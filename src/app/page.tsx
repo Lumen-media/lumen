@@ -1,4 +1,4 @@
-import { Videoplayer } from "./components/videoplayer";
+import { Videoplayer } from "../components/ui/videoplayer";
 
 export default async function Home() {
 	return (

@@ -1,17 +1,27 @@
 "use client";
+import { cn } from "@/lib/utils";
 import { useRef, useState } from "react";
 import ReactPlayer from "react-player";
+import { Button } from "./button";
+import { Slider } from "./slider";
 
 export type VideoplayerProps = {
 	className?: string;
 };
 
-export const Videoplayer = ({ className }) => {
+type stateTypes = {
+	loaded: number;
+	loadedSeconds: number;
+	played: number;
+	playedSeconds: number;
+};
+
+export const Videoplayer = ({ className }: VideoplayerProps) => {
 	// const video = "/video.mp4";
 	const video = "https://www.youtube.com/watch?v=xF-f8ZcU2uM";
-	const playerRef = useRef(null);
+	const playerRef = useRef<ReactPlayer>(null);
 	const [playing, setPlaying] = useState(false);
-	const [volume, setVolume] = useState(0.8);
+	const [volume, setVolume] = useState(1);
 	const [muted, setMuted] = useState(false);
 	const [played, setPlayed] = useState(0);
 	const [loaded, setLoaded] = useState(0);
@@ -20,29 +30,29 @@ export const Videoplayer = ({ className }) => {
 		setPlaying(!playing);
 	};
 
-	const handleVolumeChange = (e) => {
-		setVolume(Number.parseFloat(e.target.value));
+	const handleVolumeChange = (e: number) => {
+		setVolume(e);
 	};
 
 	const handleMute = () => {
 		setMuted(!muted);
 	};
 
-	const handleProgress = (state) => {
+	const handleProgress = (state: stateTypes) => {
 		setPlayed(state.played);
 		setLoaded(state.loaded);
 	};
 
-	const handleSeekChange = (e) => {
-		setPlayed(Number.parseFloat(e.target.value));
+	const handleSeekChange = (value: number) => {
 		if (!playerRef.current) {
 			return;
 		}
-		playerRef.current.seekTo(Number.parseFloat(e.target.value));
+		playerRef.current.seekTo(value);
+		setPlayed(value);
 	};
 
 	return (
-		<div>
+		<div className={cn("relative", className)}>
 			<ReactPlayer
 				ref={playerRef}
 				url={video}
@@ -59,24 +69,21 @@ export const Videoplayer = ({ className }) => {
 				controls={false}
 			/>
 			<div className="controls">
-				<input
-					className="w-full"
-					type="range"
-					min={0}
+				<Slider
+					value={[played]}
+					onValueChange={(value) => handleSeekChange(value[0])}
 					max={1}
-					step="any"
-					value={played}
-					onChange={handleSeekChange}
+					step={0.01}
 				/>
-				<button onClick={handlePlayPause}>{playing ? "Pause" : "Play"}</button>
-				<button onClick={handleMute}>{muted ? "Unmute" : "Mute"}</button>
-				<input
-					type="range"
+				<Button onClick={handlePlayPause}>{playing ? "Pause" : "Play"}</Button>
+				<Button onClick={handleMute}>{muted ? "Unmute" : "Mute"}</Button>
+				<Slider
+					className="w-1/4"
+					value={[volume]}
+					onValueChange={(value) => handleVolumeChange(value[0])}
 					min={0}
 					max={1}
-					step="any"
-					value={volume}
-					onChange={handleVolumeChange}
+					step={0.01}
 				/>
 			</div>
 		</div>
