@@ -1,8 +1,8 @@
 {
 	"$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-	"productName": "my-app",
+	"productName": "tauri-app",
 	"version": "0.1.0",
-	"identifier": "com.tauri.dev",
+	"identifier": "appTest",
 	"build": {
 		"beforeDevCommand": "pnpm dev",
 		"beforeBuildCommand": "pnpm build",
@@ -13,10 +13,12 @@
 		"windows": [
 			{
 				"title": "first-app",
+				"resizable": true,
+				"fullscreen": false,
 				"width": 800,
 				"height": 600,
-				"resizable": true,
-				"fullscreen": false
+				"center": true,
+				"maximized": true
 			}
 		],
 		"security": {
