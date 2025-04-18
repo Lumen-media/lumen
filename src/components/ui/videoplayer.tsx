@@ -87,7 +87,14 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
         />
       </div>
 
-      <div className="controls flex flex-col gap-1 absolute bottom-0 left-0 w-full bg-linear-to-t from-black/60 to-transparent p-4 translate-y-20 group-hover:translate-0 transition-transform duration-300">
+      <div
+        className={cn(
+          "controls flex flex-col gap-1 absolute bottom-0 left-0 w-full bg-linear-to-t from-black/60 to-transparent p-4 translate-y-20 group-hover:translate-0 transition-transform duration-300",
+          {
+            "translate-y-0": !playing,
+          }
+        )}
+      >
         <Slider
           trackClassName="rounded-[0.125rem] bg-muted/60"
           rangeClassName="bg-red-500"
@@ -109,7 +116,9 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
                 <LucidePlay fill="white" className="size-4" />
               )}
             </TooltipTrigger>
-            <TooltipContent>{playing ? "Pause" : "Play"}</TooltipContent>
+            <TooltipContent className="pointer-events-none">
+              {playing ? "Pause" : "Play"}
+            </TooltipContent>
           </Tooltip>
 
           <div className="flex items-center group/controls">
@@ -124,7 +133,9 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
                   <LucideVolume2 fill="white" className="size-4" />
                 )}
               </TooltipTrigger>
-              <TooltipContent> {muted ? "Unmute" : "Mute"}</TooltipContent>
+              <TooltipContent className="pointer-events-none">
+                {muted ? "Unmute" : "Mute"}
+              </TooltipContent>
             </Tooltip>
 
             <Slider
