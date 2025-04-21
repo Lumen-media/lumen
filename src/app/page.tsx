@@ -1,11 +1,53 @@
-import { Videoplayer } from "../components/ui/videoplayer";
+"use client";
 
-export default async function Home() {
-	return (
-		<div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-			<main className="flex flex-col w-full h-full gap-8 row-start-2 items-center sm:items-start">
-				<Videoplayer />
-			</main>
-		</div>
-	);
+import { useEffect, useState } from "react";
+
+export default function Home() {
+  const [messages, setMessages] = useState<string[]>([]);
+
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:8080");
+
+    ws.onopen = () => {
+      console.log("Connected to WebSocket server");
+    };
+
+    ws.onmessage = (event) => {
+      console.log("Received message:", event.data);
+      setMessages((prev) => [...prev, event.data]);
+    };
+
+    ws.onclose = () => {
+      console.log("Disconnected from WebSocket server");
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
+
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-between p-24">
+      <h1>WebSocket Messages:</h1>
+      <ul>
+        {messages.map((message, index) => (
+          <li key={index}>{message}</li>
+        ))}
+      </ul>
+      <button
+        onClick={() => {
+          const ws = new WebSocket("ws://localhost:8080");
+          ws.onopen = () => {
+            ws.send("Hello from client!");
+          };
+        }}
+      >
+        Send Message
+      </button>
+    </main>
+  );
 }
