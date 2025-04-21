@@ -7,6 +7,12 @@ use tauri::{AppHandle, Manager, Emitter};
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AudioEvent {
+    event: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -15,8 +21,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let app_handle = app.handle();
             let app_handle_clone = app_handle.clone();
             tokio::spawn(async move {
-                let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
-                println!("WebSocket server listening on ws://127.0.0.1:8080");
+                let listener = TcpListener::bind("0.0.0.0:8080").await.unwrap();
+                println!("WebSocket server listening on ws://0.0.0.0:8080");
 
                 while let Ok((stream, _)) = listener.accept().await {
                     let peer = stream
@@ -64,13 +70,48 @@ async fn handle_connection(
         let msg = msg?;
         println!("Received a message from {}: {:?}", peer, msg);
 
-        if msg.is_text() || msg.is_binary() {
-            outgoing
-                .send(msg.clone())
-                .await
-                .expect("Failed to send message");
-
-            app.emit("websocket-message", msg.to_text().unwrap().to_string())?;
+        if msg.is_text() {
+            let text = msg.to_text().unwrap();
+            match serde_json::from_str::<AudioEvent>(text) {
+                Ok(audio_event) => {
+                    match audio_event.event.as_str() {
+                        "volume_up" => {
+                            app.emit("volume-up", ())?;
+                            println!("Emitted volume-up event");
+                        }
+                        "volume_down" => {
+                            app.emit("volume-down", ())?;
+                            println!("Emitted volume-down event");
+                        }
+                        "mute" => {
+                            app.emit("mute", ())?;
+                            println!("Emitted mute event");
+                        }
+                        "play_pause" => {
+                            app.emit("play-pause", ())?;
+                            println!("Emitted play-pause event");
+                        }
+                        "stop" => {
+                            app.emit("stop", ())?;
+                            println!("Emitted stop event");
+                        }
+                        "next" => {
+                            app.emit("next", ())?;
+                            println!("Emitted next event");
+                        }
+                        "previous" => {
+                            app.emit("previous", ())?;
+                            println!("Emitted previous event");
+                        }
+                        _ => {
+                            println!("Received unknown event: {}", audio_event.event);
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("Failed to parse message as AudioEvent: {}", e);
+                }
+            }
         } else if msg.is_ping() {
             outgoing.send(Message::Pong(msg.into_data())).await?;
         } else if msg.is_close() {

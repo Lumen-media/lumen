@@ -1,9 +1,8 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import ReactPlayer from "react-player";
-import { Button } from "./button";
-import { IoPause, IoPlay } from "react-icons/io5";
+import { listen } from "@tauri-apps/api/event";
 import { Slider } from "./slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 import {
@@ -48,9 +47,9 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
     setVolume(e);
   };
 
-  const handleMute = () => {
-    setMuted(!muted);
-  };
+  const handleMute = useCallback(() => {
+    setMuted((prevMuted) => !prevMuted);
+  }, []);
 
   const handleProgress = (state: stateTypes) => {
     setPlayed(state.played);
@@ -64,6 +63,33 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
     playerRef.current.seekTo(value);
     setPlayed(value);
   };
+
+  useEffect(() => {
+    const unlistenVolumeUp = listen("volume-up", () => {
+      console.log("Volume Up event received");
+    });
+
+    const unlistenVolumeDown = listen("volume-down", () => {
+      console.log("Volume Down event received");
+    });
+
+    const unlistenMute = listen("mute", () => {
+      handleMute();
+      console.log("Mute event received here");
+    });
+
+    const unlistenPlayPause = listen("play-pause", () => {
+      handlePlayPause();
+      console.log("Play/Pause event received here");
+    });
+
+    return () => {
+      unlistenVolumeUp.then((f: any) => f());
+      unlistenVolumeDown.then((f: any) => f());
+      unlistenMute.then((f: any) => f());
+      unlistenPlayPause.then((f: any) => f());
+    };
+  }, [handleMute, handlePlayPause]);
 
   return (
     <div className={cn("relative mx-auto group overflow-y-hidden", className)}>
