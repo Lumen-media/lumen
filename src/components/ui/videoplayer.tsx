@@ -33,15 +33,20 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
   // const video = "/video.mp4";
   const video = "https://www.youtube.com/watch?v=zajUgQLviwk";
   const playerRef = useRef<ReactPlayer>(null);
+  const [ws, setWs] = useState<WebSocket | null>(null);
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [played, setPlayed] = useState(0);
   const [loaded, setLoaded] = useState(0);
 
-  const handlePlayPause = () => {
-    setPlaying(!playing);
-  };
+  const handlePlayPause = useCallback(() => {
+    if (playing && ws?.readyState === WebSocket.OPEN) {
+      console.log("Sending manual_pause event via WebSocket");
+      ws.send(JSON.stringify({ event: "manual_pause" }));
+    }
+    setPlaying((prevPlaying) => !prevPlaying);
+  }, [playing, ws]);
 
   const handleVolumeChange = (e: number) => {
     setVolume(e);
@@ -65,29 +70,63 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
   };
 
   useEffect(() => {
-    const unlistenVolumeUp = listen("volume-up", () => {
-      console.log("Volume Up event received");
-    });
+    const socket = new WebSocket("ws://localhost:8080");
 
-    const unlistenVolumeDown = listen("volume-down", () => {
-      console.log("Volume Down event received");
+    socket.onopen = () => {
+      console.log("WebSocket connection established");
+      setWs(socket);
+    };
+
+    socket.onclose = () => {
+      console.log("WebSocket connection closed");
+      setWs(null);
+    };
+
+    socket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      setWs(null);
+    };
+
+    return () => {
+      if (
+        socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING
+      ) {
+        socket.close();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const unlistenVolume = listen("set-volume", (event) => {
+      const volumeReceived = event.payload as number;
+      if (
+        typeof volumeReceived === "number" &&
+        volumeReceived >= 0 &&
+        volumeReceived <= 100
+      ) {
+        const newVolumeState = volumeReceived / 100;
+        setVolume(newVolumeState);
+        console.log("Volume updated event:", newVolumeState);
+      } else {
+        console.error("Invalid volume event received:", event.payload);
+      }
     });
 
     const unlistenMute = listen("mute", () => {
       handleMute();
-      console.log("Mute event received here");
+      console.log("Mute event received");
     });
 
     const unlistenPlayPause = listen("play-pause", () => {
       handlePlayPause();
-      console.log("Play/Pause event received here");
+      console.log("Play/Pause event received");
     });
 
     return () => {
-      unlistenVolumeUp.then((f: any) => f());
-      unlistenVolumeDown.then((f: any) => f());
-      unlistenMute.then((f: any) => f());
-      unlistenPlayPause.then((f: any) => f());
+      unlistenVolume.then((f) => f());
+      unlistenMute.then((f) => f());
+      unlistenPlayPause.then((f) => f());
     };
   }, [handleMute, handlePlayPause]);
 
@@ -101,7 +140,6 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
           volume={volume}
           muted={muted}
           onProgress={handleProgress}
-          onClick={handlePlayPause}
           onEnded={() => {
             console.log("ended");
           }}
