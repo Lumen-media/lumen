@@ -1,4 +1,4 @@
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt as FStreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::net::SocketAddr;
@@ -9,7 +9,7 @@ use tokio_tungstenite::tungstenite::Message;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct AudioEvent {
     event: String,
-    value: Option<u8>, // Added optional value field for volume
+    value: Option<u8>,
 }
 
 pub async fn accept_connection(
