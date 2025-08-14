@@ -12,11 +12,7 @@ struct AudioEvent {
     value: Option<u8>,
 }
 
-pub async fn accept_connection(
-    peer: SocketAddr,
-    stream: tokio::net::TcpStream,
-    app: AppHandle,
-) {
+pub async fn accept_connection(peer: SocketAddr, stream: tokio::net::TcpStream, app: AppHandle) {
     if let Err(error) = handle_connection(peer, stream, app).await {
         eprintln!("Error handling connection from {}: {}", peer, error);
     }
@@ -47,23 +43,33 @@ async fn handle_connection(
                                 "set_volume" => {
                                     if let Some(volume) = audio_event.value {
                                         if volume <= 100 {
-                                            app.emit("set-volume", volume).map_err(|e| e.to_string())?;
+                                            app.emit("set-volume", volume)
+                                                .map_err(|e| e.to_string())?;
                                         } else {
-                                            eprintln!("Received volume value out of range (0-100): {}", volume);
+                                            eprintln!(
+                                                "Received volume value out of range (0-100): {}",
+                                                volume
+                                            );
                                         }
                                     } else {
                                         eprintln!("Received set_volume event without a value");
                                     }
                                 }
                                 "mute" => app.emit("mute", ()).map_err(|e| e.to_string())?,
-                                "play_pause" => app.emit("play-pause", ()).map_err(|e| e.to_string())?,
+                                "play_pause" => {
+                                    app.emit("play-pause", ()).map_err(|e| e.to_string())?
+                                }
                                 "stop" => app.emit("stop", ()).map_err(|e| e.to_string())?,
                                 "next" => app.emit("next", ()).map_err(|e| e.to_string())?,
-                                "previous" => app.emit("previous", ()).map_err(|e| e.to_string())?,
-                                "manual_pause" => println!("Received manual_pause event from {}", peer),
+                                "previous" => {
+                                    app.emit("previous", ()).map_err(|e| e.to_string())?
+                                }
+                                "manual_pause" => {
+                                    println!("Received manual_pause event from {}", peer)
+                                }
                                 _ => println!("Received unknown event: {}", audio_event.event),
                             }
-                           
+
                             if audio_event.event != "manual_pause" {
                                 println!("Emitted {} event", audio_event.event);
                             }

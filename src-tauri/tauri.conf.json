@@ -1,39 +1,35 @@
 {
-	"$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-	"productName": "tauri-app",
-	"version": "0.1.0",
-	"identifier": "appTest",
-	"build": {
-		"beforeDevCommand": "pnpm dev",
-		"beforeBuildCommand": "pnpm build",
-		"devUrl": "http://localhost:3000",
-		"frontendDist": "../out"
-	},
-	"app": {
-		"windows": [
-			{
-				"title": "first-app",
-				"resizable": true,
-				"fullscreen": false,
-				"width": 800,
-				"height": 600,
-				"center": true,
-				"maximized": true
-			}
-		],
-		"security": {
-			"csp": null
-		}
-	},
-	"bundle": {
-		"active": true,
-		"targets": "all",
-		"icon": [
-			"icons/32x32.png",
-			"icons/128x128.png",
-			"icons/128x128@2x.png",
-			"icons/icon.icns",
-			"icons/icon.ico"
-		]
-	}
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "lumen-vite",
+  "version": "0.1.0",
+  "identifier": "com.lumen.media",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "lumen",
+        "width": 800,
+        "height": 600
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
 }
