@@ -32,7 +32,7 @@ type stateTypes = {
 export const Videoplayer = ({ className }: VideoplayerProps) => {
   // const video = "/video.mp4";
   const video = "https://www.youtube.com/watch?v=zajUgQLviwk";
-  const playerRef = useRef<HTMLVideoElement | null>(null);
+  const playerRef = useRef<ReactPlayer>(null);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -65,7 +65,7 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
     if (!playerRef.current) {
       return;
     }
-    // playerRef.current.seekTo(value);
+    playerRef.current.seekTo(value);
     setPlayed(value);
   };
 
@@ -135,10 +135,11 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
       <div className="w-[1000px] aspect-video h-auto">
         <ReactPlayer
           ref={playerRef}
-          src={video}
+          url={video}
           playing={playing}
           volume={volume}
           muted={muted}
+          onProgress={handleProgress}
           onEnded={() => {
             console.log("ended");
           }}
@@ -213,10 +214,10 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
               step={0.01}
             />
           </div>
-          {/* <p className="text-gray-200 flex items-center gap-2 ml-3 text-[0.75rem]">
+          <p className="text-gray-200 flex items-center gap-2 ml-3 text-[0.75rem]">
             <span>{formatTime(playerRef.current?.getCurrentTime() || 0)}</span>/
             <span>{formatTime(playerRef.current?.getDuration() || 0)}</span>
-          </p> */}
+          </p>
         </div>
       </div>
     </div>
