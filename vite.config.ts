@@ -12,7 +12,10 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     react(),
-    tanstackRouter(),],
+    tanstackRouter({
+      routesDirectory: "./src/app",
+    }),
+  ],
 
   clearScreen: false,
 
