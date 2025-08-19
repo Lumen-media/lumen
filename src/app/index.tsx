@@ -1,10 +1,10 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { Card } from "@/components/ui/card";
 import {
 	ResizableHandle,
 	ResizablePanel,
 	ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
 	component: RouteComponent,
