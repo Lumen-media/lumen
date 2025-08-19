@@ -1,0 +1,5 @@
+{
+	"welcome": "Bem-vindo ao Lumen!",
+	"greeting": "Olá, {{name}}!",
+	"language": "Idioma"
+}
