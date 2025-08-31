@@ -29,7 +29,7 @@ export function QuickShortcutsModal() {
 
 	return (
 		<Dialog open={isOpen} onOpenChange={setIsOpen}>
-			<DialogContent className="p-0 overflow-hidden">
+			<DialogContent className="p-0 overflow-hidden [&_button]:has-[svg]:hidden">
 				<Command>
 					<CommandInput placeholder="Type a command or search..." />
 					<CommandList>

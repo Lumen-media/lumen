@@ -2186,7 +2186,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "lumen-vite"
+name = "lumen"
 version = "0.1.0"
 dependencies = [
  "futures-util",
