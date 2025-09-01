@@ -1,5 +1,4 @@
 "use client";
-import { cn } from "@/lib/utils";
 import { listen } from "@tauri-apps/api/event";
 import {
 	LucidePause,
@@ -9,6 +8,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactPlayer from "react-player";
+import { cn } from "@/lib/utils";
 import { Slider } from "./slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 

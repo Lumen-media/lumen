@@ -24,19 +24,19 @@ function RouteComponent() {
 				</div>
 			</Card>
 			<ResizablePanelGroup direction="horizontal">
-				<ResizablePanel className="min-w-[18.75rem]">
+				<ResizablePanel className="min-w-1/6">
 					<Card className="w-full h-full">one</Card>
 				</ResizablePanel>
 
 				<ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
-				<ResizablePanel className="min-w-[43.75rem]">
+				<ResizablePanel className="min-w-1/2">
 					<Card className="w-full h-full">two</Card>
 				</ResizablePanel>
 
 				<ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
-				<ResizablePanel className="min-w-[18.75rem] max-w-[450px]">
+				<ResizablePanel className="min-w-1/6">
 					<RightPanel />
 				</ResizablePanel>
 			</ResizablePanelGroup>
