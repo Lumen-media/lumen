@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useTranslation } from "react-i18next";
+import { Header } from "@/components/header";
 import { RightPanel } from "@/components/right-panel";
 import { Card } from "@/components/ui/card";
 import {
@@ -13,16 +13,9 @@ export const Route = createFileRoute("/")({
 });
 
 function RouteComponent() {
-	const { t } = useTranslation();
-
 	return (
 		<main className="h-dvh p-2.5 flex flex-col gap-3">
-			<Card>
-				<div className="flex items-center gap-3 font-bold">
-					<img className="size-8" src="/logo.png" alt="Lumen logo" />{" "}
-					<h3>{t("welcome")}</h3>
-				</div>
-			</Card>
+			<Header />
 			<ResizablePanelGroup direction="horizontal">
 				<ResizablePanel className="min-w-1/6">
 					<Card className="w-full h-full">one</Card>
