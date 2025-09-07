@@ -49,7 +49,7 @@ function Slider({
 			<SliderPrimitive.Track
 				data-slot="slider-track"
 				className={cn(
-					"bg-muted relative grow overflow-hidden rounded-full data-[orientation=horizontal]:h-1.5 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5",
+					"bg-primary/10 relative grow overflow-hidden rounded-full data-[orientation=horizontal]:h-1.5 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5",
 					trackClassName,
 				)}
 			>
@@ -61,12 +61,12 @@ function Slider({
 					)}
 				/>
 			</SliderPrimitive.Track>
-			{Array.from({ length: _values.length }, (_, index) => (
+			{Array.from({ length: _values.length }, (_) => (
 				<SliderPrimitive.Thumb
 					data-slot="slider-thumb"
 					key={React.useId()}
 					className={cn(
-						"border-primary bg-background ring-ring/50 block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50",
+						"border-card border-2 bg-primary ring-ring/50 block size-3 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50",
 						thumbClassName,
 					)}
 				/>

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Card } from "./ui/card";
 import {
 	NavigationMenu,
@@ -8,7 +7,6 @@ import {
 } from "./ui/navigation-menu";
 
 export const Header = () => {
-	const [activePage, setActivePage] = useState<string>("/");
 	const pages = [
 		{ name: "Edit", href: "/edit" },
 		{ name: "View", href: "/view" },
