@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Header } from "@/components/header";
+import { Miniplayer } from "@/components/miniplayer";
 import { RightPanel } from "@/components/right-panel";
 import { Card } from "@/components/ui/card";
 import {
@@ -23,8 +24,11 @@ function RouteComponent() {
 
 				<ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
-				<ResizablePanel className="min-w-1/2">
-					<Card className="w-full h-full">two</Card>
+				<ResizablePanel className="w-full min-w-1/2">
+					<Card className="w-full h-full flex-col">
+						<div className="w-full h-full">two</div>
+						<Miniplayer />
+					</Card>
 				</ResizablePanel>
 
 				<ResizableHandle className="bg-transparent mx-1.5 w-0" />

@@ -10,33 +10,53 @@
 
 import { Route as rootRouteImport } from './app/__root'
 import { Route as IndexRouteImport } from './app/index'
+import { Route as VideoIndexRouteImport } from './app/video/index'
+import { Route as VideoWindowIndexRouteImport } from './app/video-window/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VideoIndexRoute = VideoIndexRouteImport.update({
+  id: '/video/',
+  path: '/video/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VideoWindowIndexRoute = VideoWindowIndexRouteImport.update({
+  id: '/video-window/',
+  path: '/video-window/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/video-window': typeof VideoWindowIndexRoute
+  '/video': typeof VideoIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/video-window': typeof VideoWindowIndexRoute
+  '/video': typeof VideoIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/video-window/': typeof VideoWindowIndexRoute
+  '/video/': typeof VideoIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/video-window' | '/video'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/video-window' | '/video'
+  id: '__root__' | '/' | '/video-window/' | '/video/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  VideoWindowIndexRoute: typeof VideoWindowIndexRoute
+  VideoIndexRoute: typeof VideoIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +68,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/video/': {
+      id: '/video/'
+      path: '/video'
+      fullPath: '/video'
+      preLoaderRoute: typeof VideoIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/video-window/': {
+      id: '/video-window/'
+      path: '/video-window'
+      fullPath: '/video-window'
+      preLoaderRoute: typeof VideoWindowIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  VideoWindowIndexRoute: VideoWindowIndexRoute,
+  VideoIndexRoute: VideoIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

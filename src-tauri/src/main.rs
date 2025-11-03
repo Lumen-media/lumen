@@ -37,9 +37,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![])
+        .invoke_handler(tauri::generate_handler![open_video_window])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 
     Ok(())
+}
+
+#[tauri::command]
+async fn open_video_window(app: AppHandle) -> Result<(), String> {
+    tauri::WindowBuilder::new(&app, "video-player")
+    .title("Lumen Video Player")
+    .inner_size(800.0, 600.0)
+    .resizable(true)
+    .fullscreen(false)
+    .decorations(true)
+    .build()
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }

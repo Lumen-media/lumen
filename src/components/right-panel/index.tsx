@@ -6,14 +6,19 @@ import { LyricsTab } from "./lyrics-tab";
 import { MediaTab } from "./media-tab";
 import { ThemesTab } from "./themes-tab";
 import "./styles.css";
+import { cn } from "@/lib/utils";
 
 const tabs = ["media", "lyrics", "themes"];
 
-export const RightPanel = () => {
+type RightPanelProps = {
+	className?: string;
+};
+
+export const RightPanel = (props: RightPanelProps) => {
 	const [activeTab, setActiveTab] = useState("media");
 
 	return (
-		<Card className="w-full h-full">
+		<Card className={cn("w-full h-full", props.className)}>
 			<Tabs
 				defaultValue="media"
 				className="tabs"
