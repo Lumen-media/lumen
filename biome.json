@@ -1,5 +1,6 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.1.4/schema.json",
+	"extends": ["rocketseat-biomejs-config"],
 	"vcs": {
 		"enabled": false,
 		"clientKind": "git",
@@ -16,12 +17,7 @@
 		]
 	},
 	"formatter": {
-		"enabled": true,
 		"indentStyle": "tab"
-	},
-	"assist": { "actions": { "source": { "organizeImports": "on" } } },
-	"linter": {
-		"enabled": true
 	},
 	"javascript": {
 		"formatter": {
@@ -29,11 +25,7 @@
 		}
 	},
 	"css": {
-		"formatter": {
-			"enabled": true
-		},
 		"linter": {
-			"enabled": true
 		}
 	}
 }

@@ -6,9 +6,16 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatDuration(seconds: number): string {
-	const minutes = Math.floor(seconds / 60);
-	const remainingSeconds = seconds % 60;
+	const hours = Math.floor(seconds / 3600);
+	const minutes = Math.floor((seconds % 3600) / 60);
+	const remainingSeconds = Math.floor(seconds % 60);
+
+	const formattedMinutes = minutes < 10 ? `0${minutes}` : `${minutes}`;
 	const formattedSeconds =
 		remainingSeconds < 10 ? `0${remainingSeconds}` : `${remainingSeconds}`;
-	return `${minutes}:${formattedSeconds}`;
+
+	if (hours > 0) {
+		return `${hours}:${formattedMinutes}:${formattedSeconds}`;
+	}
+	return `${formattedMinutes}:${formattedSeconds}`;
 }
