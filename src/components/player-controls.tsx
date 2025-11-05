@@ -11,7 +11,7 @@ export const PlayerControls = () => {
 		<div className="flex items-center justify-between gap-3 w-full p-3.5 rounded-xl border border-white/10 bg-background/40">
 			<div className="size-20 bg-background flex items-center justify-center rounded-xl">
 				<img
-					src="\photo-placesolder.gif"
+					src={ currentVideo?.thumbnail || "\photo-placesolder.gif"}
 					alt=""
 					className="w-10 h-auto aspect-square"
 				/>
