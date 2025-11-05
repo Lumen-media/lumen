@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import {
 	NavigationMenu,
@@ -17,14 +15,14 @@ export const Header = () => {
 		{ name: "Settings", href: "/settings" },
 	];
 
-	const openVideoWindow = async () => {
-		const testVideoUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-		try {
-			await invoke("open_video_window", { videoUrl: testVideoUrl });
-		} catch (error) {
-			console.error("Error opening video window:", error);
-		}
-	};
+	// const openVideoWindow = async () => {
+	// 	const testVideoUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+	// 	try {
+	// 		await invoke("open_video_window", { videoUrl: testVideoUrl });
+	// 	} catch (error) {
+	// 		console.error("Error opening video window:", error);
+	// 	}
+	// };
 
 	return (
 		<Card className="flex-row justify-between gap-3">
@@ -47,9 +45,7 @@ export const Header = () => {
 				</NavigationMenu>
 			</div>
 
-			<div className="flex items-center justify-center w-1/3">
-				<Button onClick={openVideoWindow}>Open Video Window</Button>
-			</div>
+			<div className="flex items-center justify-center w-1/3"/>
 		</Card>
 	);
 };
