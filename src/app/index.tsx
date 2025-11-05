@@ -2,11 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Header } from "@/components/header";
 import { RightPanel } from "@/components/right-panel";
 import { Card } from "@/components/ui/card";
-import {
-	ResizableHandle,
-	ResizablePanel,
-	ResizablePanelGroup,
-} from "@/components/ui/resizable";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { MiddlePanel } from "@/components/middle-panel";
 
 export const Route = createFileRoute("/")({

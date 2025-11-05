@@ -11,8 +11,7 @@ export function formatDuration(seconds: number): string {
 	const remainingSeconds = Math.floor(seconds % 60);
 
 	const formattedMinutes = minutes < 10 ? `0${minutes}` : `${minutes}`;
-	const formattedSeconds =
-		remainingSeconds < 10 ? `0${remainingSeconds}` : `${remainingSeconds}`;
+	const formattedSeconds = remainingSeconds < 10 ? `0${remainingSeconds}` : `${remainingSeconds}`;
 
 	if (hours > 0) {
 		return `${hours}:${formattedMinutes}:${formattedSeconds}`;

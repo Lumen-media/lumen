@@ -22,12 +22,7 @@ type ComboboxProps = {
 	onChange: (value: string) => void;
 };
 
-export const Combobox = ({
-	className,
-	value,
-	options,
-	onChange,
-}: ComboboxProps) => {
+export const Combobox = ({ className, value, options, onChange }: ComboboxProps) => {
 	const [open, setOpen] = useState(false);
 
 	return (
@@ -39,8 +34,7 @@ export const Combobox = ({
 					aria-expanded={open}
 					className={cn("w-full justify-between", className)}
 				>
-					{options.find((option) => option.value === value)?.label ??
-						"Select option..."}
+					{options.find((option) => option.value === value)?.label ?? "Select option..."}
 					<ChevronsUpDown className="opacity-50" />
 				</Button>
 			</PopoverTrigger>
@@ -63,7 +57,7 @@ export const Combobox = ({
 									<Check
 										className={cn(
 											"ml-auto",
-											value === framework.value ? "opacity-100" : "opacity-0",
+											value === framework.value ? "opacity-100" : "opacity-0"
 										)}
 									/>
 								</CommandItem>

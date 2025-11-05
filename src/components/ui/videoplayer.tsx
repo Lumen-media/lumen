@@ -1,11 +1,6 @@
 "use client";
 import { listen } from "@tauri-apps/api/event";
-import {
-	LucidePause,
-	LucidePlay,
-	LucideVolume2,
-	LucideVolumeOff,
-} from "lucide-react";
+import { LucidePause, LucidePlay, LucideVolume2, LucideVolumeOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactPlayer from "react-player";
 import { cn } from "@/lib/utils";
@@ -88,10 +83,7 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
 		};
 
 		return () => {
-			if (
-				socket.readyState === WebSocket.OPEN ||
-				socket.readyState === WebSocket.CONNECTING
-			) {
+			if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
 				socket.close();
 			}
 		};
@@ -100,11 +92,7 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
 	useEffect(() => {
 		const unlistenVolume = listen("set-volume", (event) => {
 			const volumeReceived = event.payload as number;
-			if (
-				typeof volumeReceived === "number" &&
-				volumeReceived >= 0 &&
-				volumeReceived <= 100
-			) {
+			if (typeof volumeReceived === "number" && volumeReceived >= 0 && volumeReceived <= 100) {
 				const newVolumeState = volumeReceived / 100;
 				setVolume(newVolumeState);
 				console.log("Volume updated event:", newVolumeState);
@@ -156,7 +144,7 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
 					"controls flex flex-col gap-1 absolute bottom-0 left-0 w-full bg-linear-to-t from-black/60 to-transparent p-4 translate-y-20 group-hover:translate-0 transition-transform duration-300",
 					{
 						"translate-y-0": !playing,
-					},
+					}
 				)}
 			>
 				<Slider
@@ -187,10 +175,7 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
 
 					<div className="flex items-center group/controls">
 						<Tooltip>
-							<TooltipTrigger
-								className="text-white/80 hover:text-white p-3"
-								onClick={handleMute}
-							>
+							<TooltipTrigger className="text-white/80 hover:text-white p-3" onClick={handleMute}>
 								{muted ? (
 									<LucideVolumeOff fill="white" className="size-4" />
 								) : (

@@ -17,8 +17,7 @@ const formatTime = (seconds: number) => {
 };
 
 export const Miniplayer = () => {
-	const { currentVideo, isPlaying, togglePlayPause, progress, duration } =
-		usePlayerStore();
+	const { currentVideo, isPlaying, togglePlayPause, progress, duration } = usePlayerStore();
 
 	const [localSliderValue, setLocalSliderValue] = useState(0);
 	const [isSeeking, setIsSeeking] = useState(false);
@@ -41,9 +40,7 @@ export const Miniplayer = () => {
 				alt={currentVideo.title}
 			/>
 			<div className="flex flex-col flex-1">
-				<h3 className="text-base min-h-[1lh] font-bold leading-normal">
-					{currentVideo.title}
-				</h3>
+				<h3 className="text-base min-h-[1lh] font-bold leading-normal">{currentVideo.title}</h3>
 				<p className="text-sm mb-1 min-h-[1lh] text-gray-600 dark:text-gray-300">
 					{currentVideo.artist}
 				</p>
@@ -75,11 +72,7 @@ export const Miniplayer = () => {
 				className="aspect-square h-10/12 rounded-full items-center justify-center px-0 py-0 leading-0"
 				onClick={togglePlayPause}
 			>
-				{isPlaying ? (
-					<LucidePause className="size-5" />
-				) : (
-					<LucidePlay className="size-5" />
-				)}
+				{isPlaying ? <LucidePause className="size-5" /> : <LucidePlay className="size-5" />}
 			</Button>
 		</Card>
 	);

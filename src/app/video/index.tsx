@@ -29,13 +29,7 @@ function RouteComponent() {
 	return (
 		<div className="h-dvh w-dvw bg-black flex items-center justify-center">
 			{videoUrl ? (
-				<ReactPlayer
-					url={videoUrl}
-					playing={true}
-					controls={true}
-					width="100%"
-					height="100%"
-				/>
+				<ReactPlayer url={videoUrl} playing={true} controls={true} width="100%" height="100%" />
 			) : (
 				<p className="text-white">No video URL provided.</p>
 			)}

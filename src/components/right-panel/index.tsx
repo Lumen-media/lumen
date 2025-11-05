@@ -19,19 +19,11 @@ export const RightPanel = (props: RightPanelProps) => {
 
 	return (
 		<Card className={cn("w-full h-full", props.className)}>
-			<Tabs
-				defaultValue="media"
-				className="tabs"
-				onValueChange={(value) => setActiveTab(value)}
-			>
+			<Tabs defaultValue="media" className="tabs" onValueChange={(value) => setActiveTab(value)}>
 				<div className="border-b">
 					<TabsList className="flex justify-between w-full gap-3 p-0 h-fit relative">
 						{tabs.map((tab) => (
-							<TabsTrigger
-								key={tab}
-								value={tab}
-								className="tab after:-bottom-[1px]"
-							>
+							<TabsTrigger key={tab} value={tab} className="tab after:-bottom-[1px]">
 								{tab}
 							</TabsTrigger>
 						))}

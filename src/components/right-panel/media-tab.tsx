@@ -19,9 +19,7 @@ export const MediaTab = () => {
 						key={video.id}
 					>
 						<p>{video.name}</p>
-						<span className="text-muted-foreground">
-							{formatDuration(video.duration)}
-						</span>
+						<span className="text-muted-foreground">{formatDuration(video.duration)}</span>
 					</Button>
 				))}
 			</div>
