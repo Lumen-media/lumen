@@ -105,7 +105,7 @@
 	--popover-foreground: oklch(0.985 0 0);
 	--primary: oklch(84.181% 0.14558 209.917);
 	--primary-foreground: oklch(0.21 0.006 285.885);
-	--secondary: oklch(0.274 0.006 286.033);
+	--secondary: oklab(100% 0 -0.00011 / 0.06);
 	--secondary-foreground: oklch(0.985 0 0);
 	--muted: oklch(0.274 0.006 286.033);
 	--muted-foreground: oklch(0.705 0.015 286.067);
@@ -150,5 +150,6 @@
 	h5,
 	h6 {
 		font-family: var(--font-montserrat-alternates);
+		@apply font-bold;
 	}
 }

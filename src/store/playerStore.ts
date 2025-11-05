@@ -24,7 +24,13 @@ interface VideoState {
 
 export const usePlayerStore = create<VideoState>((set) => ({
 	isPlaying: false,
-	currentVideo: null,
+	currentVideo: {
+		id: "youtube",
+		title: "World's Fastest Car Vs Cheetah!",
+		url: "https://youtu.be/FWAdfuPpLOc",
+		thumbnail: "",
+		artist: "MRBeast",
+	},
 	playerRef: null,
 	progress: { playedSeconds: 0, played: 0 },
 	duration: 0,
