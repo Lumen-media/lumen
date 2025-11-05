@@ -20,7 +20,7 @@ export const MiddlePanel = () => {
 				<h2 className="text-2xl self-center my-auto">Your Slide Preview</h2>
 			</div>
 
-		<PlayerControls />
+			<PlayerControls />
 		</Card>
 	);
 };

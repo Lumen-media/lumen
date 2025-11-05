@@ -7,6 +7,16 @@ use tokio::net::TcpListener;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // When a second instance tries to open, focus on the existing main window
+            let windows = app.webview_windows();
+            
+            if let Some(window) = windows.values().next() {
+                let _ = window.show();
+                let _ = window.set_focus();
+                let _ = window.unminimize();
+            }
+        }))
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
@@ -37,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![open_video_window])
+        .invoke_handler(tauri::generate_handler![open_video_window, create_new_window])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 
@@ -55,4 +65,22 @@ async fn open_video_window(app: AppHandle) -> Result<(), String> {
     .build()
     .map(|_| ())
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn create_new_window(app: AppHandle, window_label: String, title: String) -> Result<(), String> {
+    // Check if the window already exists
+    if app.get_webview_window(&window_label).is_some() {
+        return Err("Window already exists".to_string());
+    }
+
+    tauri::WebviewWindowBuilder::new(&app, &window_label, tauri::WebviewUrl::App("index.html".into()))
+        .title(&title)
+        .inner_size(800.0, 600.0)
+        .resizable(true)
+        .fullscreen(false)
+        .decorations(true)
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
