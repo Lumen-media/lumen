@@ -22,4 +22,14 @@ const RootWithInitialVideo = () => {
 	);
 };
 
+if (typeof window !== "undefined" && (window as any).__TAURI__) {
+	import("./lib/translation")
+		.then(({ validateSystemConfiguration }) => {
+			validateSystemConfiguration().catch(console.error);
+		})
+		.catch(console.error);
+} else {
+	console.log("ℹ️ Running in browser - translation system disabled");
+}
+
 createRoot(document.getElementById("root")!).render(<RootWithInitialVideo />);

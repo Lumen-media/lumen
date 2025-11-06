@@ -373,15 +373,32 @@ export class TranslationManagerImpl implements TranslationManager {
 		}
 
 		try {
-			await this.fileService.ensureTranslationDirectory();
+			const isTauri = typeof window !== "undefined" && (window as any).__TAURI__;
 
-			this.availableLanguages = await this.fileService.getAvailableLanguages();
+			if (isTauri) {
+				const { initializeTranslations, getAvailableLanguagesSafely } = await import(
+					"../init-translations"
+				);
 
-			if (!this.availableLanguages.includes(DEFAULT_SOURCE_LANGUAGE)) {
-				this.availableLanguages.unshift(DEFAULT_SOURCE_LANGUAGE);
+				await initializeTranslations();
+				this.availableLanguages = await getAvailableLanguagesSafely();
+
+				if (!this.availableLanguages.includes(DEFAULT_SOURCE_LANGUAGE)) {
+					this.availableLanguages.unshift(DEFAULT_SOURCE_LANGUAGE);
+				}
+
+				await this.initializeI18nextIntegration();
+				console.log("✅ Translation Manager initialized successfully with Tauri file system");
+			} else {
+				console.warn("⚠️ Running in browser environment - file system operations disabled");
+				this.availableLanguages = [DEFAULT_SOURCE_LANGUAGE];
+
+				try {
+					await this.initializeI18nextIntegration();
+				} catch (error) {
+					console.warn("Failed to initialize i18next integration:", error);
+				}
 			}
-
-			await this.initializeI18nextIntegration();
 
 			this.isInitialized = true;
 		} catch (error) {

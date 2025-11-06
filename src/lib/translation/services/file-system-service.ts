@@ -1,4 +1,5 @@
-import { readTextFile, writeTextFile, exists, readDir, remove } from "@tauri-apps/plugin-fs";
+import { readTextFile, writeTextFile, exists, readDir, remove, mkdir } from "@tauri-apps/plugin-fs";
+import { appDataDir, join } from "@tauri-apps/api/path";
 import type { FileSystemService, TranslationFile } from "../types";
 import { TRANSLATION_PATHS, LANGUAGE_CODE_PATTERN } from "../constants";
 import {
@@ -9,16 +10,35 @@ import {
     FileSystemError,
 } from "../errors";
 
+function isTauriEnvironment(): boolean {
+    return typeof window !== "undefined" && (window as any).__TAURI__;
+}
+
 export class TauriFileSystemService implements FileSystemService {
-	private readonly localesDir = TRANSLATION_PATHS.LOCALES_DIR;
 	private readonly translationFile = TRANSLATION_PATHS.TRANSLATION_FILE;
 	private readonly backupSuffix = TRANSLATION_PATHS.BACKUP_SUFFIX;
 	private readonly tempSuffix = TRANSLATION_PATHS.TEMP_SUFFIX;
+	private localesDir: string | null = null;
+
+	private async getLocalesDir(): Promise<string> {
+		if (!isTauriEnvironment()) {
+			throw createFileSystemError(
+				FileSystemErrorCode.PERMISSION_DENIED,
+				"File system operations require Tauri environment"
+			);
+		}
+
+		if (!this.localesDir) {
+			const appData = await appDataDir();
+			this.localesDir = await join(appData, "locales");
+		}
+		return this.localesDir!;
+	}
 
 	async readTranslationFile(language: string): Promise<Record<string, string>> {
 		this.validateLanguageCode(language);
 
-		const filePath = this.getTranslationFilePath(language);
+		const filePath = await this.getTranslationFilePath(language);
 
 		try {
 			const fileExists = await exists(filePath);
@@ -122,7 +142,7 @@ export class TauriFileSystemService implements FileSystemService {
 	): Promise<void> {
 		this.validateLanguageCode(language);
 
-		const filePath = this.getTranslationFilePath(language);
+		const filePath = await this.getTranslationFilePath(language);
 		const tempPath = `${filePath}${this.tempSuffix}`;
 
 		try {
@@ -198,7 +218,7 @@ export class TauriFileSystemService implements FileSystemService {
 	async backupTranslationFile(language: string): Promise<void> {
 		this.validateLanguageCode(language);
 
-		const filePath = this.getTranslationFilePath(language);
+		const filePath = await this.getTranslationFilePath(language);
 		const backupPath = `${filePath}${this.backupSuffix}`;
 
 		try {
@@ -221,7 +241,7 @@ export class TauriFileSystemService implements FileSystemService {
 	async restoreTranslationFile(language: string): Promise<void> {
 		this.validateLanguageCode(language);
 
-		const filePath = this.getTranslationFilePath(language);
+		const filePath = await this.getTranslationFilePath(language);
 		const backupPath = `${filePath}${this.backupSuffix}`;
 
 		try {
@@ -246,16 +266,25 @@ export class TauriFileSystemService implements FileSystemService {
 
 	async ensureTranslationDirectory(): Promise<void> {
 		try {
-			const dirExists = await exists(this.localesDir);
-			if (!dirExists) {
-				const tempFile = `${this.localesDir}/.temp`;
-				await writeTextFile(tempFile, "temp");
-				await remove(tempFile);
+			const localesDir = await this.getLocalesDir();
+			
+			try {
+				const dirExists = await exists(localesDir);
+				if (!dirExists) {
+					await mkdir(localesDir, { recursive: true });
+				}
+			} catch (error) {
+				try {
+					await mkdir(localesDir, { recursive: true });
+				} catch (createError) {
+					console.warn(`Directory creation warning for ${localesDir}:`, createError);
+				}
 			}
 		} catch (error) {
+			const localesDir = await this.getLocalesDir();
 			throw createFileSystemError(
 				FileSystemErrorCode.DIRECTORY_CREATION_FAILED,
-				`Failed to create translation directory: ${this.localesDir}`,
+				`Failed to create translation directory: ${localesDir}`,
 				error as Error
 			);
 		}
@@ -264,16 +293,22 @@ export class TauriFileSystemService implements FileSystemService {
 	async createLanguageDirectory(languageCode: string): Promise<void> {
 		this.validateLanguageCode(languageCode);
 
-		const languageDir = this.getLanguageDir(languageCode);
+		const languageDir = await this.getLanguageDir(languageCode);
 
 		try {
 			await this.ensureTranslationDirectory();
 
-			const dirExists = await exists(languageDir);
-			if (!dirExists) {
-				const tempFile = `${languageDir}/.temp`;
-				await writeTextFile(tempFile, "temp");
-				await remove(tempFile);
+			try {
+				const dirExists = await exists(languageDir);
+				if (!dirExists) {
+					await mkdir(languageDir, { recursive: true });
+				}
+			} catch (error) {
+				try {
+					await mkdir(languageDir, { recursive: true });
+				} catch (createError) {
+					console.warn(`Language directory creation warning for ${languageDir}:`, createError);
+				}
 			}
 		} catch (error) {
 			throw createFileSystemError(
@@ -287,23 +322,34 @@ export class TauriFileSystemService implements FileSystemService {
 	async getAvailableLanguages(): Promise<string[]> {
 		try {
 			await this.ensureTranslationDirectory();
+			const localesDir = await this.getLocalesDir();
 
-			const dirExists = await exists(this.localesDir);
-			if (!dirExists) {
+			let entries;
+			try {
+				const dirExists = await exists(localesDir);
+				if (!dirExists) {
+					return [];
+				}
+				entries = await readDir(localesDir);
+			} catch (error) {
+				console.warn(`Could not read locales directory ${localesDir}:`, error);
 				return [];
 			}
 
-			const entries = await readDir(this.localesDir);
 			const languages: string[] = [];
 
 			for (const entry of entries) {
 				if (entry.isDirectory && entry.name) {
 					if (LANGUAGE_CODE_PATTERN.test(entry.name)) {
-						const translationPath = this.getTranslationFilePath(entry.name);
-						const translationExists = await exists(translationPath);
-
-						if (translationExists) {
-							languages.push(entry.name);
+						const translationPath = await this.getTranslationFilePath(entry.name);
+						
+						try {
+							const translationExists = await exists(translationPath);
+							if (translationExists) {
+								languages.push(entry.name);
+							}
+						} catch (error) {
+							console.warn(`Could not check translation file for ${entry.name}:`, error);
 						}
 					}
 				}
@@ -311,9 +357,10 @@ export class TauriFileSystemService implements FileSystemService {
 
 			return languages.sort();
 		} catch (error) {
+			const localesDir = await this.getLocalesDir();
 			throw createFileSystemError(
 				FileSystemErrorCode.READ_FAILED,
-				`Failed to read available languages from: ${this.localesDir}`,
+				`Failed to read available languages from: ${localesDir}`,
 				error as Error
 			);
 		}
@@ -365,12 +412,14 @@ export class TauriFileSystemService implements FileSystemService {
 		}
 	}
 
-	private getLanguageDir(language: string): string {
-		return `${this.localesDir}/${language}`;
+	private async getLanguageDir(language: string): Promise<string> {
+		const localesDir = await this.getLocalesDir();
+		return await join(localesDir, language);
 	}
 
-	private getTranslationFilePath(language: string): string {
-		return `${this.getLanguageDir(language)}/${this.translationFile}`;
+	private async getTranslationFilePath(language: string): Promise<string> {
+		const languageDir = await this.getLanguageDir(language);
+		return await join(languageDir, this.translationFile);
 	}
 
 	private flattenTranslations(

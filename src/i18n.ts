@@ -1,16 +1,23 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import enTranslation from "./locales/en/translation.json";
-import ptTranslation from "./locales/pt/translation.json";
-import { translationManager } from "./lib/translation";
 
+// Initialize i18n with basic configuration
+// Resources will be loaded dynamically by the translation manager
 i18n.use(initReactI18next).init({
 	resources: {
 		en: {
-			translation: enTranslation,
+			translation: {
+				welcome: "Welcome to Lumen!",
+				greeting: "Hello, {{name}}!",
+				language: "Language",
+			},
 		},
 		pt: {
-			translation: ptTranslation,
+			translation: {
+				welcome: "Bem-vindo ao Lumen!",
+				greeting: "Olá, {{name}}!",
+				language: "Idioma",
+			},
 		},
 	},
 	fallbackLng: "en",
@@ -21,21 +28,63 @@ i18n.use(initReactI18next).init({
 	returnEmptyString: false,
 	returnNull: false,
 	saveMissing: true,
-	// Enable missing key handling for automatic translation
-	missingKeyHandler: (lngs: readonly string[], ns: string, key: string, fallbackValue: string) => {
-		// Handle missing keys for all requested languages
-		for (const lng of lngs) {
-			translationManager.handleMissingKey(lng, ns, key, fallbackValue);
+	missingKeyHandler: async (lngs: readonly string[], ns: string, key: string, fallbackValue: string) => {
+		try {
+			const { translationManager } = await import("./lib/translation");
+			for (const lng of lngs) {
+				translationManager.handleMissingKey(lng, ns, key, fallbackValue);
+			}
+		} catch (error) {
+			console.warn("Failed to handle missing key:", error);
 		}
 	},
-	// Parse missing keys to extract context for better translations
-	parseMissingKeyHandler: (key: string) => {
-		return translationManager.parseKeyContext(key);
+	parseMissingKeyHandler: async (key: string) => {
+		try {
+			const { translationManager } = await import("./lib/translation");
+			return translationManager.parseKeyContext(key);
+		} catch (error) {
+			console.warn("Failed to parse key context:", error);
+			return "General application text";
+		}
 	},
-	// Ensure backward compatibility
 	react: {
-		useSuspense: false, // Prevent suspense issues during dynamic loading
+		useSuspense: false,
 	},
 });
 
 export default i18n;
+
+export async function loadTranslationsFromManager(): Promise<void> {
+	try {
+		const { translationManager } = await import("./lib/translation");
+		
+		const languages = translationManager.getAvailableLanguages();
+		
+		for (const language of languages) {
+			try {
+				const translations = await translationManager.loadTranslations(language);
+				
+				for (const [key, value] of Object.entries(translations)) {
+					i18n.addResource(language, "translation", key, value);
+				}
+				
+				console.log(`✅ Loaded ${Object.keys(translations).length} translations for ${language}`);
+			} catch (error) {
+				console.warn(`Failed to load translations for ${language}:`, error);
+			}
+		}
+		
+		await i18n.reloadResources();
+		console.log("✅ i18n integration with translation manager complete");
+	} catch (error) {
+		console.error("Failed to integrate i18n with translation manager:", error);
+	}
+}
+
+if (typeof window !== "undefined" && (window as any).__TAURI__) {
+	setTimeout(() => {
+		loadTranslationsFromManager().catch(console.error);
+	}, 1000);
+} else {
+	console.log("ℹ️ Using static translations - dynamic translation system disabled");
+}
