@@ -10,10 +10,6 @@ import {
     FileSystemError,
 } from "../errors";
 
-function isTauriEnvironment(): boolean {
-    return typeof window !== "undefined" && (window as any).__TAURI__;
-}
-
 export class TauriFileSystemService implements FileSystemService {
 	private readonly translationFile = TRANSLATION_PATHS.TRANSLATION_FILE;
 	private readonly backupSuffix = TRANSLATION_PATHS.BACKUP_SUFFIX;
@@ -21,13 +17,6 @@ export class TauriFileSystemService implements FileSystemService {
 	private localesDir: string | null = null;
 
 	private async getLocalesDir(): Promise<string> {
-		if (!isTauriEnvironment()) {
-			throw createFileSystemError(
-				FileSystemErrorCode.PERMISSION_DENIED,
-				"File system operations require Tauri environment"
-			);
-		}
-
 		if (!this.localesDir) {
 			const appData = await appDataDir();
 			this.localesDir = await join(appData, "locales");
@@ -70,8 +59,6 @@ export class TauriFileSystemService implements FileSystemService {
 					try {
 						const backupContent = await readTextFile(backupPath);
 						translations = JSON.parse(backupContent) as TranslationFile;
-						console.log(`Successfully recovered ${language} from backup`);
-
 						await writeTextFile(filePath, backupContent);
 					} catch (backupError) {
 						throw createFileSystemError(

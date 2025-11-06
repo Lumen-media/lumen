@@ -11,6 +11,8 @@ import {
 	type AITranslationError,
 	createAIError,
 	createValidationError,
+	getRetryDelay,
+	isRetryableError,
 	ValidationErrorCode,
 } from "../errors";
 import type { AITranslationService, RateLimitStatus, StreamingTranslationResult } from "../types";
@@ -58,8 +60,8 @@ export class GeminiTranslationService implements AITranslationService {
 
 		const prompt = this.buildPrompt(text, targetLanguage, context);
 		const response = await this.makeRequest(prompt);
-
-		return this.extractTranslation(response, text);
+		const translation = this.extractTranslation(response, text);
+		return translation;
 	}
 
 	async translateBatch(
@@ -366,7 +368,6 @@ Rules:
 		if (this.requestCount >= GEMINI_CONFIG.RATE_LIMIT_RPM) {
 			const waitTime = this.rateLimitStatus.resetTime.getTime() - now;
 			if (waitTime > 0) {
-				console.log(`Rate limit reached, waiting ${waitTime}ms`);
 				await this.delay(waitTime);
 			}
 		}

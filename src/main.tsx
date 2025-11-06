@@ -22,14 +22,41 @@ const RootWithInitialVideo = () => {
 	);
 };
 
-if (typeof window !== "undefined" && (window as any).__TAURI__) {
-	import("./lib/translation")
-		.then(({ validateSystemConfiguration }) => {
-			validateSystemConfiguration().catch(console.error);
-		})
-		.catch(console.error);
-} else {
-	console.log("ℹ️ Running in browser - translation system disabled");
+function initializeTranslationSystem() {
+	const checkTauriEnvironment = () => {
+		const windowObj = window as any;
+
+		const isTauri = !!(
+			windowObj.__TAURI__ ||
+			windowObj.__TAURI_INTERNALS__ ||
+			window.location.protocol === "tauri:" ||
+			navigator.userAgent.includes("Tauri")
+		);
+
+		return isTauri;
+	};
+
+	const attemptInitialization = (attempt = 1, maxAttempts = 5) => {
+		const isTauri = checkTauriEnvironment();
+
+		if (isTauri) {
+			import("./lib/translation")
+				.then(({ validateSystemConfiguration }) => {
+					validateSystemConfiguration().catch(console.error);
+				})
+				.catch(console.error);
+		} else if (attempt < maxAttempts) {
+			setTimeout(() => attemptInitialization(attempt + 1, maxAttempts), 1000);
+		} else {
+			if (typeof window !== "undefined") {
+				(window as any).__TRANSLATION_DISABLED__ = true;
+			}
+		}
+	};
+
+	setTimeout(() => attemptInitialization(), 500);
 }
 
 createRoot(document.getElementById("root")!).render(<RootWithInitialVideo />);
+
+initializeTranslationSystem();

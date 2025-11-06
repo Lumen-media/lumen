@@ -1,5 +1,10 @@
 {
-	"welcome": "Bem-vindo ao Lumen!",
-	"greeting": "Olá, {{name}}!",
-	"language": "Idioma"
+	"welcome to lumen": "Bem-vindo ao Lumen!",
+	"hello name": "Olá, {{name}}!",
+	"language": "Idioma",
+	"slides": "Slides",
+	"start": "Iniciar",
+	"your slide preview": "Pré-visualização do Slide",
+	"translation test": "Teste de Tradução",
+	"auto translate test": "Este texto será traduzido automaticamente"
 }

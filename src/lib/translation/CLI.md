@@ -109,19 +109,15 @@ interface LanguageProgress {
 ```typescript
 import { cliService } from '../lib/translation'
 
-// Add a new language
 await cliService.addLanguage('de', 'Deutsch')
 
-// Translate all keys with progress tracking
 for await (const progress of cliService.translateAllKeys('en', 'de')) {
   console.log(`Progress: ${progress.progress}% - Key: ${progress.key}`)
 }
 
-// Check translation progress
 const progress = await cliService.getTranslationProgress('de')
 console.log(`${progress.translated}/${progress.total} keys translated`)
 
-// Validate language code
 const validation = cliService.validateAndSuggest('invalid-code')
 if (!validation.valid) {
   console.log('Suggestions:', validation.suggestions)
@@ -137,14 +133,12 @@ function LanguageManager() {
   const [progress, setProgress] = useState(0)
   
   const handleAddLanguage = async () => {
-    // Register progress callback
     cliService.onProgress('Adding Language', (progress, details) => {
       setProgress(progress)
     })
     
     await cliService.addLanguage('it', 'Italiano')
     
-    // Clean up callback
     cliService.offProgress('Adding Language')
   }
   

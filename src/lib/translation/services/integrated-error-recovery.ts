@@ -107,7 +107,6 @@ export function stopHealthMonitoring(): void {
 	}
 }
 
-// Auto-start health monitoring
 if (typeof window !== "undefined") {
 	if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", startHealthMonitoring);
@@ -132,6 +131,10 @@ export async function validateSystemConfiguration(): Promise<void> {
 			notificationService.showApiKeyConfigurationIssue(mockError as any);
 		} else {
 			console.log("✅ API key validation successful");
+		}
+
+		if (typeof window !== "undefined") {
+			window.dispatchEvent(new CustomEvent("translation-system-ready"));
 		}
 	} catch (error) {
 		console.warn("System configuration validation failed:", error);

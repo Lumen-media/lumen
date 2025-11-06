@@ -102,7 +102,7 @@ export const CACHE_KEYS = {
 // Translation Key Constants
 // ============================================================================
 
-export const TRANSLATION_KEY_PATTERN = /^[a-zA-Z0-9._-]+$/;
+export const TRANSLATION_KEY_PATTERN = /^[a-zA-Z0-9._\s-]+$/;
 
 export const RESERVED_KEY_PREFIXES = ["system.", "internal.", "debug.", "test."] as const;
 

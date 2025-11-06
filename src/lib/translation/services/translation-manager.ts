@@ -150,6 +150,8 @@ export class TranslationManagerImpl implements TranslationManager {
 			return this.cacheService.getAllTranslations(language);
 		}
 
+		// Environment check is handled by main.tsx - if we reach here, we're in Tauri
+
 		try {
 			const translations = await this.fileService.readTranslationFile(language);
 
@@ -289,26 +291,42 @@ export class TranslationManagerImpl implements TranslationManager {
 
 	handleMissingKey(lng: string, ns: string, key: string, fallbackValue: string): void {
 		try {
+			console.log(
+				`🔍 handleMissingKey called: key="${key}", lng="${lng}", fallback="${fallbackValue}"`
+			);
+
 			if (!key || !lng) {
+				console.log("❌ Missing key or language, skipping");
 				return;
 			}
 
 			if (this.isTranslationPending(key, lng)) {
+				console.log("⏳ Translation already pending, skipping");
 				return;
 			}
 
 			const existing = this.cacheService.getTranslation(key, lng);
-			if (existing) {
+			if (existing && existing !== key) {
+				console.log("✅ Real translation already exists in cache, skipping");
 				return;
 			}
 
+			if (existing === key) {
+				console.log("⚠️ Only fallback key exists in cache, proceeding with translation");
+			}
+
 			const sourceText = fallbackValue || key;
+			console.log(
+				`📝 Processing missing key: "${key}" for language "${lng}" with source "${sourceText}"`
+			);
 
 			if (lng !== DEFAULT_SOURCE_LANGUAGE) {
+				console.log(`🔄 Queueing translation for non-source language: ${lng}`);
 				this.queueTranslation(key, sourceText, lng).catch((error) => {
 					console.warn(`Failed to queue translation for missing key ${key} -> ${lng}:`, error);
 				});
 			} else {
+				console.log(`💾 Saving source translation for: ${lng}`);
 				this.cacheService.setTranslation(key, lng, sourceText);
 				this.saveTranslationToFile(key, lng, sourceText).catch((error) => {
 					console.warn(`Failed to save source translation for ${key}:`, error);
@@ -373,9 +391,18 @@ export class TranslationManagerImpl implements TranslationManager {
 		}
 
 		try {
-			const isTauri = typeof window !== "undefined" && (window as any).__TAURI__;
+			if (typeof window !== "undefined" && (window as any).__TRANSLATION_DISABLED__) {
+				console.warn("⚠️ Translation system disabled - using minimal setup");
+				this.availableLanguages = [DEFAULT_SOURCE_LANGUAGE];
 
-			if (isTauri) {
+				try {
+					await this.initializeI18nextIntegration();
+				} catch (error) {
+					console.warn("Failed to initialize i18next integration:", error);
+				}
+			} else {
+				console.log("🔄 Initializing translation system with file operations...");
+
 				const { initializeTranslations, getAvailableLanguagesSafely } = await import(
 					"../init-translations"
 				);
@@ -389,15 +416,6 @@ export class TranslationManagerImpl implements TranslationManager {
 
 				await this.initializeI18nextIntegration();
 				console.log("✅ Translation Manager initialized successfully with Tauri file system");
-			} else {
-				console.warn("⚠️ Running in browser environment - file system operations disabled");
-				this.availableLanguages = [DEFAULT_SOURCE_LANGUAGE];
-
-				try {
-					await this.initializeI18nextIntegration();
-				} catch (error) {
-					console.warn("Failed to initialize i18next integration:", error);
-				}
 			}
 
 			this.isInitialized = true;

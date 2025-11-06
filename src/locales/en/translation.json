@@ -1,5 +1,10 @@
 {
-	"welcome": "Welcome to Lumen!",
-	"greeting": "Hello, {{name}}!",
-	"language": "Language"
+	"welcome to lumen": "Welcome to Lumen!",
+	"hello name": "Hello, {{name}}!",
+	"language": "Language",
+	"slides": "Slides",
+	"start": "Start",
+	"your slide preview": "Your Slide Preview",
+	"translation test": "Translation Test",
+	"auto translate test": "This text will be translated automatically"
 }
