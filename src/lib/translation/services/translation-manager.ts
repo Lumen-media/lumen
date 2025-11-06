@@ -22,11 +22,32 @@ import type {
 	TranslationRequest,
 } from "../types";
 
+interface ErrorRecoveryService {
+	handleError(error: Error, context: ErrorContext): Promise<ErrorRecoveryResult>;
+}
+
+interface ErrorContext {
+	operation: string;
+	service: string;
+	language?: string;
+	key?: string;
+	retryCount?: number;
+}
+
+interface ErrorRecoveryResult {
+	recovered: boolean;
+	fallbackValue?: string;
+	message: string;
+	shouldRetry: boolean;
+	retryDelay?: number;
+}
+
 export class TranslationManagerImpl implements TranslationManager {
 	private translationQueue = new Map<string, TranslationRequest>();
 	private processingQueue = new Set<string>();
 	private availableLanguages: string[] = [];
 	private isInitialized = false;
+	private errorRecoveryService?: ErrorRecoveryService;
 
 	constructor(
 		private aiService: AITranslationService,
@@ -34,6 +55,10 @@ export class TranslationManagerImpl implements TranslationManager {
 		private cacheService: CacheService
 	) {
 		this.initialize();
+	}
+
+	setErrorRecoveryService(errorRecoveryService: ErrorRecoveryService): void {
+		this.errorRecoveryService = errorRecoveryService;
 	}
 
 	async getTranslation(
@@ -134,6 +159,43 @@ export class TranslationManagerImpl implements TranslationManager {
 
 			return translations;
 		} catch (error) {
+			if (isTranslationError(error) && this.errorRecoveryService) {
+				const context: ErrorContext = {
+					operation: "loadTranslations",
+					service: "TranslationManager",
+					language,
+				};
+
+				try {
+					const recovery = await this.errorRecoveryService.handleError(error, context);
+
+					if (recovery.recovered && recovery.fallbackValue) {
+						try {
+							const fallbackTranslations = JSON.parse(recovery.fallbackValue);
+							return fallbackTranslations;
+						} catch (parseError) {
+							console.warn(`Failed to parse recovery fallback for ${language}:`, parseError);
+						}
+					}
+
+					if (recovery.shouldRetry && (error as any).code === "FS_CORRUPTION_DETECTED") {
+						try {
+							const translations = await this.fileService.readTranslationFile(language);
+
+							for (const [key, value] of Object.entries(translations)) {
+								this.cacheService.setTranslation(key, language, value);
+							}
+
+							return translations;
+						} catch (retryError) {
+							console.warn(`Retry after recovery failed for ${language}:`, retryError);
+						}
+					}
+				} catch (recoveryError) {
+					console.warn(`Error recovery failed for ${language}:`, recoveryError);
+				}
+			}
+
 			if (isTranslationError(error)) {
 				throw error;
 			}
@@ -159,12 +221,10 @@ export class TranslationManagerImpl implements TranslationManager {
 
 	async initializeI18nextIntegration(): Promise<void> {
 		try {
-			// Ensure all available languages are loaded into i18next
 			for (const language of this.availableLanguages) {
 				try {
 					const translations = await this.loadTranslations(language);
 
-					// Add all translations to i18next resources
 					for (const [key, value] of Object.entries(translations)) {
 						i18next.addResource(language, "translation", key, value);
 					}
@@ -173,7 +233,6 @@ export class TranslationManagerImpl implements TranslationManager {
 				}
 			}
 
-			// Reload resources to ensure everything is up to date
 			await this.reloadAllResources();
 		} catch (error) {
 			console.warn("Failed to initialize i18next integration:", error);
@@ -436,22 +495,78 @@ export class TranslationManagerImpl implements TranslationManager {
 		request.lastAttempt = new Date();
 
 		const maxRetries = 3;
+		let shouldRetry = false;
+		let retryDelay = 0;
 
-		if (request.retryCount >= maxRetries || !isRetryableError(error as any)) {
+		if (isTranslationError(error) && this.errorRecoveryService) {
+			const context: ErrorContext = {
+				operation: "processTranslationRequest",
+				service: "TranslationManager",
+				language: request.targetLanguage,
+				key: request.key,
+				retryCount: request.retryCount,
+			};
+
+			try {
+				const recovery = await this.errorRecoveryService.handleError(error, context);
+
+				if (recovery.recovered && recovery.fallbackValue) {
+					this.cacheService.setTranslation(
+						request.key,
+						request.targetLanguage,
+						recovery.fallbackValue
+					);
+					await this.saveTranslationToFile(
+						request.key,
+						request.targetLanguage,
+						recovery.fallbackValue
+					);
+
+					this.translationQueue.delete(queueKey);
+					this.cacheService.removePending(request.key, request.targetLanguage);
+
+					console.log(`Used fallback translation for ${request.key} -> ${request.targetLanguage}`);
+					return;
+				}
+
+				shouldRetry = recovery.shouldRetry && request.retryCount < maxRetries;
+				retryDelay = recovery.retryDelay || getRetryDelay(error as any, request.retryCount);
+			} catch (recoveryError) {
+				console.warn(`Error recovery failed for ${queueKey}:`, recoveryError);
+				shouldRetry = isRetryableError(error as any) && request.retryCount < maxRetries;
+				retryDelay = getRetryDelay(error as any, request.retryCount);
+			}
+		} else {
+			shouldRetry = isRetryableError(error as any) && request.retryCount < maxRetries;
+			retryDelay = getRetryDelay(error as any, request.retryCount);
+		}
+
+		if (!shouldRetry) {
 			this.translationQueue.delete(queueKey);
 			this.cacheService.removePending(request.key, request.targetLanguage);
+
+			if (!this.errorRecoveryService) {
+				try {
+					const fallback = await this.createBasicFallback(request.key, request.targetLanguage);
+					if (fallback) {
+						this.cacheService.setTranslation(request.key, request.targetLanguage, fallback);
+						console.log(`Used basic fallback for ${request.key} -> ${request.targetLanguage}`);
+						return;
+					}
+				} catch (fallbackError) {
+					console.warn(`Basic fallback failed for ${queueKey}:`, fallbackError);
+				}
+			}
 
 			console.error(`Translation failed for ${request.key} -> ${request.targetLanguage}:`, error);
 			return;
 		}
 
-		const delay = getRetryDelay(error as any, request.retryCount);
-
 		setTimeout(() => {
 			this.processTranslationRequest(queueKey, request).catch((retryError) => {
 				console.warn(`Retry failed for ${queueKey}:`, retryError);
 			});
-		}, delay);
+		}, retryDelay);
 	}
 
 	private async saveTranslationToFile(
@@ -578,6 +693,29 @@ export class TranslationManagerImpl implements TranslationManager {
 
 	private delay(ms: number): Promise<void> {
 		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
+	private async createBasicFallback(key: string, language: string): Promise<string | null> {
+		try {
+			const cached = this.cacheService.getTranslation(key, language);
+			if (cached) {
+				return cached;
+			}
+
+			if (language !== DEFAULT_SOURCE_LANGUAGE) {
+				try {
+					const sourceTranslation = await this.getTranslation(key, DEFAULT_SOURCE_LANGUAGE);
+					return sourceTranslation;
+				} catch (error) {
+					console.warn(`Failed to get source translation for fallback: ${key}`, error);
+				}
+			}
+
+			return key;
+		} catch (error) {
+			console.error(`Basic fallback creation failed for ${key} in ${language}:`, error);
+			return null;
+		}
 	}
 }
 

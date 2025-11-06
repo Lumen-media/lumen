@@ -294,9 +294,9 @@ export class CacheServiceImpl implements CacheService {
 			}
 		}
 
-		for (const pendingKey of this.pendingRequests) {
+		this.pendingRequests.forEach((pendingKey) => {
 			totalSize += pendingKey.length * 2;
-		}
+		});
 
 		return totalSize;
 	}

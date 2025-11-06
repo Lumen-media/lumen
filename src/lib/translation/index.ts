@@ -4,6 +4,11 @@ export {
 	TRANSLATION_PATHS,
 } from "./constants";
 export {
+	ErrorHandlingUtils,
+	TranslationErrorHandler,
+	withTranslationErrorHandling,
+} from "./error-handler";
+export {
 	AITranslationError,
 	CacheError,
 	ConfigurationError,
@@ -14,4 +19,11 @@ export {
 	ValidationError,
 } from "./errors";
 export { cliService, translationManager } from "./services";
+export {
+	errorRecoveryService,
+	notificationService,
+	startHealthMonitoring,
+	stopHealthMonitoring,
+	validateSystemConfiguration,
+} from "./services/integrated-error-recovery";
 export type { CLIService, TranslationManager } from "./types";

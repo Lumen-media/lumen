@@ -2,11 +2,11 @@ import { readTextFile, writeTextFile, exists, readDir, remove } from "@tauri-app
 import type { FileSystemService, TranslationFile } from "../types";
 import { TRANSLATION_PATHS, LANGUAGE_CODE_PATTERN } from "../constants";
 import {
-	createFileSystemError,
-	FileSystemErrorCode,
-	createValidationError,
-	ValidationErrorCode,
-	FileSystemError,
+    createFileSystemError,
+    FileSystemErrorCode,
+    createValidationError,
+    ValidationErrorCode,
+    FileSystemError,
 } from "../errors";
 
 export class TauriFileSystemService implements FileSystemService {
@@ -31,10 +31,55 @@ export class TauriFileSystemService implements FileSystemService {
 
 			const content = await readTextFile(filePath);
 
-			const translations = JSON.parse(content) as TranslationFile;
+			if (!content || content.trim().length === 0) {
+				throw createFileSystemError(
+					FileSystemErrorCode.CORRUPTION_DETECTED,
+					`Translation file is empty: ${filePath}`
+				);
+			}
+
+			let translations: TranslationFile;
+			try {
+				translations = JSON.parse(content) as TranslationFile;
+			} catch (parseError) {
+				const backupPath = `${filePath}${this.backupSuffix}`;
+				const backupExists = await exists(backupPath);
+
+				if (backupExists) {
+					console.warn(`JSON parsing failed for ${filePath}, attempting backup recovery`);
+					try {
+						const backupContent = await readTextFile(backupPath);
+						translations = JSON.parse(backupContent) as TranslationFile;
+						console.log(`Successfully recovered ${language} from backup`);
+
+						await writeTextFile(filePath, backupContent);
+					} catch (backupError) {
+						throw createFileSystemError(
+							FileSystemErrorCode.CORRUPTION_DETECTED,
+							`Invalid JSON in translation file and backup recovery failed: ${filePath}`,
+							parseError as Error
+						);
+					}
+				} else {
+					throw createFileSystemError(
+						FileSystemErrorCode.CORRUPTION_DETECTED,
+						`Invalid JSON in translation file: ${filePath}`,
+						parseError as Error
+					);
+				}
+			}
+
+			if (typeof translations !== "object" || translations === null) {
+				throw createFileSystemError(
+					FileSystemErrorCode.CORRUPTION_DETECTED,
+					`Translation file has invalid structure: ${filePath}`
+				);
+			}
 
 			return this.flattenTranslations(translations);
 		} catch (error) {
+			const errorMessage = (error as Error).message || "";
+
 			if (error instanceof SyntaxError) {
 				throw createFileSystemError(
 					FileSystemErrorCode.CORRUPTION_DETECTED,
@@ -43,12 +88,24 @@ export class TauriFileSystemService implements FileSystemService {
 				);
 			}
 
-			if ((error as Error).message?.includes("permission")) {
+			if (errorMessage.includes("permission") || errorMessage.includes("denied")) {
 				throw createFileSystemError(
 					FileSystemErrorCode.PERMISSION_DENIED,
 					`Permission denied reading file: ${filePath}`,
 					error as Error
 				);
+			}
+
+			if (errorMessage.includes("ENOENT") || errorMessage.includes("not found")) {
+				throw createFileSystemError(
+					FileSystemErrorCode.FILE_NOT_FOUND,
+					`Translation file not found: ${filePath}`,
+					error as Error
+				);
+			}
+
+			if (error instanceof Error && error.constructor.name === "FileSystemError") {
+				throw error;
 			}
 
 			throw createFileSystemError(
@@ -70,16 +127,20 @@ export class TauriFileSystemService implements FileSystemService {
 
 		try {
 			await this.ensureLanguageDirectory(language);
-
 			await this.backupTranslationFile(language);
-
 			const nestedTranslations = this.unflattenTranslations(translations);
-
 			const content = JSON.stringify(nestedTranslations, null, "\t");
 			await writeTextFile(tempPath, content);
-
 			const verifyContent = await readTextFile(tempPath);
-			JSON.parse(verifyContent);
+			try {
+				JSON.parse(verifyContent);
+			} catch (parseError) {
+				throw createFileSystemError(
+					FileSystemErrorCode.CORRUPTION_DETECTED,
+					`Generated JSON is invalid: ${parseError instanceof Error ? parseError.message : "Unknown error"}`,
+					parseError as Error
+				);
+			}
 
 			await this.moveFile(tempPath, filePath);
 		} catch (error) {
@@ -88,9 +149,13 @@ export class TauriFileSystemService implements FileSystemService {
 				if (tempExists) {
 					await this.deleteFile(tempPath);
 				}
-			} catch {}
+			} catch (cleanupError) {
+				console.warn(`Failed to cleanup temporary file ${tempPath}:`, cleanupError);
+			}
 
-			if ((error as Error).message?.includes("permission")) {
+			const errorMessage = (error as Error).message || "";
+
+			if (errorMessage.includes("permission") || errorMessage.includes("denied")) {
 				throw createFileSystemError(
 					FileSystemErrorCode.PERMISSION_DENIED,
 					`Permission denied writing file: ${filePath}`,
@@ -98,12 +163,28 @@ export class TauriFileSystemService implements FileSystemService {
 				);
 			}
 
-			if ((error as Error).message?.includes("space")) {
+			if (
+				errorMessage.includes("space") ||
+				errorMessage.includes("full") ||
+				errorMessage.includes("ENOSPC")
+			) {
 				throw createFileSystemError(
 					FileSystemErrorCode.DISK_FULL,
 					`Insufficient disk space for file: ${filePath}`,
 					error as Error
 				);
+			}
+
+			if (errorMessage.includes("readonly") || errorMessage.includes("EROFS")) {
+				throw createFileSystemError(
+					FileSystemErrorCode.PERMISSION_DENIED,
+					`File system is read-only: ${filePath}`,
+					error as Error
+				);
+			}
+
+			if (error instanceof Error && error.constructor.name === "FileSystemError") {
+				throw error;
 			}
 
 			throw createFileSystemError(

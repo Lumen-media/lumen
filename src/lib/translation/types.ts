@@ -124,9 +124,6 @@ export interface TranslationManager {
 	parseKeyContext(key: string): string;
 }
 
-/**
- * Service for AI-powered translation using Gemini API
- */
 export interface AITranslationService {
 	/**
 	 * Translate a single text to target language
@@ -178,9 +175,6 @@ export interface AITranslationService {
 	getRateLimitStatus(): RateLimitStatus;
 }
 
-/**
- * Service for file system operations using Tauri APIs
- */
 export interface FileSystemService {
 	/**
 	 * Read translation file for a specific language
@@ -233,9 +227,6 @@ export interface FileSystemService {
 	copyTranslationStructure(sourceLanguage: string, targetLanguage: string): Promise<void>;
 }
 
-/**
- * Service for caching translations and managing pending requests
- */
 export interface CacheService {
 	/**
 	 * Get cached translation
@@ -295,9 +286,6 @@ export interface CacheService {
 	hasLanguage(language: string): boolean;
 }
 
-/**
- * Service for CLI operations and language management
- */
 export interface CLIService {
 	/**
 	 * Add a new language with automatic translation

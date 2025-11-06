@@ -6,7 +6,8 @@ export const VideoPlayerModal = () => {
 	const { currentVideo, isPlaying, playerRef } = usePlayerStore();
 
 	const handleOpenChange = (open: boolean) => {
-		if (!open) {}
+		if (!open) {
+		}
 	};
 
 	return (

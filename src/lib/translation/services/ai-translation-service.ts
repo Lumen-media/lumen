@@ -1,19 +1,19 @@
-import type { AITranslationService, RateLimitStatus, StreamingTranslationResult } from "../types";
 import {
-	GEMINI_CONFIG,
-	TRANSLATION_CONFIG,
-	RETRY_CONFIG,
 	COMMON_LANGUAGES,
 	DEFAULT_SOURCE_LANGUAGE,
 	ENV_VARS,
+	GEMINI_CONFIG,
+	RETRY_CONFIG,
+	TRANSLATION_CONFIG,
 } from "../constants";
 import {
 	AIErrorCode,
+	type AITranslationError,
 	createAIError,
-	AITranslationError,
-	ValidationErrorCode,
 	createValidationError,
+	ValidationErrorCode,
 } from "../errors";
+import type { AITranslationService, RateLimitStatus, StreamingTranslationResult } from "../types";
 
 export class GeminiTranslationService implements AITranslationService {
 	private apiKey: string;
@@ -228,13 +228,37 @@ Rules:
 			this.updateRateLimit();
 
 			if (!response.ok) {
-				if (response.status === 429) {
-					throw createAIError(AIErrorCode.RATE_LIMIT_EXCEEDED, "Rate limit exceeded");
+				// Enhanced error handling for different HTTP status codes
+				switch (response.status) {
+					case 401:
+						throw createAIError(
+							AIErrorCode.API_KEY_INVALID,
+							"Invalid API key - please check your Gemini API key configuration"
+						);
+					case 403:
+						throw createAIError(
+							AIErrorCode.API_KEY_INVALID,
+							"API key lacks required permissions - please check your Gemini API key permissions"
+						);
+					case 429:
+						throw createAIError(
+							AIErrorCode.RATE_LIMIT_EXCEEDED,
+							"Rate limit exceeded - please wait before making more requests"
+						);
+					case 500:
+					case 502:
+					case 503:
+					case 504:
+						throw createAIError(
+							AIErrorCode.SERVICE_UNAVAILABLE,
+							`Gemini API service temporarily unavailable (${response.status})`
+						);
+					default:
+						throw createAIError(
+							AIErrorCode.NETWORK_ERROR,
+							`API request failed: ${response.status} ${response.statusText}`
+						);
 				}
-				throw createAIError(
-					AIErrorCode.NETWORK_ERROR,
-					`API request failed: ${response.status} ${response.statusText}`
-				);
 			}
 
 			const data = await response.json();
@@ -265,26 +289,63 @@ Rules:
 				lastError = error as Error;
 
 				const translationError = error as AITranslationError;
-				if (translationError.code && translationError.code !== AIErrorCode.RATE_LIMIT_EXCEEDED) {
-					throw error;
+
+				// Enhanced error handling with proper retry logic
+				if (translationError.code) {
+					// Don't retry non-retryable errors
+					if (!isRetryableError(translationError)) {
+						throw error;
+					}
+
+					// Handle specific error types
+					if (
+						translationError.code === AIErrorCode.API_KEY_INVALID ||
+						translationError.code === AIErrorCode.API_KEY_MISSING
+					) {
+						throw createAIError(
+							translationError.code,
+							"API key configuration issue - please check your Gemini API key",
+							translationError
+						);
+					}
+
+					if (translationError.code === AIErrorCode.QUOTA_EXCEEDED) {
+						throw createAIError(
+							AIErrorCode.QUOTA_EXCEEDED,
+							"API quota exceeded - please check your billing and usage limits",
+							translationError
+						);
+					}
 				}
 
 				if (attempt === RETRY_CONFIG.MAX_ATTEMPTS) {
 					break;
 				}
 
-				const baseDelay = RETRY_CONFIG.BASE_DELAY_MS * Math.pow(2, attempt - 1);
-				const jitter = baseDelay * RETRY_CONFIG.JITTER_FACTOR * Math.random();
-				const delay = Math.min(baseDelay + jitter, RETRY_CONFIG.MAX_DELAY_MS);
+				// Use enhanced retry delay calculation
+				const delay = isRetryableError(translationError)
+					? getRetryDelay(translationError, attempt)
+					: RETRY_CONFIG.BASE_DELAY_MS * 2 ** (attempt - 1);
 
 				console.warn(`Translation attempt ${attempt} failed, retrying in ${delay}ms:`, error);
 				await this.delay(delay);
 			}
 		}
 
+		// Enhanced error reporting
+		const finalError = lastError as AITranslationError;
+		if (finalError?.code === AIErrorCode.RATE_LIMIT_EXCEEDED) {
+			throw createAIError(
+				AIErrorCode.RATE_LIMIT_EXCEEDED,
+				`Rate limit exceeded after ${RETRY_CONFIG.MAX_ATTEMPTS} attempts. Please wait before retrying.`,
+				finalError
+			);
+		}
+
 		throw createAIError(
 			AIErrorCode.TRANSLATION_FAILED,
-			`Translation failed after ${RETRY_CONFIG.MAX_ATTEMPTS} attempts: ${lastError?.message || "Unknown error"}`
+			`Translation failed after ${RETRY_CONFIG.MAX_ATTEMPTS} attempts: ${lastError?.message || "Unknown error"}`,
+			lastError as Error
 		);
 	}
 
