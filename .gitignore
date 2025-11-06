@@ -2,6 +2,7 @@
 
 # dependencies
 /.tanstack
+/.kiro
 /node_modules
 /.pnp
 .pnp.*
