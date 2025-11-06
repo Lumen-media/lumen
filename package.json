@@ -9,7 +9,13 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "biome lint .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "translate": "echo 'CLI functionality available in the app. Use the CLITest component or build the project first.'",
+    "translate:add-language": "npm run translate add-language",
+    "translate:all": "npm run translate translate-all",
+    "translate:progress": "npm run translate progress",
+    "translate:list": "npm run translate list",
+    "translate:stats": "npm run translate stats"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
