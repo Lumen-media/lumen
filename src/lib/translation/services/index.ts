@@ -3,9 +3,9 @@ export { fileSystemService } from "./file-system-service";
 export { cacheService } from "./cache-service";
 export { translationManager } from "./translation-manager";
 
-export type { 
+export type {
 	TranslationManager,
 	AITranslationService,
 	FileSystemService,
-	CacheService 
+	CacheService,
 } from "../types";

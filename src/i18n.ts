@@ -21,13 +21,20 @@ i18n.use(initReactI18next).init({
 	returnEmptyString: false,
 	returnNull: false,
 	saveMissing: true,
+	// Enable missing key handling for automatic translation
 	missingKeyHandler: (lngs: readonly string[], ns: string, key: string, fallbackValue: string) => {
+		// Handle missing keys for all requested languages
 		for (const lng of lngs) {
 			translationManager.handleMissingKey(lng, ns, key, fallbackValue);
 		}
 	},
+	// Parse missing keys to extract context for better translations
 	parseMissingKeyHandler: (key: string) => {
 		return translationManager.parseKeyContext(key);
+	},
+	// Ensure backward compatibility
+	react: {
+		useSuspense: false, // Prevent suspense issues during dynamic loading
 	},
 });
 

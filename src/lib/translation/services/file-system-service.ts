@@ -1,14 +1,12 @@
 import { readTextFile, writeTextFile, exists, readDir, remove } from "@tauri-apps/plugin-fs";
 import type { FileSystemService, TranslationFile } from "../types";
+import { TRANSLATION_PATHS, LANGUAGE_CODE_PATTERN } from "../constants";
 import {
-    TRANSLATION_PATHS, LANGUAGE_CODE_PATTERN
-} from "../constants";
-import {
-    createFileSystemError,
-    FileSystemErrorCode,
-    createValidationError,
-    ValidationErrorCode,
-    FileSystemError,
+	createFileSystemError,
+	FileSystemErrorCode,
+	createValidationError,
+	ValidationErrorCode,
+	FileSystemError,
 } from "../errors";
 
 export class TauriFileSystemService implements FileSystemService {
@@ -32,9 +30,9 @@ export class TauriFileSystemService implements FileSystemService {
 			}
 
 			const content = await readTextFile(filePath);
-			
+
 			const translations = JSON.parse(content) as TranslationFile;
-			
+
 			return this.flattenTranslations(translations);
 		} catch (error) {
 			if (error instanceof SyntaxError) {
@@ -44,7 +42,7 @@ export class TauriFileSystemService implements FileSystemService {
 					error
 				);
 			}
-			
+
 			if ((error as Error).message?.includes("permission")) {
 				throw createFileSystemError(
 					FileSystemErrorCode.PERMISSION_DENIED,
@@ -61,7 +59,10 @@ export class TauriFileSystemService implements FileSystemService {
 		}
 	}
 
-	async writeTranslationFile(language: string, translations: Record<string, string>): Promise<void> {
+	async writeTranslationFile(
+		language: string,
+		translations: Record<string, string>
+	): Promise<void> {
 		this.validateLanguageCode(language);
 
 		const filePath = this.getTranslationFilePath(language);
@@ -81,15 +82,13 @@ export class TauriFileSystemService implements FileSystemService {
 			JSON.parse(verifyContent);
 
 			await this.moveFile(tempPath, filePath);
-
 		} catch (error) {
 			try {
 				const tempExists = await exists(tempPath);
 				if (tempExists) {
 					await this.deleteFile(tempPath);
 				}
-			} catch {
-			}
+			} catch {}
 
 			if ((error as Error).message?.includes("permission")) {
 				throw createFileSystemError(
@@ -129,7 +128,6 @@ export class TauriFileSystemService implements FileSystemService {
 
 			const content = await readTextFile(filePath);
 			await writeTextFile(backupPath, content);
-
 		} catch (error) {
 			throw createFileSystemError(
 				FileSystemErrorCode.BACKUP_FAILED,
@@ -156,7 +154,6 @@ export class TauriFileSystemService implements FileSystemService {
 
 			const content = await readTextFile(backupPath);
 			await writeTextFile(filePath, content);
-
 		} catch (error) {
 			throw createFileSystemError(
 				FileSystemErrorCode.RESTORE_FAILED,
@@ -190,7 +187,7 @@ export class TauriFileSystemService implements FileSystemService {
 
 		try {
 			await this.ensureTranslationDirectory();
-			
+
 			const dirExists = await exists(languageDir);
 			if (!dirExists) {
 				const tempFile = `${languageDir}/.temp`;
@@ -223,7 +220,7 @@ export class TauriFileSystemService implements FileSystemService {
 					if (LANGUAGE_CODE_PATTERN.test(entry.name)) {
 						const translationPath = this.getTranslationFilePath(entry.name);
 						const translationExists = await exists(translationPath);
-						
+
 						if (translationExists) {
 							languages.push(entry.name);
 						}
@@ -256,7 +253,6 @@ export class TauriFileSystemService implements FileSystemService {
 			const sourceTranslations = await this.readTranslationFile(sourceLanguage);
 			await this.createLanguageDirectory(targetLanguage);
 			await this.writeTranslationFile(targetLanguage, sourceTranslations);
-
 		} catch (error) {
 			if (error instanceof FileSystemError && error.code === FileSystemErrorCode.FILE_NOT_FOUND) {
 				throw createFileSystemError(
@@ -303,24 +299,24 @@ export class TauriFileSystemService implements FileSystemService {
 	): Record<string, string> {
 		for (const [key, value] of Object.entries(obj)) {
 			const newKey = prefix ? `${prefix}.${key}` : key;
-			
+
 			if (typeof value === "string") {
 				result[newKey] = value;
 			} else if (typeof value === "object" && value !== null) {
 				this.flattenTranslations(value, newKey, result);
 			}
 		}
-		
+
 		return result;
 	}
 
 	private unflattenTranslations(flat: Record<string, string>): TranslationFile {
 		const result: TranslationFile = {};
-		
+
 		for (const [key, value] of Object.entries(flat)) {
 			const keys = key.split(".");
 			let current = result;
-			
+
 			for (let i = 0; i < keys.length - 1; i++) {
 				const k = keys[i];
 				if (!(k in current)) {
@@ -328,10 +324,10 @@ export class TauriFileSystemService implements FileSystemService {
 				}
 				current = current[k] as TranslationFile;
 			}
-			
+
 			current[keys[keys.length - 1]] = value;
 		}
-		
+
 		return result;
 	}
 

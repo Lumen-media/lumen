@@ -1,25 +1,26 @@
-import type {
-    TranslationManager,
-    AITranslationService,
-    FileSystemService,
-    CacheService,
-    TranslationRequest,
-} from "../types";
+import i18next from "i18next";
 import {
-    DEFAULT_SOURCE_LANGUAGE,
-    TRANSLATION_KEY_PATTERN,
-    VALIDATION_LIMITS,
-    CLI_CONFIG,
+	CLI_CONFIG,
+	DEFAULT_SOURCE_LANGUAGE,
+	TRANSLATION_KEY_PATTERN,
+	VALIDATION_LIMITS,
 } from "../constants";
 import {
-    createValidationError,
-    ValidationErrorCode,
-    createConfigurationError,
-    ConfigurationErrorCode,
-    isTranslationError,
-    isRetryableError,
-    getRetryDelay,
+	ConfigurationErrorCode,
+	createConfigurationError,
+	createValidationError,
+	getRetryDelay,
+	isRetryableError,
+	isTranslationError,
+	ValidationErrorCode,
 } from "../errors";
+import type {
+	AITranslationService,
+	CacheService,
+	FileSystemService,
+	TranslationManager,
+	TranslationRequest,
+} from "../types";
 
 export class TranslationManagerImpl implements TranslationManager {
 	private translationQueue = new Map<string, TranslationRequest>();
@@ -51,7 +52,7 @@ export class TranslationManagerImpl implements TranslationManager {
 		try {
 			const translations = await this.loadTranslations(language);
 			const translation = translations[key];
-			
+
 			if (translation) {
 				this.cacheService.setTranslation(key, language, translation);
 				return this.interpolateVariables(translation, variables);
@@ -62,7 +63,11 @@ export class TranslationManagerImpl implements TranslationManager {
 
 		if (language !== DEFAULT_SOURCE_LANGUAGE) {
 			try {
-				const sourceTranslation = await this.getTranslation(key, DEFAULT_SOURCE_LANGUAGE, variables);
+				const sourceTranslation = await this.getTranslation(
+					key,
+					DEFAULT_SOURCE_LANGUAGE,
+					variables
+				);
 				this.requestTranslation(key, sourceTranslation, language);
 				return sourceTranslation;
 			} catch (error) {
@@ -73,7 +78,11 @@ export class TranslationManagerImpl implements TranslationManager {
 		return this.interpolateVariables(key, variables);
 	}
 
-	async requestTranslation(key: string, sourceText: string, targetLanguage?: string): Promise<void> {
+	async requestTranslation(
+		key: string,
+		sourceText: string,
+		targetLanguage?: string
+	): Promise<void> {
 		this.validateTranslationKey(key);
 		this.validateSourceText(sourceText);
 
@@ -91,9 +100,11 @@ export class TranslationManagerImpl implements TranslationManager {
 
 		await this.ensureInitialized();
 
-		const targetLanguages = this.availableLanguages.filter(lang => lang !== DEFAULT_SOURCE_LANGUAGE);
+		const targetLanguages = this.availableLanguages.filter(
+			(lang) => lang !== DEFAULT_SOURCE_LANGUAGE
+		);
 
-		const promises = targetLanguages.map(language => 
+		const promises = targetLanguages.map((language) =>
 			this.queueTranslation(key, sourceText, language)
 		);
 
@@ -138,6 +149,37 @@ export class TranslationManagerImpl implements TranslationManager {
 		return [...this.availableLanguages];
 	}
 
+	async reloadAllResources(): Promise<void> {
+		try {
+			await i18next.reloadResources();
+		} catch (error) {
+			console.warn("Failed to reload all i18next resources:", error);
+		}
+	}
+
+	async initializeI18nextIntegration(): Promise<void> {
+		try {
+			// Ensure all available languages are loaded into i18next
+			for (const language of this.availableLanguages) {
+				try {
+					const translations = await this.loadTranslations(language);
+
+					// Add all translations to i18next resources
+					for (const [key, value] of Object.entries(translations)) {
+						i18next.addResource(language, "translation", key, value);
+					}
+				} catch (error) {
+					console.warn(`Failed to load translations for ${language} during initialization:`, error);
+				}
+			}
+
+			// Reload resources to ensure everything is up to date
+			await this.reloadAllResources();
+		} catch (error) {
+			console.warn("Failed to initialize i18next integration:", error);
+		}
+	}
+
 	async addNewLanguage(languageCode: string, languageName: string): Promise<void> {
 		this.validateLanguageCode(languageCode);
 		this.validateLanguageName(languageName);
@@ -156,26 +198,25 @@ export class TranslationManagerImpl implements TranslationManager {
 			this.availableLanguages.sort();
 
 			const sourceTranslations = await this.loadTranslations(DEFAULT_SOURCE_LANGUAGE);
-			
+
 			const entries = Object.entries(sourceTranslations);
 			const chunkSize = CLI_CONFIG.CHUNK_SIZE;
-			
+
 			for (let i = 0; i < entries.length; i += chunkSize) {
 				const chunk = entries.slice(i, i + chunkSize);
-				const promises = chunk.map(([key, sourceText]) => 
+				const promises = chunk.map(([key, sourceText]) =>
 					this.queueTranslation(key, sourceText, languageCode)
 				);
-				
+
 				await Promise.allSettled(promises);
 
 				if (i + chunkSize < entries.length) {
 					await this.delay(1000);
 				}
 			}
-
 		} catch (error) {
-			this.availableLanguages = this.availableLanguages.filter(lang => lang !== languageCode);
-			
+			this.availableLanguages = this.availableLanguages.filter((lang) => lang !== languageCode);
+
 			if (isTranslationError(error)) {
 				throw error;
 			}
@@ -189,7 +230,7 @@ export class TranslationManagerImpl implements TranslationManager {
 
 	handleMissingKey(lng: string, ns: string, key: string, fallbackValue: string): void {
 		try {
-			if (!key || !lng || !fallbackValue) {
+			if (!key || !lng) {
 				return;
 			}
 
@@ -197,12 +238,23 @@ export class TranslationManagerImpl implements TranslationManager {
 				return;
 			}
 
+			const existing = this.cacheService.getTranslation(key, lng);
+			if (existing) {
+				return;
+			}
+
 			const sourceText = fallbackValue || key;
 
-			this.queueTranslation(key, sourceText, lng).catch(error => {
-				console.warn(`Failed to queue translation for missing key ${key}:`, error);
-			});
-
+			if (lng !== DEFAULT_SOURCE_LANGUAGE) {
+				this.queueTranslation(key, sourceText, lng).catch((error) => {
+					console.warn(`Failed to queue translation for missing key ${key} -> ${lng}:`, error);
+				});
+			} else {
+				this.cacheService.setTranslation(key, lng, sourceText);
+				this.saveTranslationToFile(key, lng, sourceText).catch((error) => {
+					console.warn(`Failed to save source translation for ${key}:`, error);
+				});
+			}
 		} catch (error) {
 			console.warn(`Error handling missing key ${key}:`, error);
 		}
@@ -210,11 +262,39 @@ export class TranslationManagerImpl implements TranslationManager {
 
 	parseKeyContext(key: string): string {
 		try {
-			const parts = key.split('.');
-			
+			if (!key || typeof key !== "string") {
+				return "General application text";
+			}
+
+			const parts = key.split(".");
+
 			if (parts.length > 1) {
-				const namespace = parts.slice(0, -1).join('.');
-				return `Context: ${namespace} section of the application`;
+				const namespace = parts.slice(0, -1).join(".");
+
+				const contextMap: Record<string, string> = {
+					nav: "Navigation menu",
+					button: "Button or action element",
+					form: "Form field or validation",
+					error: "Error message",
+					success: "Success message",
+					modal: "Modal dialog",
+					tooltip: "Tooltip or help text",
+					placeholder: "Input placeholder text",
+					label: "Form label",
+					title: "Page or section title",
+					description: "Description text",
+					player: "Media player interface",
+					controls: "Control interface",
+					panel: "UI panel or section",
+				};
+
+				for (const [pattern, context] of Object.entries(contextMap)) {
+					if (namespace.toLowerCase().includes(pattern)) {
+						return `${context} in the ${namespace} section`;
+					}
+				}
+
+				return `${namespace} section of the application`;
 			}
 
 			return "General application text";
@@ -242,6 +322,8 @@ export class TranslationManagerImpl implements TranslationManager {
 				this.availableLanguages.unshift(DEFAULT_SOURCE_LANGUAGE);
 			}
 
+			await this.initializeI18nextIntegration();
+
 			this.isInitialized = true;
 		} catch (error) {
 			console.error("Failed to initialize Translation Manager:", error);
@@ -256,7 +338,11 @@ export class TranslationManagerImpl implements TranslationManager {
 		}
 	}
 
-	private async queueTranslation(key: string, sourceText: string, targetLanguage: string): Promise<void> {
+	private async queueTranslation(
+		key: string,
+		sourceText: string,
+		targetLanguage: string
+	): Promise<void> {
 		const queueKey = `${key}:${targetLanguage}`;
 
 		if (this.processingQueue.has(queueKey) || this.cacheService.isPending(key, targetLanguage)) {
@@ -281,7 +367,7 @@ export class TranslationManagerImpl implements TranslationManager {
 		this.cacheService.setPending(key, targetLanguage);
 
 		if (this.aiService.isOnline()) {
-			this.processTranslationQueue().catch(error => {
+			this.processTranslationQueue().catch((error) => {
 				console.warn("Error processing translation queue:", error);
 			});
 		}
@@ -289,29 +375,32 @@ export class TranslationManagerImpl implements TranslationManager {
 
 	private async processTranslationQueue(): Promise<void> {
 		const pendingRequests = Array.from(this.translationQueue.entries());
-		
+
 		if (pendingRequests.length === 0) {
 			return;
 		}
 
 		const batchSize = Math.min(CLI_CONFIG.MAX_CONCURRENT_REQUESTS, pendingRequests.length);
-		
+
 		for (let i = 0; i < pendingRequests.length; i += batchSize) {
 			const batch = pendingRequests.slice(i, i + batchSize);
-			
-			const promises = batch.map(([queueKey, request]) => 
+
+			const promises = batch.map(([queueKey, request]) =>
 				this.processTranslationRequest(queueKey, request)
 			);
-			
+
 			await Promise.allSettled(promises);
-			
+
 			if (i + batchSize < pendingRequests.length) {
 				await this.delay(1000);
 			}
 		}
 	}
 
-	private async processTranslationRequest(queueKey: string, request: TranslationRequest): Promise<void> {
+	private async processTranslationRequest(
+		queueKey: string,
+		request: TranslationRequest
+	): Promise<void> {
 		if (this.processingQueue.has(queueKey)) {
 			return;
 		}
@@ -331,7 +420,6 @@ export class TranslationManagerImpl implements TranslationManager {
 
 			this.translationQueue.delete(queueKey);
 			this.cacheService.removePending(request.key, request.targetLanguage);
-
 		} catch (error) {
 			await this.handleTranslationError(queueKey, request, error as Error);
 		} finally {
@@ -339,16 +427,20 @@ export class TranslationManagerImpl implements TranslationManager {
 		}
 	}
 
-	private async handleTranslationError(queueKey: string, request: TranslationRequest, error: Error): Promise<void> {
+	private async handleTranslationError(
+		queueKey: string,
+		request: TranslationRequest,
+		error: Error
+	): Promise<void> {
 		request.retryCount++;
 		request.lastAttempt = new Date();
 
 		const maxRetries = 3;
-		
+
 		if (request.retryCount >= maxRetries || !isRetryableError(error as any)) {
 			this.translationQueue.delete(queueKey);
 			this.cacheService.removePending(request.key, request.targetLanguage);
-			
+
 			console.error(`Translation failed for ${request.key} -> ${request.targetLanguage}:`, error);
 			return;
 		}
@@ -356,22 +448,43 @@ export class TranslationManagerImpl implements TranslationManager {
 		const delay = getRetryDelay(error as any, request.retryCount);
 
 		setTimeout(() => {
-			this.processTranslationRequest(queueKey, request).catch(retryError => {
+			this.processTranslationRequest(queueKey, request).catch((retryError) => {
 				console.warn(`Retry failed for ${queueKey}:`, retryError);
 			});
 		}, delay);
 	}
 
-	private async saveTranslationToFile(key: string, language: string, translation: string): Promise<void> {
+	private async saveTranslationToFile(
+		key: string,
+		language: string,
+		translation: string
+	): Promise<void> {
 		try {
 			const existingTranslations = await this.loadTranslations(language);
 
 			existingTranslations[key] = translation;
 
 			await this.fileService.writeTranslationFile(language, existingTranslations);
-			
+
+			await this.reloadI18nextResources(language, key, translation);
 		} catch (error) {
 			console.error(`Failed to save translation to file for ${key} -> ${language}:`, error);
+		}
+	}
+
+	private async reloadI18nextResources(
+		language: string,
+		key: string,
+		translation: string
+	): Promise<void> {
+		try {
+			i18next.addResource(language, "translation", key, translation);
+
+			if (i18next.language === language) {
+				await i18next.reloadResources();
+			}
+		} catch (error) {
+			console.warn(`Failed to reload i18next resources for ${language}:`, error);
 		}
 	}
 
@@ -394,7 +507,10 @@ export class TranslationManagerImpl implements TranslationManager {
 			);
 		}
 
-		if (key.length < VALIDATION_LIMITS.MIN_KEY_LENGTH || key.length > VALIDATION_LIMITS.MAX_KEY_LENGTH) {
+		if (
+			key.length < VALIDATION_LIMITS.MIN_KEY_LENGTH ||
+			key.length > VALIDATION_LIMITS.MAX_KEY_LENGTH
+		) {
 			throw createValidationError(
 				ValidationErrorCode.INVALID_TRANSLATION_KEY,
 				`Translation key length must be between ${VALIDATION_LIMITS.MIN_KEY_LENGTH} and ${VALIDATION_LIMITS.MAX_KEY_LENGTH} characters`
@@ -433,7 +549,10 @@ export class TranslationManagerImpl implements TranslationManager {
 			);
 		}
 
-		if (text.length < VALIDATION_LIMITS.MIN_TEXT_LENGTH || text.length > VALIDATION_LIMITS.MAX_TEXT_LENGTH) {
+		if (
+			text.length < VALIDATION_LIMITS.MIN_TEXT_LENGTH ||
+			text.length > VALIDATION_LIMITS.MAX_TEXT_LENGTH
+		) {
 			throw createValidationError(
 				ValidationErrorCode.INVALID_TRANSLATION_FORMAT,
 				`Source text length must be between ${VALIDATION_LIMITS.MIN_TEXT_LENGTH} and ${VALIDATION_LIMITS.MAX_TEXT_LENGTH} characters`
@@ -458,7 +577,7 @@ export class TranslationManagerImpl implements TranslationManager {
 	}
 
 	private delay(ms: number): Promise<void> {
-		return new Promise(resolve => setTimeout(resolve, ms));
+		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 }
 
@@ -467,8 +586,8 @@ export class TranslationManagerImpl implements TranslationManager {
 // ============================================================================
 
 import { aiTranslationService } from "./ai-translation-service";
-import { fileSystemService } from "./file-system-service";
 import { cacheService } from "./cache-service";
+import { fileSystemService } from "./file-system-service";
 
 export const translationManager = new TranslationManagerImpl(
 	aiTranslationService,

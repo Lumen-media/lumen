@@ -1,22 +1,18 @@
-import type {
-    AITranslationService,
-    RateLimitStatus,
-    StreamingTranslationResult,
-} from "../types";
+import type { AITranslationService, RateLimitStatus, StreamingTranslationResult } from "../types";
 import {
-    GEMINI_CONFIG,
-    TRANSLATION_CONFIG,
-    RETRY_CONFIG,
-    COMMON_LANGUAGES,
-    DEFAULT_SOURCE_LANGUAGE,
-    ENV_VARS,
+	GEMINI_CONFIG,
+	TRANSLATION_CONFIG,
+	RETRY_CONFIG,
+	COMMON_LANGUAGES,
+	DEFAULT_SOURCE_LANGUAGE,
+	ENV_VARS,
 } from "../constants";
 import {
-    AIErrorCode,
-    createAIError,
-    AITranslationError,
-    ValidationErrorCode,
-    createValidationError,
+	AIErrorCode,
+	createAIError,
+	AITranslationError,
+	ValidationErrorCode,
+	createValidationError,
 } from "../errors";
 
 export class GeminiTranslationService implements AITranslationService {
@@ -54,16 +50,23 @@ export class GeminiTranslationService implements AITranslationService {
 		this.validateInput(text, targetLanguage);
 
 		if (!this.isOnline()) {
-			throw createAIError(AIErrorCode.API_KEY_MISSING, "Service is offline or API key is not configured");
+			throw createAIError(
+				AIErrorCode.API_KEY_MISSING,
+				"Service is offline or API key is not configured"
+			);
 		}
 
 		const prompt = this.buildPrompt(text, targetLanguage, context);
 		const response = await this.makeRequest(prompt);
-		
+
 		return this.extractTranslation(response, text);
 	}
 
-	async translateBatch(texts: string[], targetLanguage: string, context?: string): Promise<string[]> {
+	async translateBatch(
+		texts: string[],
+		targetLanguage: string,
+		context?: string
+	): Promise<string[]> {
 		if (texts.length === 0) {
 			return [];
 		}
@@ -85,16 +88,19 @@ export class GeminiTranslationService implements AITranslationService {
 		this.validateBatchInput(texts, targetLanguage);
 
 		if (!this.isOnline()) {
-			throw createAIError(AIErrorCode.API_KEY_MISSING, "Service is offline or API key is not configured");
+			throw createAIError(
+				AIErrorCode.API_KEY_MISSING,
+				"Service is offline or API key is not configured"
+			);
 		}
 
 		const prompt = this.buildBatchPrompt(texts, targetLanguage, context);
 		const response = await this.makeRequest(prompt);
-		
+
 		return this.extractBatchTranslations(response, texts);
 	}
 
-	async* translateToAllLanguages(
+	async *translateToAllLanguages(
 		text: string,
 		languages: string[],
 		context?: string
@@ -102,14 +108,17 @@ export class GeminiTranslationService implements AITranslationService {
 		this.validateInput(text, languages[0]);
 
 		if (!this.isOnline()) {
-			throw createAIError(AIErrorCode.API_KEY_MISSING, "Service is offline or API key is not configured");
+			throw createAIError(
+				AIErrorCode.API_KEY_MISSING,
+				"Service is offline or API key is not configured"
+			);
 		}
 
 		const batchSize = Math.min(3, TRANSLATION_CONFIG.MAX_BATCH_SIZE);
-		
+
 		for (let i = 0; i < languages.length; i += batchSize) {
 			const languageBatch = languages.slice(i, i + batchSize);
-			
+
 			const promises = languageBatch.map(async (language) => {
 				await this.waitForRateLimit();
 				const translation = await this.translateText(text, language, context);
@@ -117,7 +126,7 @@ export class GeminiTranslationService implements AITranslationService {
 			});
 
 			const results = await Promise.allSettled(promises);
-			
+
 			for (const result of results) {
 				if (result.status === "fulfilled") {
 					yield result.value;
@@ -133,8 +142,9 @@ export class GeminiTranslationService implements AITranslationService {
 	}
 
 	private buildPrompt(text: string, targetLanguage: string, context?: string): string {
-		const languageName = COMMON_LANGUAGES[targetLanguage as keyof typeof COMMON_LANGUAGES] || targetLanguage;
-		
+		const languageName =
+			COMMON_LANGUAGES[targetLanguage as keyof typeof COMMON_LANGUAGES] || targetLanguage;
+
 		let prompt = `You are a professional translator. Translate the following text from ${DEFAULT_SOURCE_LANGUAGE} to ${languageName} (${targetLanguage}).
 
 Rules:
@@ -156,8 +166,9 @@ Translation:`;
 	}
 
 	private buildBatchPrompt(texts: string[], targetLanguage: string, context?: string): string {
-		const languageName = COMMON_LANGUAGES[targetLanguage as keyof typeof COMMON_LANGUAGES] || targetLanguage;
-		
+		const languageName =
+			COMMON_LANGUAGES[targetLanguage as keyof typeof COMMON_LANGUAGES] || targetLanguage;
+
 		let prompt = `You are a professional translator. Translate the following texts from ${DEFAULT_SOURCE_LANGUAGE} to ${languageName} (${targetLanguage}).
 
 Rules:
@@ -172,7 +183,7 @@ Rules:
 		}
 
 		prompt += `\n\nTexts to translate:\n`;
-		
+
 		texts.forEach((text, index) => {
 			prompt += `${index + 1}. "${text}"\n`;
 		});
@@ -185,7 +196,7 @@ Rules:
 	private async makeRequest(prompt: string): Promise<string> {
 		return this.executeWithRetry(async () => {
 			await this.waitForRateLimit();
-			
+
 			const response = await fetch(
 				`${GEMINI_CONFIG.BASE_URL}/models/${GEMINI_CONFIG.MODEL}:generateContent?key=${this.apiKey}`,
 				{
@@ -220,13 +231,19 @@ Rules:
 				if (response.status === 429) {
 					throw createAIError(AIErrorCode.RATE_LIMIT_EXCEEDED, "Rate limit exceeded");
 				}
-				throw createAIError(AIErrorCode.NETWORK_ERROR, `API request failed: ${response.status} ${response.statusText}`);
+				throw createAIError(
+					AIErrorCode.NETWORK_ERROR,
+					`API request failed: ${response.status} ${response.statusText}`
+				);
 			}
 
 			const data = await response.json();
-			
+
 			if (!data.candidates || data.candidates.length === 0) {
-				throw createAIError(AIErrorCode.INVALID_RESPONSE, "No translation candidates returned from API");
+				throw createAIError(
+					AIErrorCode.INVALID_RESPONSE,
+					"No translation candidates returned from API"
+				);
 			}
 
 			const content = data.candidates[0]?.content?.parts?.[0]?.text;
@@ -240,13 +257,13 @@ Rules:
 
 	private async executeWithRetry<T>(fn: () => Promise<T>): Promise<T> {
 		let lastError: Error | undefined;
-		
+
 		for (let attempt = 1; attempt <= RETRY_CONFIG.MAX_ATTEMPTS; attempt++) {
 			try {
 				return await fn();
 			} catch (error) {
 				lastError = error as Error;
-				
+
 				const translationError = error as AITranslationError;
 				if (translationError.code && translationError.code !== AIErrorCode.RATE_LIMIT_EXCEEDED) {
 					throw error;
@@ -267,7 +284,7 @@ Rules:
 
 		throw createAIError(
 			AIErrorCode.TRANSLATION_FAILED,
-			`Translation failed after ${RETRY_CONFIG.MAX_ATTEMPTS} attempts: ${lastError?.message || 'Unknown error'}`
+			`Translation failed after ${RETRY_CONFIG.MAX_ATTEMPTS} attempts: ${lastError?.message || "Unknown error"}`
 		);
 	}
 
@@ -295,7 +312,7 @@ Rules:
 
 		const timeSinceLastRequest = now - this.lastRequestTime;
 		const minDelay = 1000;
-		
+
 		if (timeSinceLastRequest < minDelay) {
 			await this.delay(minDelay - timeSinceLastRequest);
 		}
@@ -311,7 +328,7 @@ Rules:
 
 	private extractTranslation(response: string, originalText: string): string {
 		const translation = response.trim();
-		
+
 		if (!translation) {
 			throw createAIError(AIErrorCode.INVALID_RESPONSE, "Empty translation received from API");
 		}
@@ -324,15 +341,18 @@ Rules:
 	}
 
 	private extractBatchTranslations(response: string, originalTexts: string[]): string[] {
-		const lines = response.trim().split('\n').filter(line => line.trim());
-		
+		const lines = response
+			.trim()
+			.split("\n")
+			.filter((line) => line.trim());
+
 		if (lines.length !== originalTexts.length) {
 			console.warn(`Expected ${originalTexts.length} translations, got ${lines.length}`);
-			
+
 			const translations: string[] = [];
 			for (let i = 0; i < originalTexts.length; i++) {
 				if (i < lines.length) {
-					const translation = lines[i].replace(/^\d+\.\s*/, '').trim();
+					const translation = lines[i].replace(/^\d+\.\s*/, "").trim();
 					translations.push(translation || originalTexts[i]);
 				} else {
 					translations.push(originalTexts[i]);
@@ -342,7 +362,7 @@ Rules:
 		}
 
 		return lines.map((line, index) => {
-			const translation = line.replace(/^\d+\.\s*/, '').trim();
+			const translation = line.replace(/^\d+\.\s*/, "").trim();
 			return translation || originalTexts[index];
 		});
 	}
@@ -360,13 +380,19 @@ Rules:
 		}
 
 		if (!targetLanguage || targetLanguage.trim().length === 0) {
-			throw createValidationError(ValidationErrorCode.INVALID_LANGUAGE_CODE, "Target language cannot be empty");
+			throw createValidationError(
+				ValidationErrorCode.INVALID_LANGUAGE_CODE,
+				"Target language cannot be empty"
+			);
 		}
 	}
 
 	private validateBatchInput(texts: string[], targetLanguage: string): void {
 		if (texts.length === 0) {
-			throw createValidationError(ValidationErrorCode.MISSING_REQUIRED_FIELD, "Texts array cannot be empty");
+			throw createValidationError(
+				ValidationErrorCode.MISSING_REQUIRED_FIELD,
+				"Texts array cannot be empty"
+			);
 		}
 
 		for (const text of texts) {
@@ -379,17 +405,17 @@ Rules:
 		const tomorrow = new Date(now);
 		tomorrow.setDate(tomorrow.getDate() + 1);
 		tomorrow.setHours(0, 0, 0, 0);
-		
+
 		const msUntilMidnight = tomorrow.getTime() - now.getTime();
-		
+
 		setTimeout(() => {
 			this.dailyRequestCount = 0;
-			this.scheduleReset(); 
+			this.scheduleReset();
 		}, msUntilMidnight);
 	}
 
 	private delay(ms: number): Promise<void> {
-		return new Promise(resolve => setTimeout(resolve, ms));
+		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 }
 
