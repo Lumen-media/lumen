@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod websocket;
+mod commands;
 
 use tauri::{async_runtime, AppHandle, Manager};
 use tokio::net::TcpListener;
@@ -8,7 +9,6 @@ use tokio::net::TcpListener;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // When a second instance tries to open, focus on the existing main window
             let windows = app.webview_windows();
             
             if let Some(window) = windows.values().next() {
@@ -48,7 +48,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![open_video_window, create_new_window])
+        .invoke_handler(tauri::generate_handler![
+            open_video_window,
+            create_new_window,
+            commands::file::select_pptx_file,
+            commands::file::select_video_file,
+            commands::file::save_media_database,
+            commands::file::load_media_database,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 
