@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './app/index'
 import { Route as ViewIndexRouteImport } from './app/view/index'
 import { Route as VideoIndexRouteImport } from './app/video/index'
 import { Route as VideoWindowIndexRouteImport } from './app/video-window/index'
+import { Route as MediaIndexRouteImport } from './app/media/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,15 +35,22 @@ const VideoWindowIndexRoute = VideoWindowIndexRouteImport.update({
   path: '/video-window/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MediaIndexRoute = MediaIndexRouteImport.update({
+  id: '/media/',
+  path: '/media/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/media': typeof MediaIndexRoute
   '/video-window': typeof VideoWindowIndexRoute
   '/video': typeof VideoIndexRoute
   '/view': typeof ViewIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/media': typeof MediaIndexRoute
   '/video-window': typeof VideoWindowIndexRoute
   '/video': typeof VideoIndexRoute
   '/view': typeof ViewIndexRoute
@@ -50,20 +58,22 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/media/': typeof MediaIndexRoute
   '/video-window/': typeof VideoWindowIndexRoute
   '/video/': typeof VideoIndexRoute
   '/view/': typeof ViewIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/video-window' | '/video' | '/view'
+  fullPaths: '/' | '/media' | '/video-window' | '/video' | '/view'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/video-window' | '/video' | '/view'
-  id: '__root__' | '/' | '/video-window/' | '/video/' | '/view/'
+  to: '/' | '/media' | '/video-window' | '/video' | '/view'
+  id: '__root__' | '/' | '/media/' | '/video-window/' | '/video/' | '/view/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  MediaIndexRoute: typeof MediaIndexRoute
   VideoWindowIndexRoute: typeof VideoWindowIndexRoute
   VideoIndexRoute: typeof VideoIndexRoute
   ViewIndexRoute: typeof ViewIndexRoute
@@ -99,11 +109,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VideoWindowIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/media/': {
+      id: '/media/'
+      path: '/media'
+      fullPath: '/media'
+      preLoaderRoute: typeof MediaIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  MediaIndexRoute: MediaIndexRoute,
   VideoWindowIndexRoute: VideoWindowIndexRoute,
   VideoIndexRoute: VideoIndexRoute,
   ViewIndexRoute: ViewIndexRoute,
