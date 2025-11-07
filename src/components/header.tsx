@@ -1,12 +1,7 @@
-import { useLocation } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Card } from "./ui/card";
-import {
-	NavigationMenu,
-	NavigationMenuItem,
-	NavigationMenuLink,
-	NavigationMenuList,
-} from "./ui/navigation-menu";
+import { NavigationMenu, NavigationMenuItem, NavigationMenuList } from "./ui/navigation-menu";
 
 export const Header = () => {
 	const location = useLocation();
@@ -50,13 +45,13 @@ export const Header = () => {
 					<NavigationMenuList className="gap-3.5">
 						{pages.map((page) => (
 							<NavigationMenuItem key={page.name}>
-								<NavigationMenuLink
-									href={page.href}
+								<Link
+									to={page.href}
 									data-nav-item
 									className={`relative ${location.pathname === page.href ? "text-primary" : ""}`}
 								>
 									{page.name}
-								</NavigationMenuLink>
+								</Link>
 							</NavigationMenuItem>
 						))}
 					</NavigationMenuList>
