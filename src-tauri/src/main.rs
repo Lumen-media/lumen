@@ -59,6 +59,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::conversion::get_pptx_metadata,
             commands::conversion::convert_pptx_to_pdf,
             commands::conversion::convert_pptx_to_pdf_with_retry,
+            commands::window::create_media_window,
+            commands::window::get_available_displays,
+            commands::window::close_media_window,
+            commands::window::move_window_to_display,
+            commands::window::sync_presentation_state,
+            commands::window::is_media_window_open,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -81,7 +87,6 @@ async fn open_video_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn create_new_window(app: AppHandle, window_label: String, title: String) -> Result<(), String> {
-    // Check if the window already exists
     if app.get_webview_window(&window_label).is_some() {
         return Err("Window already exists".to_string());
     }
