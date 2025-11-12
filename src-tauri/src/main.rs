@@ -2,6 +2,7 @@
 
 mod websocket;
 mod commands;
+mod conversion;
 
 use tauri::{async_runtime, AppHandle, Manager};
 use tokio::net::TcpListener;
@@ -55,6 +56,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::file::select_video_file,
             commands::file::save_media_database,
             commands::file::load_media_database,
+            commands::conversion::get_pptx_metadata,
+            commands::conversion::convert_pptx_to_pdf,
+            commands::conversion::convert_pptx_to_pdf_with_retry,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
