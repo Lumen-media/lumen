@@ -1,7 +1,8 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Pause, Play, SkipBack, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactPlayer from "react-player";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
 	Select,
@@ -35,8 +36,68 @@ export const VideoPlayerControl = ({ mediaId, className = "" }: VideoPlayerContr
 
 	const [isSeeking, setIsSeeking] = useState(false);
 	const [seekValue, setSeekValue] = useState(0);
+	const lastUpdateTimeRef = useRef<number>(0);
+	const progressThrottleRef = useRef<number>(0);
 
 	const displayMedia = mediaId ? getMediaItemById(mediaId) : currentMedia;
+	const videoMetadata =
+		displayMedia?.type === "video" ? (displayMedia.metadata as VideoMetadata) : null;
+
+	const handleProgress = useCallback(
+		(state: { playedSeconds: number; played: number }) => {
+			if (isSeeking) return;
+
+			const now = Date.now();
+			if (now - progressThrottleRef.current < 100) return;
+
+			progressThrottleRef.current = now;
+
+			const currentStateTime = videoState?.currentTime ?? 0;
+			if (Math.abs(state.playedSeconds - currentStateTime) > 0.2) {
+				updateVideoState({ currentTime: state.playedSeconds });
+				lastUpdateTimeRef.current = now;
+			}
+		},
+		[isSeeking, videoState?.currentTime, updateVideoState]
+	);
+
+	const handleError = useCallback(
+		(error: unknown) => {
+			if (!videoMetadata) return;
+
+			console.error("Video playback error:", error);
+			let errorMessage = "An error occurred while playing the video.";
+			let errorTitle = "Video Playback Error";
+
+			if (error instanceof Error) {
+				if (error.message.includes("codec") || error.message.includes("format")) {
+					errorTitle = "Unsupported Video Format";
+					errorMessage = `The video format "${videoMetadata.format}" is not supported. Please try a different video file (MP4, WebM recommended).`;
+				} else if (error.message.includes("network") || error.message.includes("load")) {
+					errorTitle = "Failed to Load Video";
+					errorMessage =
+						"Failed to load video file. Please check if the file exists and is accessible.";
+				} else if (error.message.includes("decode")) {
+					errorTitle = "Video Decoding Error";
+					errorMessage =
+						"The video file may be corrupted or use an unsupported codec. Try re-encoding the video.";
+				}
+			}
+
+			updateVideoState({ playing: false });
+
+			toast.error(errorTitle, {
+				description: errorMessage,
+			});
+
+			console.error("Video error details:", {
+				filePath: videoMetadata.filePath,
+				format: videoMetadata.format,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		},
+		[videoMetadata, updateVideoState]
+	);
 
 	useEffect(() => {
 		if (!isSeeking && videoState) {
@@ -44,7 +105,7 @@ export const VideoPlayerControl = ({ mediaId, className = "" }: VideoPlayerContr
 		}
 	}, [videoState, isSeeking]);
 
-	if (!displayMedia || displayMedia.type !== "video") {
+	if (!displayMedia || displayMedia.type !== "video" || !videoMetadata) {
 		return (
 			<div className={`flex items-center justify-center w-full h-full bg-muted ${className}`}>
 				<p className="text-muted-foreground">No video selected</p>
@@ -52,7 +113,6 @@ export const VideoPlayerControl = ({ mediaId, className = "" }: VideoPlayerContr
 		);
 	}
 
-	const videoMetadata = displayMedia.metadata as VideoMetadata;
 	const videoUrl = convertFileSrc(videoMetadata.filePath);
 
 	const handlePlayPause = () => {
@@ -110,42 +170,12 @@ export const VideoPlayerControl = ({ mediaId, className = "" }: VideoPlayerContr
 		updateVideoState({ playbackRate: Number.parseFloat(value) });
 	};
 
-	const handleProgress = (state: { playedSeconds: number; played: number }) => {
-		if (!isSeeking) {
-			updateVideoState({ currentTime: state.playedSeconds });
-		}
-	};
-
 	const handleDuration = (duration: number) => {
 		updateVideoState({ duration });
 	};
 
 	const handleEnded = () => {
 		updateVideoState({ playing: false, currentTime: 0 });
-	};
-
-	const handleError = (error: unknown) => {
-		console.error("Video playback error:", error);
-		let errorMessage = "An error occurred while playing the video.";
-
-		if (error instanceof Error) {
-			if (error.message.includes("codec") || error.message.includes("format")) {
-				errorMessage = `Video format not supported: ${videoMetadata.format}. Please try a different video file.`;
-			} else if (error.message.includes("network") || error.message.includes("load")) {
-				errorMessage =
-					"Failed to load video file. Please check if the file exists and is accessible.";
-			}
-		}
-
-		updateVideoState({ playing: false });
-
-		console.error("Video error details:", {
-			filePath: videoMetadata.filePath,
-			format: videoMetadata.format,
-			error: error instanceof Error ? error.message : String(error),
-		});
-
-		// TODO: Show error toast notification with errorMessage
 	};
 	const currentTime = isSeeking ? seekValue : (videoState?.currentTime ?? 0);
 	const duration = videoState?.duration ?? 0;

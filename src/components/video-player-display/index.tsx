@@ -1,5 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import ReactPlayer from "react-player";
 import { useCurrentMedia, useMediaStore, useVideoState } from "@/store/mediaStore";
 import type { VideoMetadata } from "@/types/media";
@@ -15,21 +15,70 @@ export const VideoPlayerDisplay = ({ mediaId, className = "" }: VideoPlayerDispl
 	const currentMedia = useCurrentMedia();
 	const updateVideoState = useMediaStore((state) => state.updateVideoState);
 	const getMediaItemById = useMediaStore((state) => state.getMediaItemById);
+	const lastSyncTimeRef = useRef<number>(0);
+	const isSyncingRef = useRef<boolean>(false);
 
 	const displayMedia = mediaId ? getMediaItemById(mediaId) : currentMedia;
+	const videoMetadata =
+		displayMedia?.type === "video" ? (displayMedia.metadata as VideoMetadata) : null;
+
+	const handleProgress = useCallback(
+		(state: { playedSeconds: number; played: number }) => {
+			if (
+				!isSyncingRef.current &&
+				videoState &&
+				Math.abs(state.playedSeconds - videoState.currentTime) > 2
+			) {
+				updateVideoState({ currentTime: state.playedSeconds });
+			}
+		},
+		[videoState, updateVideoState]
+	);
+
+	const handleError = useCallback(
+		(error: unknown) => {
+			if (!videoMetadata) return;
+
+			console.error("Video playback error on display:", error);
+
+			updateVideoState({ playing: false });
+
+			console.error("Video error details (display):", {
+				filePath: videoMetadata.filePath,
+				format: videoMetadata.format,
+				error: error instanceof Error ? error.message : String(error),
+				timestamp: new Date().toISOString(),
+			});
+		},
+		[videoMetadata, updateVideoState]
+	);
 
 	useEffect(() => {
-		if (!playerRef.current || !videoState) return;
+		if (!playerRef.current || !videoState || isSyncingRef.current) return;
 
 		const player = playerRef.current;
 		const internalPlayer = player.getInternalPlayer();
 
-		if (internalPlayer && Math.abs(internalPlayer.currentTime - videoState.currentTime) > 0.5) {
-			player.seekTo(videoState.currentTime, "seconds");
+		if (!internalPlayer) return;
+
+		const currentTime = internalPlayer.currentTime || 0;
+		const targetTime = videoState.currentTime;
+		const timeDiff = Math.abs(currentTime - targetTime);
+
+		if (timeDiff > 0.3) {
+			const now = Date.now();
+			if (now - lastSyncTimeRef.current > 50) {
+				isSyncingRef.current = true;
+				player.seekTo(targetTime, "seconds");
+				lastSyncTimeRef.current = now;
+				setTimeout(() => {
+					isSyncingRef.current = false;
+				}, 100);
+			}
 		}
 	}, [videoState]);
 
-	if (!displayMedia || displayMedia.type !== "video") {
+	if (!displayMedia || displayMedia.type !== "video" || !videoMetadata) {
 		return (
 			<div className={`flex items-center justify-center w-full h-full bg-black ${className}`}>
 				<p className="text-white text-xl">No video selected</p>
@@ -37,14 +86,7 @@ export const VideoPlayerDisplay = ({ mediaId, className = "" }: VideoPlayerDispl
 		);
 	}
 
-	const videoMetadata = displayMedia.metadata as VideoMetadata;
 	const videoUrl = convertFileSrc(videoMetadata.filePath);
-
-	const handleProgress = (state: { playedSeconds: number; played: number }) => {
-		if (videoState && Math.abs(state.playedSeconds - videoState.currentTime) > 1) {
-			updateVideoState({ currentTime: state.playedSeconds });
-		}
-	};
 
 	const handleDuration = (duration: number) => {
 		updateVideoState({ duration });
@@ -52,29 +94,6 @@ export const VideoPlayerDisplay = ({ mediaId, className = "" }: VideoPlayerDispl
 
 	const handleEnded = () => {
 		updateVideoState({ playing: false, currentTime: 0 });
-	};
-
-	const handleError = (error: unknown) => {
-		console.error("Video playback error:", error);
-
-		let errorMessage = "An error occurred while playing the video.";
-
-		if (error instanceof Error) {
-			if (error.message.includes("codec") || error.message.includes("format")) {
-				errorMessage = `Video format not supported: ${videoMetadata.format}. Please try a different video file.`;
-			} else if (error.message.includes("network") || error.message.includes("load")) {
-				errorMessage =
-					"Failed to load video file. Please check if the file exists and is accessible.";
-			}
-		}
-
-		updateVideoState({ playing: false });
-
-		console.error("Video error details:", {
-			filePath: videoMetadata.filePath,
-			format: videoMetadata.format,
-			error: error instanceof Error ? error.message : String(error),
-		});
 	};
 
 	return (
