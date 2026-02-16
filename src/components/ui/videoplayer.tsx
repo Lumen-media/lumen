@@ -30,7 +30,6 @@ type stateTypes = {
 };
 
 export const Videoplayer = ({ className }: VideoplayerProps) => {
-	// const video = "/video.mp4";
 	const video = "https://www.youtube.com/watch?v=zajUgQLviwk";
 	const playerRef = useRef<ReactPlayer>(null);
 	const [ws, setWs] = useState<WebSocket | null>(null);
@@ -38,7 +37,7 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
 	const [volume, setVolume] = useState(1);
 	const [muted, setMuted] = useState(false);
 	const [played, setPlayed] = useState(0);
-	const [loaded, setLoaded] = useState(0);
+	const [_loaded, setLoaded] = useState(0);
 
 	const handlePlayPause = useCallback(() => {
 		if (playing && ws?.readyState === WebSocket.OPEN) {
