@@ -8,6 +8,9 @@ import {
 	ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import i18n from "@/i18n";
+import { MediaPanel } from "@/components/media-panel";
+import { PreviewPanel } from "@/components/preview-panel";
+import { AsidePanel } from "@/components/aside-panel";
 
 export const Route = createFileRoute("/")({
 	component: RouteComponent,
@@ -34,19 +37,19 @@ function RouteComponent() {
 			</Card>
 			<ResizablePanelGroup direction="horizontal">
 				<ResizablePanel className="min-w-[18.75rem]">
-					<Card className="w-full h-full">one</Card>
+					<MediaPanel />
 				</ResizablePanel>
 
 				<ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
 				<ResizablePanel className="min-w-[43.75rem]">
-					<Card className="w-full h-full">two</Card>
+					<PreviewPanel />
 				</ResizablePanel>
 
 				<ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
 				<ResizablePanel className="min-w-[18.75rem]">
-					<Card className="w-full h-full">three</Card>
+					<AsidePanel />
 				</ResizablePanel>
 			</ResizablePanelGroup>
 		</main>
