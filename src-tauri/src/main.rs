@@ -7,6 +7,7 @@ use tokio::net::TcpListener;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
