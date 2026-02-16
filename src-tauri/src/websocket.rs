@@ -2,8 +2,7 @@ use futures_util::{SinkExt, StreamExt as FStreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::net::SocketAddr;
-use tauri::{AppHandle, Emitter, Manager};
-use tokio::net::TcpStream;
+use tauri::{AppHandle, Emitter};
 use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

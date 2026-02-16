@@ -2,7 +2,7 @@
 
 mod websocket;
 
-use tauri::{async_runtime, AppHandle, Manager};
+use tauri::async_runtime;
 use tokio::net::TcpListener;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
