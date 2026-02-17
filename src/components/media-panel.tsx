@@ -197,6 +197,9 @@ export function MediaPanel() {
 										onClick={(file) => {
 											console.log('File clicked:', file.name);
 										}}
+										onDelete={() => {
+											loadFiles(activeMedia);
+										}}
 									/>
 								))}
 							</div>

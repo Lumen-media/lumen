@@ -1,6 +1,5 @@
-import { appDataDir } from '@tauri-apps/api/path';
 import { exists, mkdir } from '@tauri-apps/plugin-fs';
-import { join } from '@tauri-apps/api/path';
+import { join, appLocalDataDir } from '@tauri-apps/api/path';
 import type { MediaType } from './types';
 
 export interface FileInitService {
@@ -31,7 +30,7 @@ class FileInitServiceImpl implements FileInitService {
   
   async initializeMediaFolders(): Promise<void> {
     try {
-      const appDataPath = await appDataDir();
+      const appDataPath = await appLocalDataDir();
       
       const filesPath = await join(appDataPath, 'files');
       const mediaPath = await join(filesPath, 'media');
@@ -58,7 +57,7 @@ class FileInitServiceImpl implements FileInitService {
   
   async getMediaBasePath(): Promise<string> {
     try {
-      const appDataPath = await appDataDir();
+      const appDataPath = await appLocalDataDir();
       return await join(appDataPath, 'files', 'media');
     } catch (error) {
       console.error('Failed to get media base path:', error);

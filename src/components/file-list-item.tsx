@@ -6,12 +6,27 @@ import {
 	Video,
 	Image as ImageIcon,
 	File,
+	MoreVertical,
+	Trash2,
+	FolderOpen,
 } from "lucide-react";
+import { useState } from "react";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { invoke } from "@tauri-apps/api/core";
+import { remove } from "@tauri-apps/plugin-fs";
+import { toast } from "sonner";
 
 interface FileListItemProps {
 	file: FileInfo;
 	mediaType: MediaType;
 	onClick?: (file: FileInfo) => void;
+	onDelete?: (file: FileInfo) => void;
 }
 
 const getMediaIcon = (mediaType: MediaType) => {
@@ -51,8 +66,9 @@ const formatDate = (date: Date): string => {
 	});
 };
 
-export function FileListItem({ file, mediaType, onClick }: FileListItemProps) {
+export function FileListItem({ file, mediaType, onClick, onDelete }: FileListItemProps) {
 	const Icon = getMediaIcon(mediaType);
+	const [isDeleting, setIsDeleting] = useState(false);
 
 	const handleClick = () => {
 		if (onClick) {
@@ -67,11 +83,39 @@ export function FileListItem({ file, mediaType, onClick }: FileListItemProps) {
 		}
 	};
 
+	const handleOpenFolder = async (e: React.MouseEvent) => {
+		e.stopPropagation();
+		try {
+			const folderPath = file.path.substring(0, file.path.lastIndexOf("\\"));
+			await invoke("open_folder", { path: folderPath });
+		} catch (error) {
+			console.error("Failed to open folder:", error);
+			toast.error("Failed to open folder");
+		}
+	};
+
+	const handleDelete = async (e: React.MouseEvent) => {
+		e.stopPropagation();
+		setIsDeleting(true);
+		try {
+			await remove(file.path);
+			toast.success(`${file.name} removed`);
+			if (onDelete) {
+				onDelete(file);
+			}
+		} catch (error) {
+			console.error("Failed to delete file:", error);
+			toast.error("Failed to delete file");
+		} finally {
+			setIsDeleting(false);
+		}
+	};
+
 	const fileDescription = `${file.name}, ${formatFileSize(file.size)}, modified ${formatDate(file.modifiedAt)}`;
 
 	return (
 		<div
-			className="p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+			className="p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 group"
 			onClick={handleClick}
 			onKeyDown={handleKeyDown}
 			role="listitem"
@@ -89,6 +133,36 @@ export function FileListItem({ file, mediaType, onClick }: FileListItemProps) {
 						<span>•</span>
 						<span>{formatDate(file.modifiedAt)}</span>
 					</div>
+				</div>
+				<div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-8 w-8"
+								aria-label={`Options for ${file.name}`}
+								onClick={(e) => e.stopPropagation()}
+							>
+								<MoreVertical className="h-4 w-4" aria-hidden="true" />
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end">
+							<DropdownMenuItem onClick={handleOpenFolder} aria-label="Open folder">
+								<FolderOpen className="h-4 w-4 mr-2" aria-hidden="true" />
+								Open folder
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								onClick={handleDelete}
+								disabled={isDeleting}
+								className="text-destructive focus:text-destructive"
+								aria-label="Delete file"
+							>
+								<Trash2 className="h-4 w-4 mr-2" aria-hidden="true" />
+								{isDeleting ? "Deleting..." : "Delete"}
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
 				</div>
 			</div>
 		</div>
