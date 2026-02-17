@@ -61,7 +61,7 @@ function Slider({
 					)}
 				/>
 			</SliderPrimitive.Track>
-			{Array.from({ length: _values.length }, (_, index) => (
+			{Array.from({ length: _values.length }, (_) => (
 				<SliderPrimitive.Thumb
 					data-slot="slider-thumb"
 					key={React.useId()}
