@@ -114,15 +114,13 @@ export function FileListItem({ file, mediaType, onClick, onDelete }: FileListIte
 	const fileDescription = `${file.name}, ${formatFileSize(file.size)}, modified ${formatDate(file.modifiedAt)}`;
 
 	return (
-		<div
-			className="p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 group"
+		<Button
+			variant="ghost"
+			className="w-full justify-start hover:bg-primary/15 text-left p-3 h-auto group"
 			onClick={handleClick}
-			onKeyDown={handleKeyDown}
-			role="listitem"
-			tabIndex={0}
 			aria-label={fileDescription}
 		>
-			<div className="flex items-start gap-3">
+			<div className="flex items-start gap-3 w-full min-w-0">
 				<div className="shrink-0 mt-0.5">
 					<Icon className="size-5 text-muted-foreground" aria-hidden="true" />
 				</div>
@@ -165,6 +163,6 @@ export function FileListItem({ file, mediaType, onClick, onDelete }: FileListIte
 					</DropdownMenu>
 				</div>
 			</div>
-		</div>
+		</Button>
 	);
 }
