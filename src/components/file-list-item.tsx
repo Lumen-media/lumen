@@ -129,7 +129,7 @@ export function FileListItem({ file, mediaType, onClick, onDelete }: FileListIte
 					<div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground" aria-hidden="true">
 						<span>{formatFileSize(file.size)}</span>
 						<span>•</span>
-						<span>{formatDate(file.modifiedAt)}</span>
+						<span className="truncate">{formatDate(file.modifiedAt)}</span>
 					</div>
 				</div>
 				<div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
