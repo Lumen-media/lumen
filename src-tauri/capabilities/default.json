@@ -21,6 +21,7 @@
     "fs:allow-copy-file",
     "fs:allow-remove",
     "shell:allow-open",
+    "core:window:allow-create",
     "fs:scope",
     {
       "identifier": "fs:scope",

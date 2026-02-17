@@ -2,7 +2,7 @@
 
 mod websocket;
 
-use tauri::async_runtime;
+use tauri::{async_runtime, Emitter, Manager};
 use tokio::net::TcpListener;
 
 #[tauri::command]
@@ -31,8 +31,43 @@ fn open_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn create_window(
+    app_handle: tauri::AppHandle,
+    label: String,
+    title: String,
+    url: String,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    let _window = tauri::WebviewWindowBuilder::new(&app_handle, &label, tauri::WebviewUrl::App(url.into()))
+        .title(&title)
+        .inner_size(width, height)
+        .min_inner_size(400.0, 400.0)
+        .center()
+        .decorations(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+    
+    println!("Janela '{}' criada com sucesso", label);
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            println!("Single instance callback:");
+            println!("  args: {:?}", args);
+            println!("  cwd: {:?}", cwd);
+            
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+                let _ = window.unminimize();
+                let _ = window.show();
+            }
+            
+            let _ = app.emit("single-instance", args);
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
@@ -65,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![open_folder])
+        .invoke_handler(tauri::generate_handler![open_folder, create_window])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 
