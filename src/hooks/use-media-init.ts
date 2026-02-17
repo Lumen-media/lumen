@@ -15,6 +15,13 @@ export function useMediaInit(): UseMediaInitResult {
   useEffect(() => {
     async function initialize() {
       try {
+        const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+        
+        if (!isTauri) {
+          setState({ isInitialized: true, error: null });
+          return;
+        }
+
         await fileInitService.initializeMediaFolders();
         setState({ isInitialized: true, error: null });
       } catch (error) {
@@ -22,7 +29,6 @@ export function useMediaInit(): UseMediaInitResult {
           isInitialized: false,
           error: error instanceof Error ? error : new Error('Unknown error'),
         });
-        console.error('Failed to initialize media folders:', error);
       }
     }
 

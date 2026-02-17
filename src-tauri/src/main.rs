@@ -2,8 +2,14 @@
 
 mod websocket;
 
-use tauri::{async_runtime, Emitter, Manager};
+use std::collections::HashMap;
+use std::sync::Mutex;
+use tauri::{async_runtime, Emitter, Manager, State};
 use tokio::net::TcpListener;
+
+struct WindowState {
+    positions: Mutex<HashMap<String, (i32, i32)>>,
+}
 
 #[tauri::command]
 fn open_folder(path: String) -> Result<(), String> {
@@ -36,25 +42,90 @@ async fn create_window(
     app_handle: tauri::AppHandle,
     label: String,
     title: String,
-    url: String,
-    width: f64,
-    height: f64,
+    window_state: State<'_, WindowState>,
 ) -> Result<(), String> {
-    let _window = tauri::WebviewWindowBuilder::new(&app_handle, &label, tauri::WebviewUrl::App(url.into()))
-        .title(&title)
-        .inner_size(width, height)
-        .min_inner_size(400.0, 400.0)
-        .center()
-        .decorations(true)
-        .build()
-        .map_err(|e| e.to_string())?;
+    let main_window = app_handle
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window not found".to_string())?;
     
-    println!("Janela '{}' criada com sucesso", label);
+    let saved_position = {
+        let positions = window_state.positions.lock().unwrap();
+        positions.get(&label).cloned()
+    };
+    
+    let target_position = if let Some((saved_x, saved_y)) = saved_position {
+        tauri::PhysicalPosition { x: saved_x, y: saved_y }
+    } else {
+        let current_monitor = main_window
+            .current_monitor()
+            .map_err(|e| format!("Failed to get current monitor: {}", e))?
+            .ok_or_else(|| "Current monitor not found".to_string())?;
+        
+        let monitors = main_window
+            .available_monitors()
+            .map_err(|e| format!("Failed to get monitors: {}", e))?;
+        
+        let target_monitor = if monitors.len() > 1 {
+            monitors
+                .into_iter()
+                .find(|m| {
+                    let pos1 = m.position();
+                    let pos2 = current_monitor.position();
+                    pos1.x != pos2.x || pos1.y != pos2.y
+                })
+                .unwrap_or(current_monitor)
+        } else {
+            current_monitor
+        };
+        
+        let monitor_position = target_monitor.position();
+        
+        tauri::PhysicalPosition { 
+            x: monitor_position.x, 
+            y: monitor_position.y 
+        }
+    };
+    
+    let window = tauri::WebviewWindowBuilder::new(&app_handle, &label, tauri::WebviewUrl::App("/media-window".into()))
+        .title(&title)
+        .decorations(false)
+        .fullscreen(true)
+        .build()
+        .map_err(|e| format!("Failed to create window: {}", e))?;
+    
+    window
+        .set_position(tauri::Position::Physical(target_position))
+        .map_err(|e| format!("Failed to set window position: {}", e))?;
+    
+    window
+        .set_fullscreen(true)
+        .map_err(|e| format!("Failed to set fullscreen: {}", e))?;
+    
+    {
+        let mut positions = window_state.positions.lock().unwrap();
+        positions.insert(label.clone(), (target_position.x, target_position.y));
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn save_window_position(
+    label: String,
+    x: i32,
+    y: i32,
+    window_state: State<'_, WindowState>,
+) -> Result<(), String> {
+    let mut positions = window_state.positions.lock().unwrap();
+    positions.insert(label, (x, y));
     Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
+        .manage(WindowState {
+            positions: Mutex::new(HashMap::new()),
+        })
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             println!("Single instance callback:");
             println!("  args: {:?}", args);
@@ -83,13 +154,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let app_handle_clone = app_handle.clone();
             async_runtime::spawn(async move {
                 let listener = TcpListener::bind("0.0.0.0:8080").await.unwrap();
-                println!("WebSocket server listening on ws://0.0.0.0:8080");
-
                 while let Ok((stream, _)) = listener.accept().await {
                     let peer = stream
                         .peer_addr()
                         .expect("connected streams should have a peer address");
-                    println!("Peer address: {}", peer);
 
                     async_runtime::spawn(websocket::accept_connection(
                         peer,
@@ -100,7 +168,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![open_folder, create_window])
+        .invoke_handler(tauri::generate_handler![open_folder, create_window, save_window_position])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 
