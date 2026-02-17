@@ -34,6 +34,7 @@
     "@tailwindcss/cli": "^4.0.9",
     "@tailwindcss/vite": "^4.1.11",
     "@tanstack/react-router": "^1.131.8",
+    "@tanstack/react-virtual": "^3.13.18",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-deep-link": "~2",
     "@tauri-apps/plugin-dialog": "~2",
@@ -63,7 +64,9 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.0.2",
     "tailwindcss": "^4.1.11",
-    "vaul": "^1.1.2"
+    "usehooks-ts": "^3.1.1",
+    "vaul": "^1.1.2",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.1.4",
