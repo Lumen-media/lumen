@@ -178,7 +178,7 @@ class FileManagementServiceImpl implements FileManagementService {
         ? [] 
         : [{
             name: mediaType,
-            extensions: extensions.map(ext => ext.slice(1)) // Remove leading dot
+            extensions: extensions.map(ext => ext.slice(1))
           }];
       
       const selected = await open({

@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": [
-    "main"
+    "main",
+    "media-window"
   ],
   "permissions": [
     "core:default",
@@ -22,6 +23,14 @@
     "fs:allow-remove",
     "shell:allow-open",
     "core:window:allow-create",
+    "core:window:allow-current-monitor",
+    "core:window:allow-available-monitors",
+    "core:window:allow-set-position",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-inner-position",
+    "core:window:allow-close",
+    "core:window:allow-set-decorations",
     "fs:scope",
     {
       "identifier": "fs:scope",

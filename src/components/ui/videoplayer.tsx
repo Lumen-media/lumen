@@ -20,6 +20,10 @@ const formatTime = (time: number) => {
 
 export type VideoplayerProps = {
 	className?: string;
+	url?: string;
+	autoplay?: boolean;
+	muted?: boolean;
+	interactive?: boolean;
 };
 
 type stateTypes = {
@@ -29,19 +33,32 @@ type stateTypes = {
 	playedSeconds: number;
 };
 
-export const Videoplayer = ({ className }: VideoplayerProps) => {
-	const video = "https://www.youtube.com/watch?v=zajUgQLviwk";
+export const Videoplayer = ({
+	className,
+	url,
+	autoplay = true,
+	muted = false,
+	interactive = true,
+}: VideoplayerProps) => {
+	const video = url ?? "https://www.youtube.com/watch?v=zajUgQLviwk";
 	const playerRef = useRef<ReactPlayer>(null);
 	const [ws, setWs] = useState<WebSocket | null>(null);
-	const [playing, setPlaying] = useState(false);
+	const [playing, setPlaying] = useState(autoplay);
 	const [volume, setVolume] = useState(1);
-	const [muted, setMuted] = useState(false);
+	const [mutedState, setMutedState] = useState(muted);
 	const [played, setPlayed] = useState(0);
 	const [_loaded, setLoaded] = useState(0);
 
+	useEffect(() => {
+		setPlaying(autoplay);
+	}, [autoplay]);
+
+	useEffect(() => {
+		setMutedState(muted);
+	}, [muted]);
+
 	const handlePlayPause = useCallback(() => {
 		if (playing && ws?.readyState === WebSocket.OPEN) {
-			console.log("Sending manual_pause event via WebSocket");
 			ws.send(JSON.stringify({ event: "manual_pause" }));
 		}
 		setPlaying((prevPlaying) => !prevPlaying);
@@ -52,7 +69,7 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
 	};
 
 	const handleMute = useCallback(() => {
-		setMuted((prevMuted) => !prevMuted);
+		setMutedState((prevMuted) => !prevMuted);
 	}, []);
 
 	const handleProgress = (state: stateTypes) => {
@@ -72,17 +89,14 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
 		const socket = new WebSocket("ws://localhost:8080");
 
 		socket.onopen = () => {
-			console.log("WebSocket connection established");
 			setWs(socket);
 		};
 
 		socket.onclose = () => {
-			console.log("WebSocket connection closed");
 			setWs(null);
 		};
 
 		socket.onerror = (error) => {
-			console.error("WebSocket error:", error);
 			setWs(null);
 		};
 
@@ -106,20 +120,15 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
 			) {
 				const newVolumeState = volumeReceived / 100;
 				setVolume(newVolumeState);
-				console.log("Volume updated event:", newVolumeState);
-			} else {
-				console.error("Invalid volume event received:", event.payload);
 			}
 		});
 
 		const unlistenMute = listen("mute", () => {
 			handleMute();
-			console.log("Mute event received");
 		});
 
 		const unlistenPlayPause = listen("play-pause", () => {
 			handlePlayPause();
-			console.log("Play/Pause event received");
 		});
 
 		return () => {
@@ -130,26 +139,28 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
 	}, [handleMute, handlePlayPause]);
 
 	return (
-		<div className={cn("relative mx-auto group overflow-y-hidden", className)}>
-			<div className="w-[1000px] aspect-video h-auto">
-				<ReactPlayer
-					ref={playerRef}
-					url={video}
-					playing={playing}
-					volume={volume}
-					muted={muted}
-					onProgress={handleProgress}
-					onEnded={() => {
-						console.log("ended");
-					}}
-					onPlay={() => setPlaying(true)}
-					onPause={() => setPlaying(false)}
-					controls={false}
-					width="100%"
-					height="100%"
-				/>
-			</div>
-
+		<div
+			className={cn("relative mx-auto group overflow-y-hidden", {
+				'pointer-events-none': !interactive
+			}, className)}
+		>
+			<ReactPlayer
+				ref={playerRef}
+				url={video}
+				playing={playing}
+				volume={volume}
+				muted={mutedState}
+				onProgress={handleProgress}
+				onEnded={() => {
+					console.log("ended");
+				}}
+				onPlay={() => setPlaying(true)}
+				onPause={() => setPlaying(false)}
+				controls={false}
+				width="100%"
+				height="100%"
+			/>
+			
 			<div
 				className={cn(
 					"controls flex flex-col gap-1 absolute bottom-0 left-0 w-full bg-linear-to-t from-black/60 to-transparent p-4 translate-y-20 group-hover:translate-0 transition-transform duration-300",
@@ -190,7 +201,7 @@ export const Videoplayer = ({ className }: VideoplayerProps) => {
 								className="text-white/80 hover:text-white p-3"
 								onClick={handleMute}
 							>
-								{muted ? (
+								{mutedState ? (
 									<LucideVolumeOff fill="white" className="size-4" />
 								) : (
 									<LucideVolume2 fill="white" className="size-4" />
