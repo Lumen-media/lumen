@@ -50,6 +50,13 @@ class FileManagementServiceImpl implements FileManagementService {
     try {
       const folderPath = await fileInitService.getMediaTypePath(mediaType);
       
+      const { exists } = await import('@tauri-apps/plugin-fs');
+      if (!await exists(folderPath)) {
+        const { mkdir } = await import('@tauri-apps/plugin-fs');
+        await mkdir(folderPath, { recursive: true });
+        return []; // Retornar array vazio para pasta recém-criada
+      }
+      
       const entries = await readDir(folderPath);
       
       const fileInfos: FileInfo[] = [];
