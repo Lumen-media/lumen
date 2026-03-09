@@ -1,5 +1,4 @@
 import { exists, mkdir } from '@tauri-apps/plugin-fs';
-import { join, appLocalDataDir } from '@tauri-apps/api/path';
 import type { MediaType } from './types';
 
 export interface FileInitService {
@@ -30,10 +29,13 @@ class FileInitServiceImpl implements FileInitService {
   
   async initializeMediaFolders(): Promise<void> {
     try {
-      const appDataPath = await appLocalDataDir();
+      const basePath = 'C:\\lumen\\lumen';
+      const filesPath = `${basePath}\\files`;
+      const mediaPath = `${filesPath}\\media`;
       
-      const filesPath = await join(appDataPath, 'files');
-      const mediaPath = await join(filesPath, 'media');
+      if (!await exists(basePath)) {
+        await mkdir(basePath, { recursive: true });
+      }
       
       if (!await exists(filesPath)) {
         await mkdir(filesPath, { recursive: true });
@@ -44,7 +46,7 @@ class FileInitServiceImpl implements FileInitService {
       }
       
       for (const mediaType of this.MEDIA_TYPES) {
-        const mediaTypePath = await join(mediaPath, mediaType);
+        const mediaTypePath = `${mediaPath}\\${mediaType}`;
         if (!await exists(mediaTypePath)) {
           await mkdir(mediaTypePath);
         }
@@ -57,8 +59,8 @@ class FileInitServiceImpl implements FileInitService {
   
   async getMediaBasePath(): Promise<string> {
     try {
-      const appDataPath = await appLocalDataDir();
-      return await join(appDataPath, 'files', 'media');
+      const basePath = 'C:\\lumen\\lumen';
+      return `${basePath}\\files\\media`;
     } catch (error) {
       console.error('Failed to get media base path:', error);
       throw new Error(`Failed to get media base path: ${error instanceof Error ? error.message : String(error)}`);
@@ -68,7 +70,14 @@ class FileInitServiceImpl implements FileInitService {
   async getMediaTypePath(mediaType: MediaType): Promise<string> {
     try {
       const basePath = await this.getMediaBasePath();
-      return await join(basePath, mediaType);
+      const mediaTypePath = `${basePath}\\${mediaType}`;
+      
+      // Garantir que a pasta existe antes de retornar o caminho
+      if (!await exists(mediaTypePath)) {
+        await mkdir(mediaTypePath, { recursive: true });
+      }
+      
+      return mediaTypePath;
     } catch (error) {
       console.error(`Failed to get path for media type ${mediaType}:`, error);
       throw new Error(`Failed to get path for media type ${mediaType}: ${error instanceof Error ? error.message : String(error)}`);
