@@ -90,6 +90,7 @@ async fn create_window(
         .title(&title)
         .decorations(false)
         .fullscreen(true)
+        .visible(false)
         .build()
         .map_err(|e| format!("Failed to create window: {}", e))?;
     

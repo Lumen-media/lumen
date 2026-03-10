@@ -95,22 +95,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   handlePlayPause: async () => {
     const { sendWs, isPlaying } = get();
 
-    if (!isPlaying) {
-      // Starting playback — ensure window exists and is visible
-      const existing = await getMediaWindow();
-      if (!existing) {
-        // Window doesn't exist: create it (auto-plays on mount)
-        try {
-          await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-          set({ isScreenOpen: true, isPlaying: true });
-        } catch {}
-        return;
-      }
-      const visible = await existing.isVisible();
-      if (!visible) {
-        await existing.show();
-        set({ isScreenOpen: true });
-      }
+    const existing = await getMediaWindow();
+    if (!existing) {
+      try {
+        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+        set({ isPlaying: true });
+      } catch {}
+      return;
     }
 
     sendWs({ event: 'play_pause' });
@@ -158,10 +149,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   handleToggleScreen: async () => {
     const existing = await getMediaWindow();
     if (!existing) {
-      // No window — create it (starts playback automatically)
       try {
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-        set({ isScreenOpen: true, isPlaying: true });
+        const win = await getMediaWindow();
+        await win?.show();
+        set({ isScreenOpen: true });
       } catch {}
       return;
     }
