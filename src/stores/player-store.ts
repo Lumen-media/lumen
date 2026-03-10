@@ -19,8 +19,8 @@ interface PlayerStore {
   initWs: () => () => void;
   initListeners: () => () => void;
   sendWs: (message: object) => void;
-  handlePlayPause: () => void;
-  handleStop: () => void;
+  handlePlayPause: () => Promise<void>;
+  handleStop: () => Promise<void>;
   handlePrevious: () => void;
   handleNext: () => void;
   handleLoop: () => void;
@@ -29,6 +29,10 @@ interface PlayerStore {
   handleToggleScreen: () => Promise<void>;
   handleSliderChange: (value: number[]) => void;
   setIsDragging: (dragging: boolean) => void;
+}
+
+async function getMediaWindow() {
+  return WebviewWindow.getByLabel('media-window');
 }
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
@@ -71,23 +75,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
 
     const unlistenStop = listen('stop', () => {
-      set({ isScreenOpen: false, isPlaying: false });
-    });
-
-    const unlistenPlayPause = listen('play-pause', () => {
-      set((state) => ({ isPlaying: !state.isPlaying }));
-    });
-
-    const unlistenManualPause = listen('manual_pause', () => {
-      set({ isPlaying: false });
+      set({ isPlaying: false, isScreenOpen: false });
     });
 
     return () => {
       unlistenProgress.then((f) => f());
       unlistenMeta.then((f) => f());
       unlistenStop.then((f) => f());
-      unlistenPlayPause.then((f) => f());
-      unlistenManualPause.then((f) => f());
     };
   },
 
@@ -98,16 +92,44 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
   },
 
-  handlePlayPause: () => {
+  handlePlayPause: async () => {
     const { sendWs, isPlaying } = get();
+
+    if (!isPlaying) {
+      // Starting playback — ensure window exists and is visible
+      const existing = await getMediaWindow();
+      if (!existing) {
+        // Window doesn't exist: create it (auto-plays on mount)
+        try {
+          await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+          set({ isScreenOpen: true, isPlaying: true });
+        } catch {}
+        return;
+      }
+      const visible = await existing.isVisible();
+      if (!visible) {
+        await existing.show();
+        set({ isScreenOpen: true });
+      }
+    }
+
     sendWs({ event: 'play_pause' });
     set({ isPlaying: !isPlaying });
   },
 
-  handleStop: () => {
+  handleStop: async () => {
     const { sendWs } = get();
     sendWs({ event: 'stop' });
-    set({ localTime: 0 });
+    set({ localTime: 0, isPlaying: false });
+
+    const win = await getMediaWindow();
+    if (win) {
+      const visible = await win.isVisible();
+      if (visible) {
+        await win.hide();
+        set({ isScreenOpen: false });
+      }
+    }
   },
 
   handlePrevious: () => get().sendWs({ event: 'previous' }),
@@ -134,15 +156,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   handleToggleScreen: async () => {
-    const existing = await WebviewWindow.getByLabel('media-window');
-    if (existing) {
-      await existing.close();
-      set({ isScreenOpen: false });
-    } else {
+    const existing = await getMediaWindow();
+    if (!existing) {
+      // No window — create it (starts playback automatically)
       try {
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-        set({ isScreenOpen: true });
+        set({ isScreenOpen: true, isPlaying: true });
       } catch {}
+      return;
+    }
+
+    const visible = await existing.isVisible();
+    if (visible) {
+      await existing.hide();
+      set({ isScreenOpen: false });
+    } else {
+      await existing.show();
+      set({ isScreenOpen: true });
     }
   },
 
