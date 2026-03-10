@@ -4,7 +4,6 @@ import { Card } from '@/components/ui/card';
 
 export function PreviewPanel() {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(24);
 
   return (
     <Card className="w-full h-full gap-3">
@@ -13,11 +12,6 @@ export function PreviewPanel() {
       </div>
 
       <MiniPlayer
-        title="Keynote Intro"
-        subtitle="Slide 1 of 12"
-        duration={600}
-        currentTime={currentTime}
-        onTimeChange={setCurrentTime}
         isPlaying={isPlaying}
         onPlayPause={() => setIsPlaying((p) => !p)}
       />

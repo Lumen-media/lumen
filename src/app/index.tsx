@@ -27,7 +27,7 @@ function RouteComponent() {
 
       await invoke('create_window', {
         label: 'media-window',
-        title: 'Lumen - Second Window',
+        title: 'Media Player',
       });
 
       toast.success('Second window created successfully.');
@@ -39,7 +39,7 @@ function RouteComponent() {
 
         const webview = new WebviewWindow('media-window', {
           url: '/media-window',
-          title: 'Lumen - Second Window',
+          title: 'Media Player',
           fullscreen: true,
           decorations: false,
         });
