@@ -1,9 +1,11 @@
 'use client';
 import { listen } from '@tauri-apps/api/event';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { LucidePause, LucidePlay, LucideVolume2, LucideVolumeOff } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
 import { cn } from '@/lib/utils';
+import { extractVideoThumbnail } from '@/services/get-video-tumb';
 import { Slider } from './slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 
@@ -35,30 +37,30 @@ export const Videoplayer = ({
   muted = false,
   interactive = true,
 }: VideoplayerProps) => {
-  const video = url ?? 'https://www.youtube.com/watch?v=zajUgQLviwk';
-
   async function fetchMetadata(videoUrl: string): Promise<{ title: string; thumbnail?: string }> {
-    try {
-      const u = new URL(videoUrl);
-      if (u.hostname.includes('youtube.com') || u.hostname.includes('youtu.be')) {
-        const res = await fetch(
-          `https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          return { title: data.title, thumbnail: data.thumbnail_url };
+    if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
+      try {
+        const u = new URL(videoUrl);
+        if (u.hostname.includes('youtube.com') || u.hostname.includes('youtu.be')) {
+          const res = await fetch(
+            `https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            return { title: data.title, thumbnail: data.thumbnail_url };
+          }
+          return { title: 'YouTube Video' };
         }
-        return { title: 'YouTube Video' };
-      }
-      const filename = u.pathname.split('/').pop() ?? videoUrl;
-      return { title: filename.replace(/\.[^.]+$/, '') };
-    } catch {
-      // local file path
-      const filename = videoUrl.split(/[\\/]/).pop() ?? videoUrl;
-      return { title: filename.replace(/\.[^.]+$/, '') };
+      } catch {}
     }
+    const raw = videoUrl.split(/[\\/]/).pop() ?? videoUrl;
+    const decoded = decodeURIComponent(raw);
+    return { title: decoded.replace(/\.[^.]+$/, '') };
   }
   const playerRef = useRef<ReactPlayer>(null);
+  const currentBlobUrl = useRef<string | null>(null);
+  const currentFilePath = useRef<string | null>(null);
+  const pendingThumbnail = useRef<string | null>(null);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [playing, setPlaying] = useState(autoplay);
   const [volume, setVolume] = useState(1);
@@ -66,6 +68,7 @@ export const Videoplayer = ({
   const [played, setPlayed] = useState(0);
   const [_loaded, setLoaded] = useState(0);
   const [isLooping, setIsLooping] = useState(false);
+  const [activeUrl, setActiveUrl] = useState(url ?? '');
 
   useEffect(() => {
     setPlaying(autoplay);
@@ -171,6 +174,41 @@ export const Videoplayer = ({
       }
     });
 
+    const unlistenLoadUrl = listen<string>('load-url', async (event) => {
+      const filePath = event.payload;
+      if (currentBlobUrl.current) {
+        URL.revokeObjectURL(currentBlobUrl.current);
+        currentBlobUrl.current = null;
+      }
+      const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+      const mimeTypes: Record<string, string> = {
+        mp4: 'video/mp4',
+        webm: 'video/webm',
+        mkv: 'video/x-matroska',
+        avi: 'video/x-msvideo',
+        mov: 'video/quicktime',
+        mp3: 'audio/mpeg',
+        wav: 'audio/wav',
+        ogg: 'audio/ogg',
+        flac: 'audio/flac',
+        aac: 'audio/aac',
+        m4a: 'audio/mp4',
+      };
+      const mime = mimeTypes[ext] ?? 'application/octet-stream';
+      const data = await readFile(filePath);
+      const blobUrl = URL.createObjectURL(new Blob([data], { type: mime }));
+      currentBlobUrl.current = blobUrl;
+      currentFilePath.current = filePath;
+      if (mime.startsWith('video/')) {
+        pendingThumbnail.current = await extractVideoThumbnail(blobUrl);
+      } else {
+        pendingThumbnail.current = null;
+      }
+      setPlayed(0);
+      setActiveUrl(blobUrl);
+      setPlaying(true);
+    });
+
     return () => {
       unlistenVolume.then((f) => f());
       unlistenMute.then((f) => f());
@@ -178,6 +216,7 @@ export const Videoplayer = ({
       unlistenSeek.then((f) => f());
       unlistenLoop.then((f) => f());
       unlistenStop.then((f) => f());
+      unlistenLoadUrl.then((f) => f());
     };
   }, [handleMute, handlePlayPause]);
 
@@ -193,18 +232,20 @@ export const Videoplayer = ({
     >
       <ReactPlayer
         ref={playerRef}
-        url={video}
+        url={activeUrl}
         playing={playing}
         volume={volume}
         muted={mutedState}
         onReady={async () => {
           if (ws?.readyState === WebSocket.OPEN) {
-            const meta = await fetchMetadata(video);
+            const meta = await fetchMetadata(currentFilePath.current ?? activeUrl);
+            const thumbnail = pendingThumbnail.current ?? meta.thumbnail ?? '';
+            pendingThumbnail.current = null;
             ws.send(
               JSON.stringify({
                 event: 'metadata',
                 title: meta.title,
-                url: meta.thumbnail ?? video,
+                url: thumbnail,
               })
             );
           }

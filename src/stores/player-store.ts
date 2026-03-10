@@ -8,6 +8,7 @@ interface PlayerStore {
   localDuration: number;
   localTitle: string;
   localUrl: string | undefined;
+  localMediaType: 'audio' | 'video' | 'stream' | undefined;
   isLoop: boolean;
   isScreenOpen: boolean;
   volume: number;
@@ -29,6 +30,7 @@ interface PlayerStore {
   handleToggleScreen: () => Promise<void>;
   handleSliderChange: (value: number[]) => void;
   setIsDragging: (dragging: boolean) => void;
+  loadFile: (filePath: string) => Promise<void>;
 }
 
 async function getMediaWindow() {
@@ -40,6 +42,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   localDuration: 0,
   localTitle: 'Untitled',
   localUrl: undefined,
+  localMediaType: undefined,
   isLoop: false,
   isScreenOpen: false,
   volume: 100,
@@ -99,7 +102,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (!existing) {
       try {
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-        set({ isPlaying: true });
+        set({ isPlaying: true, localMediaType: 'stream' });
       } catch {}
       return;
     }
@@ -175,4 +178,29 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   setIsDragging: (dragging) => set({ isDragging: dragging }),
+
+  loadFile: async (filePath: string) => {
+    const videoExtensions = ['mp4', 'webm', 'mkv', 'avi', 'mov'];
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+    const isVideo = videoExtensions.includes(ext);
+
+    let win = await getMediaWindow();
+    if (!win) {
+      try {
+        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+        await new Promise((r) => setTimeout(r, 800));
+        win = await getMediaWindow();
+      } catch {
+        return;
+      }
+    }
+
+    get().sendWs({ event: 'load_url', url: filePath });
+    set({ isPlaying: true, localMediaType: isVideo ? 'video' : 'audio' });
+
+    if (isVideo && win) {
+      await win.show();
+      set({ isScreenOpen: true });
+    }
+  },
 }));

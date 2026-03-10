@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useAnnounce } from '@/hooks/use-announce';
 import { type FileInfo, fileInitService, fileManagementService, type MediaType } from '@/services';
+import { usePlayerStore } from '@/stores/player-store';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
 
 const mediaItems = [
@@ -32,6 +33,7 @@ const mediaItems = [
 
 export function MediaPanel() {
   const { t } = useTranslation();
+  const player = usePlayerStore();
   const [activeMedia, setActiveMedia] = useState<MediaType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
@@ -54,7 +56,7 @@ export function MediaPanel() {
       } catch (error) {
         console.error('Failed to initialize media folders:', error);
         toast.error('Failed to initialize media folders');
-        setIsInitialized(true); // Permitir continuar mesmo com erro
+        setIsInitialized(true);
       }
     };
 
@@ -331,6 +333,11 @@ export function MediaPanel() {
                             onClick={(file) => {
                               console.log('File clicked:', file.name);
                             }}
+                            onDoubleClick={
+                              activeMedia === 'audio' || activeMedia === 'video'
+                                ? (file) => player.loadFile(file.path)
+                                : undefined
+                            }
                           />
                         </div>
                       </div>
