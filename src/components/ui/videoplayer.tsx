@@ -1,5 +1,6 @@
 'use client';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { LucidePause, LucidePlay, LucideVolume2, LucideVolumeOff } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
@@ -36,6 +37,28 @@ export const Videoplayer = ({
   interactive = true,
 }: VideoplayerProps) => {
   const video = url ?? 'https://www.youtube.com/watch?v=zajUgQLviwk';
+
+  async function fetchMetadata(videoUrl: string): Promise<{ title: string; thumbnail?: string }> {
+    try {
+      const u = new URL(videoUrl);
+      if (u.hostname.includes('youtube.com') || u.hostname.includes('youtu.be')) {
+        const res = await fetch(
+          `https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          return { title: data.title, thumbnail: data.thumbnail_url };
+        }
+        return { title: 'YouTube Video' };
+      }
+      const filename = u.pathname.split('/').pop() ?? videoUrl;
+      return { title: filename.replace(/\.[^.]+$/, '') };
+    } catch {
+      // local file path
+      const filename = videoUrl.split(/[\\/]/).pop() ?? videoUrl;
+      return { title: filename.replace(/\.[^.]+$/, '') };
+    }
+  }
   const playerRef = useRef<ReactPlayer>(null);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [playing, setPlaying] = useState(autoplay);
@@ -43,6 +66,7 @@ export const Videoplayer = ({
   const [mutedState, setMutedState] = useState(muted);
   const [played, setPlayed] = useState(0);
   const [_loaded, setLoaded] = useState(0);
+  const [isLooping, setIsLooping] = useState(false);
 
   useEffect(() => {
     setPlaying(autoplay);
@@ -70,6 +94,13 @@ export const Videoplayer = ({
   const handleProgress = (state: stateTypes) => {
     setPlayed(state.played);
     setLoaded(state.loaded);
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        event: 'progress',
+        value: state.playedSeconds,
+        duration: playerRef.current?.getDuration() ?? 0,
+      }));
+    }
   };
 
   const handleSeekChange = (value: number) => {
@@ -119,10 +150,31 @@ export const Videoplayer = ({
       handlePlayPause();
     });
 
+    const unlistenSeek = listen('seek', (event) => {
+      const seconds = event.payload as number;
+      if (playerRef.current) {
+        playerRef.current.seekTo(seconds, 'seconds');
+        setPlayed(seconds / (playerRef.current.getDuration() || 1));
+      }
+    });
+
+    const unlistenLoop = listen('video-loop', (event) => {
+      setIsLooping(event.payload as boolean);
+    });
+
+    const unlistenStop = listen('stop', async () => {
+      setPlaying(false);
+      const win = getCurrentWebviewWindow();
+      await win.close();
+    });
+
     return () => {
       unlistenVolume.then((f) => f());
       unlistenMute.then((f) => f());
       unlistenPlayPause.then((f) => f());
+      unlistenSeek.then((f) => f());
+      unlistenLoop.then((f) => f());
+      unlistenStop.then((f) => f());
     };
   }, [handleMute, handlePlayPause]);
 
@@ -142,12 +194,23 @@ export const Videoplayer = ({
         playing={playing}
         volume={volume}
         muted={mutedState}
+        onReady={async () => {
+          if (ws?.readyState === WebSocket.OPEN) {
+            const meta = await fetchMetadata(video);
+            ws.send(JSON.stringify({
+              event: 'metadata',
+              title: meta.title,
+              url: meta.thumbnail ?? video,
+            }));
+          }
+        }}
         onProgress={handleProgress}
         onEnded={() => {
           console.log('ended');
         }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
+        loop={isLooping}
         controls={false}
         width="100%"
         height="100%"
