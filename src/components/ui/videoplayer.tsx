@@ -1,6 +1,5 @@
 'use client';
 import { listen } from '@tauri-apps/api/event';
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { LucidePause, LucidePlay, LucideVolume2, LucideVolumeOff } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
@@ -95,11 +94,13 @@ export const Videoplayer = ({
     setPlayed(state.played);
     setLoaded(state.loaded);
     if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        event: 'progress',
-        value: state.playedSeconds,
-        duration: playerRef.current?.getDuration() ?? 0,
-      }));
+      ws.send(
+        JSON.stringify({
+          event: 'progress',
+          value: state.playedSeconds,
+          duration: playerRef.current?.getDuration() ?? 0,
+        })
+      );
     }
   };
 
@@ -162,10 +163,12 @@ export const Videoplayer = ({
       setIsLooping(event.payload as boolean);
     });
 
-    const unlistenStop = listen('stop', async () => {
+    const unlistenStop = listen('stop', () => {
       setPlaying(false);
-      const win = getCurrentWebviewWindow();
-      await win.close();
+      if (playerRef.current) {
+        playerRef.current.seekTo(0, 'seconds');
+        setPlayed(0);
+      }
     });
 
     return () => {
@@ -197,11 +200,13 @@ export const Videoplayer = ({
         onReady={async () => {
           if (ws?.readyState === WebSocket.OPEN) {
             const meta = await fetchMetadata(video);
-            ws.send(JSON.stringify({
-              event: 'metadata',
-              title: meta.title,
-              url: meta.thumbnail ?? video,
-            }));
+            ws.send(
+              JSON.stringify({
+                event: 'metadata',
+                title: meta.title,
+                url: meta.thumbnail ?? video,
+              })
+            );
           }
         }}
         onProgress={handleProgress}

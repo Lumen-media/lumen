@@ -30,6 +30,9 @@
     "core:window:allow-is-fullscreen",
     "core:window:allow-inner-position",
     "core:window:allow-close",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-is-visible",
     "core:window:allow-set-decorations",
     "fs:scope",
     {
