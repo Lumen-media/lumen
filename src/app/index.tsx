@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 import { AsidePanel } from '@/components/aside-panel';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { MediaPanel } from '@/components/media-panel';
@@ -21,42 +20,6 @@ function RouteComponent() {
     i18n.changeLanguage(lng);
   };
 
-  const openSecondWindow = async () => {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-
-      await invoke('create_window', {
-        label: 'media-window',
-        title: 'Media Player',
-      });
-
-      toast.success('Second window created successfully.');
-    } catch {
-      toast.error('Failed to create second window. Check the console for details.');
-
-      try {
-        const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-
-        const webview = new WebviewWindow('media-window', {
-          url: '/media-window',
-          title: 'Media Player',
-          fullscreen: true,
-          decorations: false,
-        });
-
-        webview.once('tauri://created', () => {
-          toast.success('Second window created successfully.');
-        });
-
-        webview.once('tauri://error', () => {
-          toast.error('Error creating second window.');
-        });
-      } catch {
-        toast.error('Unable to create second window. Check application permissions.');
-      }
-    }
-  };
-
   return (
     <main className="h-dvh p-2.5 flex flex-col gap-3">
       <Card>
@@ -66,33 +29,9 @@ function RouteComponent() {
         <div className="flex gap-2 mt-2">
           <Button onClick={() => changeLanguage('en')}>English</Button>
           <Button onClick={() => changeLanguage('pt')}>Português</Button>
-          <Button
-            onClick={openSecondWindow}
-            variant="outline"
-            title="Open a new window with the same interface"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="mr-2"
-              aria-label="Open second window icon"
-            >
-              <title>Open second window</title>
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <line x1="3" y1="9" x2="21" y2="9" />
-              <line x1="9" y1="21" x2="9" y2="9" />
-            </svg>
-            Open Second Window
-          </Button>
         </div>
       </Card>
+
       <ResizablePanelGroup direction="horizontal">
         <ResizablePanel className="min-w-[18.75rem]">
           <ErrorBoundary>
