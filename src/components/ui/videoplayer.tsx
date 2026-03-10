@@ -37,7 +37,9 @@ export const Videoplayer = ({
   muted = false,
   interactive = true,
 }: VideoplayerProps) => {
-  async function fetchMetadata(videoUrl: string): Promise<{ title: string; thumbnail?: string }> {
+  async function fetchMetadata(
+    videoUrl: string
+  ): Promise<{ title: string; thumbnail?: string; artist?: string }> {
     if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
       try {
         const u = new URL(videoUrl);
@@ -47,7 +49,11 @@ export const Videoplayer = ({
           );
           if (res.ok) {
             const data = await res.json();
-            return { title: data.title, thumbnail: data.thumbnail_url };
+            return {
+              title: data.title,
+              thumbnail: data.thumbnail_url,
+              artist: data.author_name ?? undefined,
+            };
           }
           return { title: 'YouTube Video' };
         }
@@ -61,6 +67,7 @@ export const Videoplayer = ({
   const currentBlobUrl = useRef<string | null>(null);
   const currentFilePath = useRef<string | null>(null);
   const pendingThumbnail = useRef<string | null>(null);
+  const pendingSeekTime = useRef<number | null>(null);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [playing, setPlaying] = useState(autoplay);
   const [volume, setVolume] = useState(1);
@@ -174,8 +181,8 @@ export const Videoplayer = ({
       }
     });
 
-    const unlistenLoadUrl = listen<string>('load-url', async (event) => {
-      const filePath = event.payload;
+    const unlistenLoadUrl = listen<{ url: string; time: number }>('load-url', async (event) => {
+      const { url: filePath, time: seekTime } = event.payload;
       if (currentBlobUrl.current) {
         URL.revokeObjectURL(currentBlobUrl.current);
         currentBlobUrl.current = null;
@@ -199,6 +206,7 @@ export const Videoplayer = ({
       const blobUrl = URL.createObjectURL(new Blob([data], { type: mime }));
       currentBlobUrl.current = blobUrl;
       currentFilePath.current = filePath;
+      pendingSeekTime.current = seekTime > 0 ? seekTime : null;
       if (mime.startsWith('video/')) {
         pendingThumbnail.current = await extractVideoThumbnail(blobUrl);
       } else {
@@ -237,6 +245,10 @@ export const Videoplayer = ({
         volume={volume}
         muted={mutedState}
         onReady={async () => {
+          if (pendingSeekTime.current !== null && pendingSeekTime.current > 0) {
+            playerRef.current?.seekTo(pendingSeekTime.current, 'seconds');
+            pendingSeekTime.current = null;
+          }
           if (ws?.readyState === WebSocket.OPEN) {
             const meta = await fetchMetadata(currentFilePath.current ?? activeUrl);
             const thumbnail = pendingThumbnail.current ?? meta.thumbnail ?? '';
@@ -246,6 +258,7 @@ export const Videoplayer = ({
                 event: 'metadata',
                 title: meta.title,
                 url: thumbnail,
+                artist: meta.artist ?? '',
               })
             );
           }

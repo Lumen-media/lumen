@@ -1,5 +1,4 @@
 import {
-  LucideHeadphones,
   LucideMonitorOff,
   LucideMonitorPlay,
   LucidePause,
@@ -8,7 +7,6 @@ import {
   LucideSkipBack,
   LucideSkipForward,
   LucideSquare,
-  LucideVideo,
   LucideVolume2,
   LucideVolumeX,
 } from 'lucide-react';
@@ -39,36 +37,32 @@ export function MiniPlayer({ className }: MiniPlayerProps) {
   useEffect(() => {
     const cleanupWs = player.initWs();
     const cleanupListeners = player.initListeners();
+    player.restoreLastMedia();
     return () => {
       cleanupWs();
       cleanupListeners();
     };
-  }, [player.initWs, player.initListeners]);
+  }, [player.initWs, player.initListeners, player.restoreLastMedia]);
 
   const iconBtn =
     'p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors';
 
   return (
-    <div className={cn('bg-card border rounded-xl p-3 flex flex-col gap-0', className)}>
+    <div className={cn('bg-card border rounded-xl p-3 flex flex-col gap-1', className)}>
       <div className="flex items-center gap-3">
-        <div className="h-10 aspect-video shrink-0 rounded bg-muted overflow-hidden flex items-center justify-center">
-          {player.localUrl ? (
-            <img
-              src={player.localUrl}
-              alt={player.localTitle}
-              className="w-full h-full object-cover"
-            />
-          ) : player.localMediaType === 'audio' ? (
-            <LucideHeadphones className="size-5 text-muted-foreground" />
-          ) : player.localMediaType === 'video' ? (
-            <LucideVideo className="size-5 text-muted-foreground" />
-          ) : (
-            <div className="w-full h-full bg-muted" />
-          )}
-        </div>
-
         <div className="flex-1 min-w-0 flex flex-col gap-1">
-          <span className="text-sm font-semibold leading-tight truncate">{player.localTitle}</span>
+          {player.localTitle && (
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-semibold leading-tight truncate">
+                {player.localTitle}
+              </span>
+              {player.localArtist && (
+                <span className="text-xs text-muted-foreground leading-tight truncate">
+                  {player.localArtist}
+                </span>
+              )}
+            </div>
+          )}
           <Slider
             min={0}
             max={player.localDuration}
@@ -80,10 +74,12 @@ export function MiniPlayer({ className }: MiniPlayerProps) {
             rangeClassName="bg-primary"
             thumbClassName="size-2.5 border-primary bg-primary shadow-none focus-visible:ring-0"
           />
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{formatTime(player.localTime)}</span>
-            <span>{formatTime(player.localDuration)}</span>
-          </div>
+          {(player.localTime > 0 || player.localDuration > 0) && (
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{formatTime(player.localTime)}</span>
+              <span>{formatTime(player.localDuration)}</span>
+            </div>
+          )}
         </div>
       </div>
 
