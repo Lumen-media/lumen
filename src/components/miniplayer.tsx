@@ -1,4 +1,5 @@
 import {
+  LucideHeadphones,
   LucideMonitorOff,
   LucideMonitorPlay,
   LucidePause,
@@ -7,6 +8,7 @@ import {
   LucideSkipBack,
   LucideSkipForward,
   LucideSquare,
+  LucideVideo,
   LucideVolume2,
   LucideVolumeX,
 } from 'lucide-react';
@@ -49,13 +51,17 @@ export function MiniPlayer({ className }: MiniPlayerProps) {
   return (
     <div className={cn('bg-card border rounded-xl p-3 flex flex-col gap-0', className)}>
       <div className="flex items-center gap-3">
-        <div className="h-10 aspect-video shrink-0 rounded bg-muted overflow-hidden">
+        <div className="h-10 aspect-video shrink-0 rounded bg-muted overflow-hidden flex items-center justify-center">
           {player.localUrl ? (
             <img
               src={player.localUrl}
               alt={player.localTitle}
               className="w-full h-full object-cover"
             />
+          ) : player.localMediaType === 'audio' ? (
+            <LucideHeadphones className="size-5 text-muted-foreground" />
+          ) : player.localMediaType === 'video' ? (
+            <LucideVideo className="size-5 text-muted-foreground" />
           ) : (
             <div className="w-full h-full bg-muted" />
           )}

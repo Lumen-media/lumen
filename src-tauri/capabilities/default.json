@@ -16,6 +16,7 @@
     "deep-link:default",
     "dialog:default",
     "fs:allow-read-dir",
+    "fs:allow-read-file",
     "fs:allow-stat",
     "fs:allow-exists",
     "fs:allow-mkdir",
@@ -40,7 +41,8 @@
       "allow": [
         { "path": "$APPDATA/**" },
         { "path": "$APPLOCALDATA/**" },
-        { "path": "C:\\lumen\\lumen\\**" }
+        { "path": "C:\\lumen\\lumen\\**" },
+        { "path": "**" }
       ]
     }
   ]

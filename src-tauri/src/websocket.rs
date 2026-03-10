@@ -93,6 +93,13 @@ async fn handle_connection(
                                     app.emit("play-pause", ()).map_err(|e| e.to_string())?
                                 }
                                 "stop" => app.emit("stop", ()).map_err(|e| e.to_string())?,
+                                "load_url" => {
+                                    app.emit(
+                                        "load-url",
+                                        audio_event.url.unwrap_or_default(),
+                                    )
+                                    .map_err(|e| e.to_string())?;
+                                }
                                 "set_loop" => {
                                     let enabled = audio_event.value.map(|v| v != 0.0).unwrap_or(false);
                                     app.emit("video-loop", enabled).map_err(|e| e.to_string())?;
