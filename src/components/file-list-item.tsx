@@ -5,7 +5,6 @@ import {
   FolderOpen,
   Headphones,
   Image as ImageIcon,
-  MoreVertical,
   Music,
   Trash2,
   Video,
@@ -13,11 +12,11 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import type { FileInfo, MediaType } from '@/services';
 import { useDeleteFileStore } from '@/stores/delete-file-store';
 
@@ -107,58 +106,43 @@ export function FileListItem({
   const fileDescription = `${file.name}, ${formatFileSize(file.size)}, modified ${formatDate(file.modifiedAt)}`;
 
   return (
-    <Button
-      variant="ghost"
-      className={`w-full justify-start hover:bg-primary/15 text-left p-3 h-auto group ${isFocused ? 'ring-2 ring-ring' : ''}`}
-      onClick={handleClick}
-      onDoubleClick={handleDoubleClick}
-      aria-label={fileDescription}
-    >
-      <div className="flex items-start gap-3 w-full min-w-0">
-        <div className="shrink-0 mt-0.5">
-          <Icon className="size-5 text-muted-foreground" aria-hidden="true" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-medium truncate">{file.name}</p>
-          <div
-            className="flex items-center gap-3 mt-1 text-sm text-muted-foreground"
-            aria-hidden="true"
-          >
-            <span>{formatFileSize(file.size)}</span>
-            <span>•</span>
-            <span className="truncate">{formatDate(file.modifiedAt)}</span>
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <Button
+          variant="ghost"
+          className={`w-full justify-start hover:bg-primary/15 text-left p-3 h-auto ${isFocused ? 'ring-2 ring-ring' : ''}`}
+          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
+          aria-label={fileDescription}
+        >
+          <div className="flex items-start gap-3 w-full min-w-0">
+            <div className="shrink-0 mt-0.5">
+              <Icon className="size-5 text-muted-foreground" aria-hidden="true" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">{file.name}</p>
+              <div
+                className="flex items-center gap-3 mt-1 text-sm text-muted-foreground"
+                aria-hidden="true"
+              >
+                <span>{formatFileSize(file.size)}</span>
+                <span>•</span>
+                <span className="truncate">{formatDate(file.modifiedAt)}</span>
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                aria-label={`Options for ${file.name}`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <MoreVertical className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleOpenFolder} aria-label="Open folder">
-                <FolderOpen className="h-4 w-4 mr-2" aria-hidden="true" />
-                Open folder
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleDeleteClick}
-                className="text-destructive focus:text-destructive"
-                aria-label="Delete file"
-              >
-                <Trash2 className="h-4 w-4 mr-2" aria-hidden="true" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-    </Button>
+        </Button>
+      </ContextMenuTrigger>
+      <ContextMenuContent side="bottom">
+        <ContextMenuItem onClick={handleOpenFolder}>
+          <FolderOpen className="h-4 w-4" aria-hidden="true" />
+          Open folder
+        </ContextMenuItem>
+        <ContextMenuItem onClick={handleDeleteClick} variant="destructive">
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+          Delete
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
