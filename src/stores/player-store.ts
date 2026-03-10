@@ -2,11 +2,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { create } from 'zustand';
+import { getSetting, saveSetting } from '@/services/db';
 
 interface PlayerStore {
   localTime: number;
   localDuration: number;
   localTitle: string;
+  localArtist: string;
   localUrl: string | undefined;
   localMediaType: 'audio' | 'video' | 'stream' | undefined;
   isLoop: boolean;
@@ -16,6 +18,7 @@ interface PlayerStore {
   isPlaying: boolean;
   isDragging: boolean;
   ws: WebSocket | null;
+  restoredFilePath: string | null;
 
   initWs: () => () => void;
   initListeners: () => () => void;
@@ -30,7 +33,8 @@ interface PlayerStore {
   handleToggleScreen: () => Promise<void>;
   handleSliderChange: (value: number[]) => void;
   setIsDragging: (dragging: boolean) => void;
-  loadFile: (filePath: string) => Promise<void>;
+  loadFile: (filePath: string, seekTime?: number) => Promise<void>;
+  restoreLastMedia: () => Promise<void>;
 }
 
 async function getMediaWindow() {
@@ -40,7 +44,8 @@ async function getMediaWindow() {
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
   localTime: 0,
   localDuration: 0,
-  localTitle: 'Untitled',
+  localTitle: '',
+  localArtist: '',
   localUrl: undefined,
   localMediaType: undefined,
   isLoop: false,
@@ -50,6 +55,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   isPlaying: false,
   isDragging: false,
   ws: null,
+  restoredFilePath: null,
 
   initWs: () => {
     const socket = new WebSocket('ws://localhost:8080');
@@ -64,21 +70,36 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   initListeners: () => {
+    let lastSavedDuration = 0;
+
     const unlistenProgress = listen<{ seconds: number; duration: number }>(
       'video-progress',
       (event) => {
         if (get().isDragging) return;
         set({ localTime: event.payload.seconds });
-        if (event.payload.duration > 0) set({ localDuration: event.payload.duration });
+        if (event.payload.duration > 0) {
+          set({ localDuration: event.payload.duration });
+          if (Math.abs(event.payload.duration - lastSavedDuration) > 1) {
+            lastSavedDuration = event.payload.duration;
+            saveSetting('last_duration', String(event.payload.duration)).catch(() => {});
+          }
+        }
       }
     );
 
-    const unlistenMeta = listen<{ title: string; url: string }>('video-metadata', (event) => {
-      set({ localTitle: event.payload.title, localUrl: event.payload.url });
-    });
+    const unlistenMeta = listen<{ title: string; url: string; artist: string }>(
+      'video-metadata',
+      (event) => {
+        const { title, url, artist } = event.payload;
+        set({ localTitle: title, localUrl: url, localArtist: artist });
+        saveSetting('last_title', title).catch(() => {});
+        saveSetting('last_artist', artist).catch(() => {});
+      }
+    );
 
     const unlistenStop = listen('stop', () => {
       set({ isPlaying: false, isScreenOpen: false });
+      saveSetting('last_time', '0').catch(() => {});
     });
 
     return () => {
@@ -96,15 +117,26 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   handlePlayPause: async () => {
-    const { sendWs, isPlaying } = get();
+    const { sendWs, isPlaying, restoredFilePath, localTime } = get();
+
+    if (restoredFilePath) {
+      const seekTime = get().localTime;
+      set({ restoredFilePath: null });
+      await get().loadFile(restoredFilePath, seekTime);
+      return;
+    }
 
     const existing = await getMediaWindow();
     if (!existing) {
       try {
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-        set({ isPlaying: true, localMediaType: 'stream' });
+        set({ isPlaying: true });
       } catch {}
       return;
+    }
+
+    if (isPlaying) {
+      saveSetting('last_time', String(localTime)).catch(() => {});
     }
 
     sendWs({ event: 'play_pause' });
@@ -115,6 +147,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const { sendWs } = get();
     sendWs({ event: 'stop' });
     set({ localTime: 0, isPlaying: false });
+    saveSetting('last_time', '0').catch(() => {});
 
     const win = await getMediaWindow();
     if (win) {
@@ -140,6 +173,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const v = value[0] ?? 100;
     set({ volume: v });
     get().sendWs({ event: 'set_volume', value: v });
+    saveSetting('last_volume', String(v)).catch(() => {});
   },
 
   handleMuteToggle: () => {
@@ -150,8 +184,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   handleToggleScreen: async () => {
+    const { localMediaType } = get();
+
     const existing = await getMediaWindow();
     if (!existing) {
+      if (localMediaType !== 'video') return;
       try {
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
         const win = await getMediaWindow();
@@ -166,6 +203,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       await existing.hide();
       set({ isScreenOpen: false });
     } else {
+      if (localMediaType !== 'video') return;
       await existing.show();
       set({ isScreenOpen: true });
     }
@@ -179,7 +217,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   setIsDragging: (dragging) => set({ isDragging: dragging }),
 
-  loadFile: async (filePath: string) => {
+  loadFile: async (filePath: string, seekTime = 0) => {
     const videoExtensions = ['mp4', 'webm', 'mkv', 'avi', 'mov'];
     const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
     const isVideo = videoExtensions.includes(ext);
@@ -195,12 +233,56 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
     }
 
-    get().sendWs({ event: 'load_url', url: filePath });
-    set({ isPlaying: true, localMediaType: isVideo ? 'video' : 'audio' });
+    // Wait up to 3s for WS to be open before sending
+    const deadline = Date.now() + 3000;
+    while (get().ws?.readyState !== WebSocket.OPEN) {
+      if (Date.now() >= deadline) return;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+
+    get().sendWs({ event: 'load_url', url: filePath, value: seekTime });
+    set({
+      isPlaying: true,
+      localMediaType: isVideo ? 'video' : 'audio',
+      restoredFilePath: null,
+      localTime: seekTime > 0 ? seekTime : 0,
+      localDuration: seekTime > 0 ? get().localDuration : 0,
+    });
+
+    saveSetting('last_media_path', filePath).catch(() => {});
+    saveSetting('last_media_type', isVideo ? 'video' : 'audio').catch(() => {});
+    saveSetting('last_time', '0').catch(() => {});
 
     if (isVideo && win) {
       await win.show();
       set({ isScreenOpen: true });
     }
+  },
+
+  restoreLastMedia: async () => {
+    try {
+      const [path, type, title, artist, duration, time, volume] = await Promise.all([
+        getSetting('last_media_path'),
+        getSetting('last_media_type'),
+        getSetting('last_title'),
+        getSetting('last_artist'),
+        getSetting('last_duration'),
+        getSetting('last_time'),
+        getSetting('last_volume'),
+      ]);
+
+      if (!path) return;
+
+      set({
+        restoredFilePath: path,
+        localMediaType: (type as 'audio' | 'video') ?? undefined,
+        localTitle: title ?? '',
+        localArtist: artist ?? '',
+        localUrl: undefined,
+        localDuration: duration ? Number(duration) : 0,
+        localTime: time ? Number(time) : 0,
+        volume: volume ? Number(volume) : 100,
+      });
+    } catch {}
   },
 }));

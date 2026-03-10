@@ -12,6 +12,7 @@ struct AudioEvent {
     duration: Option<f64>,
     title: Option<String>,
     url: Option<String>,
+    artist: Option<String>,
 }
 
 pub async fn accept_connection(peer: SocketAddr, stream: tokio::net::TcpStream, app: AppHandle) {
@@ -60,8 +61,7 @@ async fn handle_connection(
                                 }
                                 "seek" => {
                                     if let Some(seconds) = audio_event.value {
-                                        app.emit("seek", seconds)
-                                            .map_err(|e| e.to_string())?;
+                                        app.emit("seek", seconds).map_err(|e| e.to_string())?;
                                     } else {
                                         eprintln!("Received seek event without a value");
                                     }
@@ -72,6 +72,7 @@ async fn handle_connection(
                                         serde_json::json!({
                                             "title": audio_event.title.unwrap_or_default(),
                                             "url": audio_event.url.unwrap_or_default(),
+                                            "artist": audio_event.artist.unwrap_or_default(),
                                         }),
                                     )
                                     .map_err(|e| e.to_string())?;
@@ -96,12 +97,16 @@ async fn handle_connection(
                                 "load_url" => {
                                     app.emit(
                                         "load-url",
-                                        audio_event.url.unwrap_or_default(),
+                                        serde_json::json!({
+                                            "url": audio_event.url.unwrap_or_default(),
+                                            "time": audio_event.value.unwrap_or(0.0),
+                                        }),
                                     )
                                     .map_err(|e| e.to_string())?;
                                 }
                                 "set_loop" => {
-                                    let enabled = audio_event.value.map(|v| v != 0.0).unwrap_or(false);
+                                    let enabled =
+                                        audio_event.value.map(|v| v != 0.0).unwrap_or(false);
                                     app.emit("video-loop", enabled).map_err(|e| e.to_string())?;
                                 }
                                 "next" => app.emit("next", ()).map_err(|e| e.to_string())?,
