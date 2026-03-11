@@ -1,7 +1,8 @@
-export { fileInitService } from './file-init-service';
 export type { FileInitService } from './file-init-service';
-
-export { fileManagementService } from './file-management-service';
+export { fileInitService } from './file-init-service';
 export type { FileManagementService } from './file-management-service';
+export { fileManagementService } from './file-management-service';
 
-export type { MediaType, FileInfo } from './types';
+export { mediaDbService } from './media-db-service';
+
+export type { FileInfo, MediaType } from './types';

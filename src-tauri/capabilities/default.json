@@ -38,6 +38,9 @@
     "store:allow-load",
     "store:allow-get",
     "store:allow-set",
+    "sql:allow-load",
+    "sql:allow-execute",
+    "sql:allow-select",
     "fs:scope",
     {
       "identifier": "fs:scope",
