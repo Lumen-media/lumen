@@ -7,10 +7,11 @@ import {
   Image as ImageIcon,
   Music,
   Plus,
+  RefreshCw,
   Search,
   Video,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { DeleteFileAlert } from '@/components/delete-file-alert';
@@ -18,7 +19,7 @@ import { FileListItem } from '@/components/file-list-item';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useAnnounce } from '@/hooks/use-announce';
-import { type FileInfo, fileInitService, fileManagementService, type MediaType } from '@/services';
+import { type FileInfo, fileInitService, fileManagementService, mediaDbService, type MediaType } from '@/services';
 import { usePlayerStore } from '@/stores/player-store';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
 
@@ -63,15 +64,8 @@ export function MediaPanel() {
     initializeFolders();
   }, []);
 
-  const filteredFiles = useMemo(() => {
-    if (searchQuery) {
-      return files.filter((file) => file.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    }
-    return files;
-  }, [searchQuery, files]);
-
   const virtualizer = useVirtualizer({
-    count: filteredFiles.length,
+    count: files.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 80,
     overscan: 10,
@@ -107,12 +101,12 @@ export function MediaPanel() {
   }, [activeMedia, isInitialized, loadFiles]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!activeMedia || filteredFiles.length === 0) return;
+    if (!activeMedia || files.length === 0) return;
 
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setFocusedIndex((prev) => (prev < filteredFiles.length - 1 ? prev + 1 : prev));
+        setFocusedIndex((prev) => (prev < files.length - 1 ? prev + 1 : prev));
         break;
       case 'ArrowUp':
         e.preventDefault();
@@ -121,13 +115,13 @@ export function MediaPanel() {
       case 'Enter':
         e.preventDefault();
         if (focusedIndex >= 0) {
-          console.log('File clicked:', filteredFiles[focusedIndex].name);
+          console.log('File clicked:', files[focusedIndex].name);
         }
         break;
       case 'Delete':
         e.preventDefault();
         if (focusedIndex >= 0) {
-          const fileToDelete = filteredFiles[focusedIndex];
+          const fileToDelete = files[focusedIndex];
           handleDeleteFile(fileToDelete);
         }
         break;
@@ -155,6 +149,21 @@ export function MediaPanel() {
   const handleRetry = () => {
     if (activeMedia) {
       loadFiles(activeMedia);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!activeMedia) return;
+    setIsLoading(true);
+    try {
+      const refreshed = await fileManagementService.refreshFiles(activeMedia);
+      setFiles(refreshed);
+      toast.success('Folder synced');
+    } catch (err) {
+      console.error('Failed to refresh folder:', err);
+      toast.error('Failed to refresh folder');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -221,21 +230,33 @@ export function MediaPanel() {
             </InputGroupAddon>
             {searchQuery && (
               <InputGroupAddon align="inline-end">
-                {filteredFiles.length} {t('results')}
+                {files.length} {t('results')}
               </InputGroupAddon>
             )}
           </InputGroup>
 
           {activeMedia && (
-            <Button
-              size="icon"
-              className="shrink-0 rounded-full"
-              onClick={handleAddFiles}
-              aria-label={`Add files to ${currentItem?.label.toLowerCase()}`}
-              disabled={isLoading}
-            >
-              <Plus className="size-5" aria-hidden="true" />
-            </Button>
+            <div className="flex gap-1 shrink-0">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="rounded-full"
+                onClick={handleRefresh}
+                aria-label={`Refresh ${currentItem?.label.toLowerCase()} folder`}
+                disabled={isLoading}
+              >
+                <RefreshCw className="size-4" aria-hidden="true" />
+              </Button>
+              <Button
+                size="icon"
+                className="rounded-full"
+                onClick={handleAddFiles}
+                aria-label={`Add files to ${currentItem?.label.toLowerCase()}`}
+                disabled={isLoading}
+              >
+                <Plus className="size-5" aria-hidden="true" />
+              </Button>
+            </div>
           )}
         </div>
 
@@ -290,7 +311,7 @@ export function MediaPanel() {
                     {t('Retry')}
                   </Button>
                 </div>
-              ) : filteredFiles.length === 0 ? (
+              ) : files.length === 0 ? (
                 <div className="flex items-center justify-center h-32" role="status">
                   <p className="text-muted-foreground">
                     {searchQuery ? t('No files match your search') : t('No files in this folder')}
@@ -326,7 +347,7 @@ export function MediaPanel() {
                       >
                         <div className="px-2 py-1">
                           <FileListItem
-                            file={filteredFiles[virtualItem.index]}
+                            file={files[virtualItem.index]}
                             mediaType={activeMedia}
                             isFocused={virtualItem.index === focusedIndex}
                             onClick={(file) => {
