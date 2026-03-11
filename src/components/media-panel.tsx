@@ -252,8 +252,7 @@ export function MediaPanel() {
                 <ArrowLeft className="size-5" aria-hidden="true" />
               </Button>
               <div className="flex items-center gap-2">
-                <currentItem.icon className="size-5" aria-hidden="true" />
-                <h2 className="font-semibold text-lg" id="media-type-heading">
+                <h2 className="font-semibold text-base" id="media-type-heading">
                   {currentItem.label}
                 </h2>
               </div>
