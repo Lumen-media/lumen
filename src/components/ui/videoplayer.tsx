@@ -265,7 +265,10 @@ export const Videoplayer = ({
         }}
         onProgress={handleProgress}
         onEnded={() => {
-          console.log('ended');
+          if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ event: 'stop' }));
+          }
+          setPlaying(false);
         }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
