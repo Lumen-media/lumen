@@ -10,42 +10,48 @@
 
 import { Route as rootRouteImport } from './app/__root'
 import { Route as MediaWindowRouteImport } from './app/media-window'
-import { Route as IndexRouteImport } from './app/index'
+import { Route as LayoutRouteImport } from './app/_layout'
+import { Route as LayoutIndexRouteImport } from './app/_layout/index'
 
 const MediaWindowRoute = MediaWindowRouteImport.update({
   id: '/media-window',
   path: '/media-window',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
+const LayoutRoute = LayoutRouteImport.update({
+  id: '/_layout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LayoutIndexRoute = LayoutIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LayoutRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
   '/media-window': typeof MediaWindowRoute
+  '/': typeof LayoutIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
   '/media-window': typeof MediaWindowRoute
+  '/': typeof LayoutIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_layout': typeof LayoutRouteWithChildren
   '/media-window': typeof MediaWindowRoute
+  '/_layout/': typeof LayoutIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/media-window'
+  fullPaths: '/media-window' | '/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/media-window'
-  id: '__root__' | '/' | '/media-window'
+  to: '/media-window' | '/'
+  id: '__root__' | '/_layout' | '/media-window' | '/_layout/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  LayoutRoute: typeof LayoutRouteWithChildren
   MediaWindowRoute: typeof MediaWindowRoute
 }
 
@@ -58,18 +64,36 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MediaWindowRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
+    '/_layout': {
+      id: '/_layout'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof LayoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_layout/': {
+      id: '/_layout/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof LayoutIndexRouteImport
+      parentRoute: typeof LayoutRoute
     }
   }
 }
 
+interface LayoutRouteChildren {
+  LayoutIndexRoute: typeof LayoutIndexRoute
+}
+
+const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutIndexRoute: LayoutIndexRoute,
+}
+
+const LayoutRouteWithChildren =
+  LayoutRoute._addFileChildren(LayoutRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  LayoutRoute: LayoutRouteWithChildren,
   MediaWindowRoute: MediaWindowRoute,
 }
 export const routeTree = rootRouteImport
