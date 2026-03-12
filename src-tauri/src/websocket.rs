@@ -8,7 +8,11 @@ use tokio_tungstenite::tungstenite::Message;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct AudioEvent {
     event: String,
-    value: Option<u8>,
+    value: Option<f64>,
+    duration: Option<f64>,
+    title: Option<String>,
+    url: Option<String>,
+    artist: Option<String>,
 }
 
 pub async fn accept_connection(peer: SocketAddr, stream: tokio::net::TcpStream, app: AppHandle) {
@@ -41,8 +45,9 @@ async fn handle_connection(
                             match audio_event.event.as_str() {
                                 "set_volume" => {
                                     if let Some(volume) = audio_event.value {
-                                        if volume <= 100 {
-                                            app.emit("set-volume", volume)
+                                        let volume_u8 = volume as u8;
+                                        if volume_u8 <= 100 {
+                                            app.emit("set-volume", volume_u8)
                                                 .map_err(|e| e.to_string())?;
                                         } else {
                                             eprintln!(
@@ -54,11 +59,56 @@ async fn handle_connection(
                                         eprintln!("Received set_volume event without a value");
                                     }
                                 }
+                                "seek" => {
+                                    if let Some(seconds) = audio_event.value {
+                                        app.emit("seek", seconds).map_err(|e| e.to_string())?;
+                                    } else {
+                                        eprintln!("Received seek event without a value");
+                                    }
+                                }
+                                "metadata" => {
+                                    app.emit(
+                                        "video-metadata",
+                                        serde_json::json!({
+                                            "title": audio_event.title.unwrap_or_default(),
+                                            "url": audio_event.url.unwrap_or_default(),
+                                            "artist": audio_event.artist.unwrap_or_default(),
+                                        }),
+                                    )
+                                    .map_err(|e| e.to_string())?;
+                                }
+                                "progress" => {
+                                    if let Some(seconds) = audio_event.value {
+                                        app.emit(
+                                            "video-progress",
+                                            serde_json::json!({
+                                                "seconds": seconds,
+                                                "duration": audio_event.duration.unwrap_or(0.0)
+                                            }),
+                                        )
+                                        .map_err(|e| e.to_string())?;
+                                    }
+                                }
                                 "mute" => app.emit("mute", ()).map_err(|e| e.to_string())?,
                                 "play_pause" => {
                                     app.emit("play-pause", ()).map_err(|e| e.to_string())?
                                 }
                                 "stop" => app.emit("stop", ()).map_err(|e| e.to_string())?,
+                                "load_url" => {
+                                    app.emit(
+                                        "load-url",
+                                        serde_json::json!({
+                                            "url": audio_event.url.unwrap_or_default(),
+                                            "time": audio_event.value.unwrap_or(0.0),
+                                        }),
+                                    )
+                                    .map_err(|e| e.to_string())?;
+                                }
+                                "set_loop" => {
+                                    let enabled =
+                                        audio_event.value.map(|v| v != 0.0).unwrap_or(false);
+                                    app.emit("video-loop", enabled).map_err(|e| e.to_string())?;
+                                }
                                 "next" => app.emit("next", ()).map_err(|e| e.to_string())?,
                                 "previous" => {
                                     app.emit("previous", ()).map_err(|e| e.to_string())?

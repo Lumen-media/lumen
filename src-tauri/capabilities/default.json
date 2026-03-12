@@ -16,6 +16,7 @@
     "deep-link:default",
     "dialog:default",
     "fs:allow-read-dir",
+    "fs:allow-read-file",
     "fs:allow-stat",
     "fs:allow-exists",
     "fs:allow-mkdir",
@@ -30,13 +31,24 @@
     "core:window:allow-is-fullscreen",
     "core:window:allow-inner-position",
     "core:window:allow-close",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-is-visible",
     "core:window:allow-set-decorations",
+    "store:allow-load",
+    "store:allow-get",
+    "store:allow-set",
+    "sql:allow-load",
+    "sql:allow-execute",
+    "sql:allow-select",
     "fs:scope",
     {
       "identifier": "fs:scope",
       "allow": [
         { "path": "$APPDATA/**" },
-        { "path": "$APPLOCALDATA/**" }
+        { "path": "$APPLOCALDATA/**" },
+        { "path": "$DOCUMENT/lumen/**" },
+        { "path": "**" }
       ]
     }
   ]

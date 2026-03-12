@@ -12,6 +12,17 @@ struct WindowState {
 }
 
 #[tauri::command]
+fn get_exe_dir() -> Result<String, String> {
+    std::env::current_exe()
+        .map_err(|e| e.to_string())
+        .and_then(|path| {
+            path.parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .ok_or_else(|| "Could not get executable parent directory".to_string())
+        })
+}
+
+#[tauri::command]
 fn open_folder(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -47,24 +58,27 @@ async fn create_window(
     let main_window = app_handle
         .get_webview_window("main")
         .ok_or_else(|| "Main window not found".to_string())?;
-    
+
     let saved_position = {
         let positions = window_state.positions.lock().unwrap();
         positions.get(&label).cloned()
     };
-    
+
     let target_position = if let Some((saved_x, saved_y)) = saved_position {
-        tauri::PhysicalPosition { x: saved_x, y: saved_y }
+        tauri::PhysicalPosition {
+            x: saved_x,
+            y: saved_y,
+        }
     } else {
         let current_monitor = main_window
             .current_monitor()
             .map_err(|e| format!("Failed to get current monitor: {}", e))?
             .ok_or_else(|| "Current monitor not found".to_string())?;
-        
+
         let monitors = main_window
             .available_monitors()
             .map_err(|e| format!("Failed to get monitors: {}", e))?;
-        
+
         let target_monitor = if monitors.len() > 1 {
             monitors
                 .into_iter()
@@ -77,35 +91,40 @@ async fn create_window(
         } else {
             current_monitor
         };
-        
+
         let monitor_position = target_monitor.position();
-        
-        tauri::PhysicalPosition { 
-            x: monitor_position.x, 
-            y: monitor_position.y 
+
+        tauri::PhysicalPosition {
+            x: monitor_position.x,
+            y: monitor_position.y,
         }
     };
-    
-    let window = tauri::WebviewWindowBuilder::new(&app_handle, &label, tauri::WebviewUrl::App("/media-window".into()))
-        .title(&title)
-        .decorations(false)
-        .fullscreen(true)
-        .build()
-        .map_err(|e| format!("Failed to create window: {}", e))?;
-    
+
+    let window = tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        &label,
+        tauri::WebviewUrl::App("/media-window".into()),
+    )
+    .title(&title)
+    .decorations(false)
+    .fullscreen(true)
+    .visible(false)
+    .build()
+    .map_err(|e| format!("Failed to create window: {}", e))?;
+
     window
         .set_position(tauri::Position::Physical(target_position))
         .map_err(|e| format!("Failed to set window position: {}", e))?;
-    
+
     window
         .set_fullscreen(true)
         .map_err(|e| format!("Failed to set fullscreen: {}", e))?;
-    
+
     {
         let mut positions = window_state.positions.lock().unwrap();
         positions.insert(label.clone(), (target_position.x, target_position.y));
     }
-    
+
     Ok(())
 }
 
@@ -123,6 +142,8 @@ async fn save_window_position(
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_sql::Builder::new().build())
         .manage(WindowState {
             positions: Mutex::new(HashMap::new()),
         })
@@ -130,13 +151,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Single instance callback:");
             println!("  args: {:?}", args);
             println!("  cwd: {:?}", cwd);
-            
+
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_focus();
                 let _ = window.unminimize();
                 let _ = window.show();
             }
-            
+
             let _ = app.emit("single-instance", args);
         }))
         .plugin(tauri_plugin_shell::init())
@@ -168,7 +189,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![open_folder, create_window, save_window_position])
+        .invoke_handler(tauri::generate_handler![
+            get_exe_dir,
+            open_folder,
+            create_window,
+            save_window_position
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 
