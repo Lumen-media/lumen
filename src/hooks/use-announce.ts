@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 
 /**
  * Custom hook for screen reader announcements
@@ -26,11 +26,11 @@ export function useAnnounce() {
     };
   }, []);
 
-  const announce = (message: string) => {
+  const announce = useCallback((message: string) => {
     if (announceRef.current) {
       announceRef.current.textContent = message;
     }
-  };
+  }, []);
 
   return announce;
 }
