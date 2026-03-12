@@ -47,7 +47,7 @@
       "allow": [
         { "path": "$APPDATA/**" },
         { "path": "$APPLOCALDATA/**" },
-        { "path": "C:\\lumen\\lumen\\**" },
+        { "path": "$DOCUMENT/lumen/**" },
         { "path": "**" }
       ]
     }

@@ -12,6 +12,17 @@ struct WindowState {
 }
 
 #[tauri::command]
+fn get_exe_dir() -> Result<String, String> {
+    std::env::current_exe()
+        .map_err(|e| e.to_string())
+        .and_then(|path| {
+            path.parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .ok_or_else(|| "Could not get executable parent directory".to_string())
+        })
+}
+
+#[tauri::command]
 fn open_folder(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -179,6 +190,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_exe_dir,
             open_folder,
             create_window,
             save_window_position

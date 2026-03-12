@@ -1,7 +1,7 @@
+import { exists, mkdir } from '@tauri-apps/plugin-fs';
 import Database from '@tauri-apps/plugin-sql';
+import { getAppBasePath, getDbPath } from './app-paths';
 import type { FileInfo, MediaType } from './types';
-
-const DB_PATH = 'sqlite:lumen-media.db';
 
 interface DbRow {
   id: number;
@@ -24,7 +24,12 @@ class MediaDbService {
   }
 
   private async connect(): Promise<Database> {
-    const db = await Database.load(DB_PATH);
+    const basePath = await getAppBasePath();
+    if (!(await exists(basePath))) {
+      await mkdir(basePath, { recursive: true });
+    }
+
+    const db = await Database.load(await getDbPath());
     await db.execute(`
       CREATE TABLE IF NOT EXISTS media_files (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,18 +47,16 @@ class MediaDbService {
     return db;
   }
 
-  /** Called on startup to eagerly open the connection and create schema. */
   async initialize(): Promise<void> {
     await this.ready();
   }
 
-  /** Sync DB with real filesystem for one media type. Inserts missing, deletes stale. */
   async syncMediaType(mediaType: MediaType, fsFiles: FileInfo[]): Promise<void> {
     const db = await this.ready();
 
     const existing = await db.select<{ path: string }[]>(
       'SELECT path FROM media_files WHERE media_type = $1',
-      [mediaType],
+      [mediaType]
     );
     const existingPaths = new Set(existing.map((r) => r.path));
     const fsPaths = new Set(fsFiles.map((f) => f.path));
@@ -70,7 +73,7 @@ class MediaDbService {
             file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
             file.extension,
             mediaType,
-          ],
+          ]
         );
       }
     }
@@ -86,7 +89,7 @@ class MediaDbService {
     const db = await this.ready();
     const rows = await db.select<DbRow[]>(
       'SELECT * FROM media_files WHERE media_type = $1 ORDER BY name COLLATE NOCASE',
-      [mediaType],
+      [mediaType]
     );
     return rows.map(rowToFileInfo);
   }
@@ -96,7 +99,7 @@ class MediaDbService {
     const rows = await db.select<DbRow[]>(
       `SELECT * FROM media_files WHERE media_type = $1 AND name LIKE $2 ESCAPE '\\'
        ORDER BY name COLLATE NOCASE`,
-      [mediaType, `%${escapeLike(query)}%`],
+      [mediaType, `%${escapeLike(query)}%`]
     );
     return rows.map(rowToFileInfo);
   }
@@ -113,7 +116,7 @@ class MediaDbService {
         file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
         file.extension,
         mediaType,
-      ],
+      ]
     );
   }
 

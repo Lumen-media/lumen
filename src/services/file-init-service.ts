@@ -1,5 +1,6 @@
 import { extname, join } from '@tauri-apps/api/path';
 import { exists, mkdir, readDir, stat } from '@tauri-apps/plugin-fs';
+import { getAppBasePath, getMediaBasePath } from './app-paths';
 import { mediaDbService } from './media-db-service';
 import type { FileInfo, MediaType } from './types';
 
@@ -38,16 +39,11 @@ class FileInitServiceImpl implements FileInitService {
 
   async initializeMediaFolders(): Promise<void> {
     try {
-      const basePath = 'C:\\lumen\\lumen';
-      const filesPath = `${basePath}\\files`;
-      const mediaPath = `${filesPath}\\media`;
+      const basePath = await getAppBasePath();
+      const mediaPath = await getMediaBasePath();
 
       if (!(await exists(basePath))) {
         await mkdir(basePath, { recursive: true });
-      }
-
-      if (!(await exists(filesPath))) {
-        await mkdir(filesPath, { recursive: true });
       }
 
       if (!(await exists(mediaPath))) {
@@ -55,7 +51,7 @@ class FileInitServiceImpl implements FileInitService {
       }
 
       for (const mediaType of this.MEDIA_TYPES) {
-        const mediaTypePath = `${mediaPath}\\${mediaType}`;
+        const mediaTypePath = await join(mediaPath, mediaType);
         if (!(await exists(mediaTypePath))) {
           await mkdir(mediaTypePath);
         }
@@ -73,13 +69,13 @@ class FileInitServiceImpl implements FileInitService {
     } catch (error) {
       console.error('Failed to initialize media folders:', error);
       throw new Error(
-        `Failed to initialize media folders: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to initialize media folders: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
 
   private async readFolderFiles(mediaType: MediaType): Promise<FileInfo[]> {
-    const folderPath = `C:\\lumen\\lumen\\files\\media\\${mediaType}`;
+    const folderPath = await this.getMediaTypePath(mediaType);
     const entries = await readDir(folderPath);
     const results: FileInfo[] = [];
     for (const entry of entries) {
@@ -98,21 +94,13 @@ class FileInitServiceImpl implements FileInitService {
   }
 
   async getMediaBasePath(): Promise<string> {
-    try {
-      const basePath = 'C:\\lumen\\lumen';
-      return `${basePath}\\files\\media`;
-    } catch (error) {
-      console.error('Failed to get media base path:', error);
-      throw new Error(
-        `Failed to get media base path: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+    return getMediaBasePath();
   }
 
   async getMediaTypePath(mediaType: MediaType): Promise<string> {
     try {
-      const basePath = await this.getMediaBasePath();
-      const mediaTypePath = `${basePath}\\${mediaType}`;
+      const mediaPath = await getMediaBasePath();
+      const mediaTypePath = await join(mediaPath, mediaType);
 
       if (!(await exists(mediaTypePath))) {
         await mkdir(mediaTypePath, { recursive: true });
@@ -122,7 +110,7 @@ class FileInitServiceImpl implements FileInitService {
     } catch (error) {
       console.error(`Failed to get path for media type ${mediaType}:`, error);
       throw new Error(
-        `Failed to get path for media type ${mediaType}: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to get path for media type ${mediaType}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
