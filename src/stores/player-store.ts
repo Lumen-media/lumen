@@ -135,9 +135,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
 
-    if (isPlaying) {
-      saveSetting('last_time', String(localTime)).catch(() => {});
-    }
+    saveSetting('last_time', String(localTime)).catch(() => {});
 
     sendWs({ event: 'play_pause' });
     set({ isPlaying: !isPlaying });
