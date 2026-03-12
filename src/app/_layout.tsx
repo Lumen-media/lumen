@@ -1,38 +1,25 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router';
-import { useTranslation } from 'react-i18next';
+import { AppHeader } from '@/components/app-header';
 import { AsidePanel } from '@/components/aside-panel';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { MediaPanel } from '@/components/media-panel';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import i18n from '@/i18n';
 
 export const Route = createFileRoute('/_layout')({
   component: LayoutComponent,
 });
 
 function LayoutComponent() {
-  const { t } = useTranslation();
-
-  const changeLanguage = (lng: string) => {
-    i18n.changeLanguage(lng);
-  };
-
   return (
-    <main className="h-dvh p-2.5 flex flex-col gap-3">
-      <Card>
-        <div className="flex items-center gap-3 font-bold">
-          <img className="size-8" src="/logo.png" alt="Lumen logo" /> <h3>{t('welcome')}</h3>
-        </div>
-        <div className="flex gap-2 mt-2">
-          <Button onClick={() => changeLanguage('en')}>English</Button>
-          <Button onClick={() => changeLanguage('pt')}>Português</Button>
-        </div>
-      </Card>
+    <main className="h-dvh flex flex-col gap-3 p-2.5">
+      <AppHeader />
 
-      <ResizablePanelGroup direction="horizontal" autoSaveId="main-layout-panels">
-        <ResizablePanel className="min-w-[18.75rem]">
+      <ResizablePanelGroup
+        direction="horizontal"
+        autoSaveId="main-layout-panels"
+        className="flex-1 overflow-hidden"
+      >
+        <ResizablePanel minSize={18} defaultSize={25}>
           <ErrorBoundary>
             <MediaPanel />
           </ErrorBoundary>
@@ -40,13 +27,13 @@ function LayoutComponent() {
 
         <ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
-        <ResizablePanel className="min-w-[43.75rem]">
+        <ResizablePanel minSize={50}>
           <Outlet />
         </ResizablePanel>
 
         <ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
-        <ResizablePanel className="min-w-[18.75rem]">
+        <ResizablePanel minSize={18} defaultSize={25}>
           <AsidePanel />
         </ResizablePanel>
       </ResizablePanelGroup>
