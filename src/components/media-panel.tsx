@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/card';
 import { useAnnounce } from '@/hooks/use-announce';
 import { type FileInfo, fileInitService, fileManagementService, mediaDbService, type MediaType } from '@/services';
 import { usePlayerStore } from '@/stores/player-store';
+import { cn } from '@/lib/utils';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
 
 const mediaItems = [
@@ -239,16 +240,6 @@ export function MediaPanel() {
             <div className="flex gap-1 shrink-0">
               <Button
                 size="icon"
-                variant="ghost"
-                className="rounded-full"
-                onClick={handleRefresh}
-                aria-label={`Refresh ${currentItem?.label.toLowerCase()} folder`}
-                disabled={isLoading}
-              >
-                <RefreshCw className="size-4" aria-hidden="true" />
-              </Button>
-              <Button
-                size="icon"
                 className="rounded-full"
                 onClick={handleAddFiles}
                 aria-label={`Add files to ${currentItem?.label.toLowerCase()}`}
@@ -262,21 +253,31 @@ export function MediaPanel() {
 
         {activeMedia && currentItem ? (
           <>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleBack}
-                className="shrink-0"
-                aria-label="Go back to media categories"
-              >
-                <ArrowLeft className="size-5" aria-hidden="true" />
-              </Button>
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleBack}
+                  className="shrink-0"
+                  aria-label="Go back to media categories"
+                >
+                  <ArrowLeft className="size-5" aria-hidden="true" />
+                </Button>
                 <h2 className="font-semibold text-base" id="media-type-heading">
                   {currentItem.label}
                 </h2>
               </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="rounded-full"
+                onClick={handleRefresh}
+                aria-label={`Refresh ${currentItem.label.toLowerCase()} folder`}
+                disabled={isLoading}
+              >
+                <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} aria-hidden="true" />
+              </Button>
             </div>
 
             <div
