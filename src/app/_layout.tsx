@@ -1,19 +1,18 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { AsidePanel } from '@/components/aside-panel';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { MediaPanel } from '@/components/media-panel';
-import { PreviewPanel } from '@/components/preview-panel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import i18n from '@/i18n';
 
-export const Route = createFileRoute('/')({
-  component: RouteComponent,
+export const Route = createFileRoute('/_layout')({
+  component: LayoutComponent,
 });
 
-function RouteComponent() {
+function LayoutComponent() {
   const { t } = useTranslation();
 
   const changeLanguage = (lng: string) => {
@@ -32,7 +31,7 @@ function RouteComponent() {
         </div>
       </Card>
 
-      <ResizablePanelGroup direction="horizontal">
+      <ResizablePanelGroup direction="horizontal" autoSaveId="main-layout-panels">
         <ResizablePanel className="min-w-[18.75rem]">
           <ErrorBoundary>
             <MediaPanel />
@@ -42,7 +41,7 @@ function RouteComponent() {
         <ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
         <ResizablePanel className="min-w-[43.75rem]">
-          <PreviewPanel />
+          <Outlet />
         </ResizablePanel>
 
         <ResizableHandle className="bg-transparent mx-1.5 w-0" />
