@@ -12,6 +12,10 @@ import { Route as rootRouteImport } from './app/__root'
 import { Route as MediaWindowRouteImport } from './app/media-window'
 import { Route as LayoutRouteImport } from './app/_layout'
 import { Route as LayoutIndexRouteImport } from './app/_layout/index'
+import { Route as LayoutSettingsRouteImport } from './app/_layout/settings'
+import { Route as LayoutPresentationRouteImport } from './app/_layout/presentation'
+import { Route as LayoutLiveRouteImport } from './app/_layout/live'
+import { Route as LayoutEditRouteImport } from './app/_layout/edit'
 
 const MediaWindowRoute = MediaWindowRouteImport.update({
   id: '/media-window',
@@ -27,27 +31,73 @@ const LayoutIndexRoute = LayoutIndexRouteImport.update({
   path: '/',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutSettingsRoute = LayoutSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutPresentationRoute = LayoutPresentationRouteImport.update({
+  id: '/presentation',
+  path: '/presentation',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutLiveRoute = LayoutLiveRouteImport.update({
+  id: '/live',
+  path: '/live',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutEditRoute = LayoutEditRouteImport.update({
+  id: '/edit',
+  path: '/edit',
+  getParentRoute: () => LayoutRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/media-window': typeof MediaWindowRoute
+  '/edit': typeof LayoutEditRoute
+  '/live': typeof LayoutLiveRoute
+  '/presentation': typeof LayoutPresentationRoute
+  '/settings': typeof LayoutSettingsRoute
   '/': typeof LayoutIndexRoute
 }
 export interface FileRoutesByTo {
   '/media-window': typeof MediaWindowRoute
+  '/edit': typeof LayoutEditRoute
+  '/live': typeof LayoutLiveRoute
+  '/presentation': typeof LayoutPresentationRoute
+  '/settings': typeof LayoutSettingsRoute
   '/': typeof LayoutIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
   '/media-window': typeof MediaWindowRoute
+  '/_layout/edit': typeof LayoutEditRoute
+  '/_layout/live': typeof LayoutLiveRoute
+  '/_layout/presentation': typeof LayoutPresentationRoute
+  '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/': typeof LayoutIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/media-window' | '/'
+  fullPaths:
+    | '/media-window'
+    | '/edit'
+    | '/live'
+    | '/presentation'
+    | '/settings'
+    | '/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/media-window' | '/'
-  id: '__root__' | '/_layout' | '/media-window' | '/_layout/'
+  to: '/media-window' | '/edit' | '/live' | '/presentation' | '/settings' | '/'
+  id:
+    | '__root__'
+    | '/_layout'
+    | '/media-window'
+    | '/_layout/edit'
+    | '/_layout/live'
+    | '/_layout/presentation'
+    | '/_layout/settings'
+    | '/_layout/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -78,14 +128,50 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutIndexRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/settings': {
+      id: '/_layout/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof LayoutSettingsRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/presentation': {
+      id: '/_layout/presentation'
+      path: '/presentation'
+      fullPath: '/presentation'
+      preLoaderRoute: typeof LayoutPresentationRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/live': {
+      id: '/_layout/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof LayoutLiveRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/edit': {
+      id: '/_layout/edit'
+      path: '/edit'
+      fullPath: '/edit'
+      preLoaderRoute: typeof LayoutEditRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
 interface LayoutRouteChildren {
+  LayoutEditRoute: typeof LayoutEditRoute
+  LayoutLiveRoute: typeof LayoutLiveRoute
+  LayoutPresentationRoute: typeof LayoutPresentationRoute
+  LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutEditRoute: LayoutEditRoute,
+  LayoutLiveRoute: LayoutLiveRoute,
+  LayoutPresentationRoute: LayoutPresentationRoute,
+  LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutIndexRoute: LayoutIndexRoute,
 }
 
