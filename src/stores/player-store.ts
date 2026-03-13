@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { create } from 'zustand';
 import { getSetting, saveSetting } from '@/services/db';
+import { useQueueStore } from '@/stores/queue-store';
 
 interface PlayerStore {
   localTime: number;
@@ -19,6 +20,7 @@ interface PlayerStore {
   isDragging: boolean;
   ws: WebSocket | null;
   restoredFilePath: string | null;
+  currentFilePath: string | null;
 
   initWs: () => () => void;
   initListeners: () => () => void;
@@ -56,6 +58,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   isDragging: false,
   ws: null,
   restoredFilePath: null,
+  currentFilePath: null,
 
   initWs: () => {
     const socket = new WebSocket('ws://localhost:8080');
@@ -100,6 +103,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const unlistenStop = listen('stop', () => {
       set({ isPlaying: false, isScreenOpen: false });
       saveSetting('last_time', '0').catch(() => {});
+
+      useQueueStore
+        .getState()
+        .shiftQueue(get().currentFilePath ?? undefined)
+        .then((next) => {
+          if (next) get().loadFile(next.path);
+        });
     });
 
     return () => {
@@ -243,6 +253,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       isPlaying: true,
       localMediaType: isVideo ? 'video' : 'audio',
       restoredFilePath: null,
+      currentFilePath: filePath,
       localTime: seekTime > 0 ? seekTime : 0,
       localDuration: seekTime > 0 ? get().localDuration : 0,
     });
