@@ -5,6 +5,8 @@ import {
   FolderOpen,
   Headphones,
   Image as ImageIcon,
+  ListPlus,
+  ListVideo,
   Music,
   Trash2,
   Video,
@@ -15,6 +17,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import type { FileInfo, MediaType } from '@/services';
@@ -25,6 +28,8 @@ interface FileListItemProps {
   mediaType: MediaType;
   onClick?: (file: FileInfo) => void;
   onDoubleClick?: (file: FileInfo) => void;
+  onPlayNext?: (file: FileInfo) => void;
+  onAddToQueue?: (file: FileInfo) => void;
   isFocused?: boolean;
 }
 
@@ -70,6 +75,8 @@ export function FileListItem({
   mediaType,
   onClick,
   onDoubleClick,
+  onPlayNext,
+  onAddToQueue,
   isFocused,
 }: FileListItemProps) {
   const Icon = getMediaIcon(mediaType);
@@ -110,7 +117,7 @@ export function FileListItem({
       <ContextMenuTrigger>
         <Button
           variant="ghost"
-          className={`w-full justify-start hover:bg-primary/15 text-left p-3 h-auto ${isFocused ? 'ring-2 ring-ring' : ''}`}
+          className={`w-full justify-start text-left p-3 h-auto ${isFocused ? 'ring-2 ring-ring' : ''}`}
           onClick={handleClick}
           onDoubleClick={handleDoubleClick}
           aria-label={fileDescription}
@@ -134,6 +141,23 @@ export function FileListItem({
         </Button>
       </ContextMenuTrigger>
       <ContextMenuContent side="bottom">
+        {(onPlayNext || onAddToQueue) && (
+          <>
+            {onPlayNext && (
+              <ContextMenuItem onClick={() => onPlayNext(file)}>
+                <ListVideo className="h-4 w-4" aria-hidden="true" />
+                Play next
+              </ContextMenuItem>
+            )}
+            {onAddToQueue && (
+              <ContextMenuItem onClick={() => onAddToQueue(file)}>
+                <ListPlus className="h-4 w-4" aria-hidden="true" />
+                Add to queue
+              </ContextMenuItem>
+            )}
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem onClick={handleOpenFolder}>
           <FolderOpen className="h-4 w-4" aria-hidden="true" />
           Open folder
