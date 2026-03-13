@@ -4,5 +4,7 @@ export type { FileManagementService } from './file-management-service';
 export { fileManagementService } from './file-management-service';
 
 export { mediaDbService } from './media-db-service';
+export type { QueueDbItem } from './queue-db-service';
+export { queueDbService } from './queue-db-service';
 
 export type { FileInfo, MediaType } from './types';
