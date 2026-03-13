@@ -19,9 +19,10 @@ import { FileListItem } from '@/components/file-list-item';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useAnnounce } from '@/hooks/use-announce';
-import { type FileInfo, fileInitService, fileManagementService, mediaDbService, type MediaType } from '@/services';
-import { usePlayerStore } from '@/stores/player-store';
 import { cn } from '@/lib/utils';
+import { type FileInfo, fileInitService, fileManagementService, type MediaType } from '@/services';
+import { usePlayerStore } from '@/stores/player-store';
+import { useQueueStore } from '@/stores/queue-store';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
 
 const mediaItems = [
@@ -36,6 +37,7 @@ const mediaItems = [
 export function MediaPanel() {
   const { t } = useTranslation();
   const player = usePlayerStore();
+  const { addToQueue, playNext } = useQueueStore();
   const [activeMedia, setActiveMedia] = useState<MediaType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
@@ -276,7 +278,10 @@ export function MediaPanel() {
                 aria-label={`Refresh ${currentItem.label.toLowerCase()} folder`}
                 disabled={isLoading}
               >
-                <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} aria-hidden="true" />
+                <RefreshCw
+                  className={cn('size-4', isLoading && 'animate-spin')}
+                  aria-hidden="true"
+                />
               </Button>
             </div>
 
@@ -359,6 +364,8 @@ export function MediaPanel() {
                                 ? (file) => player.loadFile(file.path)
                                 : undefined
                             }
+                            onPlayNext={activeMedia === 'video' ? playNext : undefined}
+                            onAddToQueue={activeMedia === 'video' ? addToQueue : undefined}
                           />
                         </div>
                       </div>
@@ -377,7 +384,7 @@ export function MediaPanel() {
                 <Button
                   key={item.id}
                   onClick={() => setActiveMedia(item.id)}
-                  className="justify-start hover:bg-primary/15"
+                  className="justify-start"
                   type="button"
                   variant="ghost"
                   aria-label={`Open ${item.label} category`}
