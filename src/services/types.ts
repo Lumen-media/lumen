@@ -6,6 +6,9 @@ export interface FileInfo {
   size: number;
   modifiedAt: Date;
   extension: string;
+  duration?: number;
+  title?: string;
+  artist?: string;
 }
 
 export interface FileUploadResult {
