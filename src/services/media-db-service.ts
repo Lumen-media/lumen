@@ -1,6 +1,7 @@
 import { exists, mkdir } from '@tauri-apps/plugin-fs';
 import Database from '@tauri-apps/plugin-sql';
 import { getAppBasePath, getDbPath } from './app-paths';
+import { extractMetadata } from './metadata-extractor';
 import type { FileInfo, MediaType } from './types';
 
 interface DbRow {
@@ -11,6 +12,8 @@ interface DbRow {
   modified_at: number;
   extension: string;
   media_type: string;
+  duration: number | null;
+  artist: string | null;
 }
 
 class MediaDbService {
@@ -39,6 +42,8 @@ class MediaDbService {
         modified_at INTEGER NOT NULL DEFAULT 0,
         extension   TEXT    NOT NULL DEFAULT '',
         media_type  TEXT    NOT NULL,
+        duration    REAL,
+        artist      TEXT,
         created_at  INTEGER NOT NULL DEFAULT (unixepoch())
       )
     `);
@@ -63,9 +68,14 @@ class MediaDbService {
 
     for (const file of fsFiles) {
       if (!existingPaths.has(file.path)) {
+        let metadata: { duration?: number; artist?: string } = {};
+        try {
+          metadata = await extractMetadata(file.path);
+        } catch {}
+
         await db.execute(
-          `INSERT OR IGNORE INTO media_files (name, path, size, modified_at, extension, media_type)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+          `INSERT OR IGNORE INTO media_files (name, path, size, modified_at, extension, media_type, duration, artist)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
           [
             file.name,
             file.path,
@@ -73,6 +83,8 @@ class MediaDbService {
             file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
             file.extension,
             mediaType,
+            metadata.duration ?? null,
+            metadata.artist ?? null,
           ]
         );
       }
@@ -106,9 +118,15 @@ class MediaDbService {
 
   async insertFile(file: FileInfo, mediaType: MediaType): Promise<void> {
     const db = await this.ready();
+
+    let metadata: { duration?: number; artist?: string } = {};
+    try {
+      metadata = await extractMetadata(file.path);
+    } catch {}
+
     await db.execute(
-      `INSERT OR IGNORE INTO media_files (name, path, size, modified_at, extension, media_type)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `INSERT OR IGNORE INTO media_files (name, path, size, modified_at, extension, media_type, duration, artist)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         file.name,
         file.path,
@@ -116,6 +134,8 @@ class MediaDbService {
         file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
         file.extension,
         mediaType,
+        metadata.duration ?? null,
+        metadata.artist ?? null,
       ]
     );
   }
@@ -133,6 +153,8 @@ function rowToFileInfo(row: DbRow): FileInfo {
     size: row.size,
     modifiedAt: new Date(row.modified_at),
     extension: row.extension,
+    duration: row.duration ?? undefined,
+    artist: row.artist ?? undefined,
   };
 }
 
