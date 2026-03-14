@@ -85,6 +85,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           if (Math.abs(event.payload.duration - lastSavedDuration) > 1) {
             lastSavedDuration = event.payload.duration;
             saveSetting('last_duration', String(event.payload.duration)).catch(() => {});
+
+            if (get().currentFilePath) {
+              useQueueStore
+                .getState()
+                .updateMetadata(get().currentFilePath, { duration: event.payload.duration })
+                .catch(() => {});
+            }
           }
         }
       }
@@ -97,6 +104,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         set({ localTitle: title, localUrl: url, localArtist: artist });
         saveSetting('last_title', title).catch(() => {});
         saveSetting('last_artist', artist).catch(() => {});
+
+        if (get().currentFilePath) {
+          useQueueStore
+            .getState()
+            .updateMetadata(get().currentFilePath, { title, artist })
+            .catch(() => {});
+        }
       }
     );
 
