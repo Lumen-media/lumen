@@ -1,4 +1,4 @@
-import { CheckCircle2, ListX, Video } from 'lucide-react';
+import { CheckCircle2, ListX } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -22,7 +22,8 @@ const TABS: { value: TabValue; label: string }[] = [
 ];
 
 export function AsidePanel() {
-  const { queue, removeFromQueue, markPlayed, togglePlayed, loadFromDb } = useQueueStore();
+  const { queue, removeFromQueue, markPlayed, togglePlayed, loadFromDb, clearQueue, shuffleQueue } =
+    useQueueStore();
   const loadFile = usePlayerStore((s) => s.loadFile);
 
   const [activeTab, setActiveTab] = useState<TabValue>('queue');
@@ -93,6 +94,8 @@ export function AsidePanel() {
             queue={queue}
             onRemove={removeFromQueue}
             onTogglePlayed={togglePlayed}
+            onClear={clearQueue}
+            onShuffle={shuffleQueue}
             onPlay={(item) => {
               loadFile(item.file.path);
               markPlayed(item.id);
@@ -120,13 +123,19 @@ function QueueTab({
   queue,
   onRemove,
   onTogglePlayed,
+  onClear,
+  onShuffle,
   onPlay,
 }: {
   queue: QueueItem[];
   onRemove: (id: number) => void;
   onTogglePlayed: (id: number) => void;
+  onClear: () => Promise<void>;
+  onShuffle: () => Promise<void>;
   onPlay: (item: QueueItem) => void;
 }) {
+  const currentFilePath = usePlayerStore((s) => s.currentFilePath);
+
   if (queue.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
@@ -135,41 +144,137 @@ function QueueTab({
     );
   }
 
+  const currentItemIndex = currentFilePath
+    ? queue.findIndex((item) => item.file.path === currentFilePath)
+    : -1;
+
+  const currentItem = currentItemIndex >= 0 ? queue[currentItemIndex] : queue[0];
+  const upNextItems =
+    currentItemIndex >= 0
+      ? [...queue.slice(0, currentItemIndex), ...queue.slice(currentItemIndex + 1)]
+      : queue.slice(1);
+
+  const formatDuration = (seconds?: number) => {
+    if (!seconds) return '';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
-    <div className="h-full overflow-auto">
-      {queue.map((item) => (
-        <ContextMenu key={item.id}>
-          <ContextMenuTrigger>
-            <Button
-              variant="ghost"
-              className={cn(
-                'w-full justify-start text-left p-3 h-auto gap-3',
-                item.played && 'opacity-50'
-              )}
-              onDoubleClick={() => onPlay(item)}
-            >
-              {item.played ? (
-                <CheckCircle2 className="size-4 text-primary shrink-0" />
-              ) : (
-                <Video className="size-4 text-muted-foreground shrink-0" />
-              )}
-              <span className={cn('text-sm truncate', item.played && 'line-through')}>
-                {item.file.name}
-              </span>
-            </Button>
-          </ContextMenuTrigger>
-          <ContextMenuContent side="bottom">
-            <ContextMenuItem onClick={() => onTogglePlayed(item.id)}>
-              <CheckCircle2 className="h-4 w-4" />
-              {item.played ? 'Mark as unplayed' : 'Mark as played'}
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => onRemove(item.id)} variant="destructive">
-              <ListX className="h-4 w-4" />
-              Remove from queue
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
-      ))}
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-auto">
+        <div className="p-4 pb-2">
+          <h3 className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-widest">
+            Now Playing
+          </h3>
+          <ContextMenu>
+            <ContextMenuTrigger>
+              <Button
+                variant="ghost"
+                className="w-full justify-between text-left p-3 h-auto gap-3 border border-primary/40 rounded-lg hover:bg-primary/10 hover:border-primary/60"
+                onDoubleClick={() => onPlay(currentItem)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div
+                    className={cn(
+                      'font-semibold text-sm text-primary leading-tight line-clamp-1 text-ellipsis',
+                      currentItem.played && 'line-through opacity-60'
+                    )}
+                  >
+                    {currentItem.file.title || currentItem.file.name}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {currentItem.file.artist ||
+                      currentItem.file.name.split('.').pop()?.toUpperCase()}
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground font-medium shrink-0">
+                  {formatDuration(currentItem.file.duration)}
+                </div>
+              </Button>
+            </ContextMenuTrigger>
+            <ContextMenuContent side="bottom">
+              <ContextMenuItem onClick={() => onTogglePlayed(currentItem.id)}>
+                <CheckCircle2 className="h-4 w-4" />
+                {currentItem.played ? 'Mark as unplayed' : 'Mark as played'}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onRemove(currentItem.id)} variant="destructive">
+                <ListX className="h-4 w-4" />
+                Remove from queue
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+        </div>
+
+        {upNextItems.length > 0 && (
+          <div className="px-4 pb-4 pt-2">
+            <h3 className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-widest">
+              Up Next
+            </h3>
+            <div className="space-y-2">
+              {upNextItems.map((item) => {
+                const originalIndex = queue.findIndex((q) => q.id === item.id);
+                return (
+                  <ContextMenu key={item.id}>
+                    <ContextMenuTrigger>
+                      <Button
+                        variant="ghost"
+                        className={cn(
+                          'w-full justify-between text-left p-3 h-auto gap-2 rounded-lg hover:bg-accent/50 transition-colors',
+                          item.played && 'opacity-50'
+                        )}
+                        onDoubleClick={() => onPlay(item)}
+                      >
+                        <div className="flex items-start gap-1 flex-1 min-w-0">
+                          <span className="text-sm font-medium text-muted-foreground w-5 shrink-0 pt-0.5">
+                            {originalIndex + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div
+                              className={cn(
+                                'font-medium text-sm text-foreground leading-tight line-clamp-1 text-ellipsis',
+                                item.played && 'line-through opacity-60'
+                              )}
+                            >
+                              {item.file.title || item.file.name}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {item.file.artist || item.file.name.split('.').pop()?.toUpperCase()}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground font-medium shrink-0">
+                          {formatDuration(item.file.duration)}
+                        </div>
+                      </Button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent side="bottom">
+                      <ContextMenuItem onClick={() => onTogglePlayed(item.id)}>
+                        <CheckCircle2 className="h-4 w-4" />
+                        {item.played ? 'Mark as unplayed' : 'Mark as played'}
+                      </ContextMenuItem>
+                      <ContextMenuItem onClick={() => onRemove(item.id)} variant="destructive">
+                        <ListX className="h-4 w-4" />
+                        Remove from queue
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-border p-3 shrink-0 flex gap-2">
+        <Button variant="secondary" size="sm" className="flex-1 rounded-md" onClick={onClear}>
+          Clear
+        </Button>
+        <Button variant="secondary" size="sm" className="flex-1 rounded-md" onClick={onShuffle}>
+          Shuffle
+        </Button>
+      </div>
     </div>
   );
 }
