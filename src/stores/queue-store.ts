@@ -18,6 +18,9 @@ interface QueueStore {
   markPlayed: (id: number) => Promise<void>;
   togglePlayed: (id: number) => Promise<void>;
   shiftQueue: (excludePath?: string) => Promise<FileInfo | null>;
+  clearQueue: () => Promise<void>;
+  shuffleQueue: () => Promise<void>;
+  updateMetadata: (filePath: string, metadata: { duration?: number; title?: string; artist?: string }) => Promise<void>;
 }
 
 export const useQueueStore = create<QueueStore>((set) => ({
@@ -34,6 +37,7 @@ export const useQueueStore = create<QueueStore>((set) => ({
       toast.info('Already in queue', { description: file.name });
       return;
     }
+
     const id = await queueDbService.addToQueue(file);
     set((s) => ({ queue: [...s.queue, { id, file, played: false }] }));
   },
@@ -44,6 +48,7 @@ export const useQueueStore = create<QueueStore>((set) => ({
       toast.info('Already in queue', { description: file.name });
       return;
     }
+
     const id = await queueDbService.playNext(file);
     set((s) => ({ queue: [{ id, file, played: false }, ...s.queue] }));
   },
@@ -70,10 +75,40 @@ export const useQueueStore = create<QueueStore>((set) => ({
   shiftQueue: async (excludePath) => {
     const next = await queueDbService.shiftQueue(excludePath);
     if (!next) return null;
-    // Mark the item as played in the local state (it remains in the list)
     set((s) => ({
       queue: s.queue.map((item) => (item.id === next.id ? { ...item, played: true } : item)),
     }));
     return next;
+  },
+
+  clearQueue: async () => {
+    await queueDbService.clearQueue();
+    set({ queue: [] });
+  },
+
+  shuffleQueue: async () => {
+    await queueDbService.shuffleQueue();
+    await queueDbService.loadQueue().then((items) => {
+      set({ queue: items.map((item) => ({ id: item.id, file: item, played: item.played })) });
+    });
+  },
+
+  updateMetadata: async (filePath, metadata) => {
+    await queueDbService.updateMetadata(filePath, metadata);
+    set((s) => ({
+      queue: s.queue.map((item) =>
+        item.file.path === filePath
+          ? {
+              ...item,
+              file: {
+                ...item.file,
+                duration: metadata.duration ?? item.file.duration,
+                title: metadata.title ?? item.file.title,
+                artist: metadata.artist ?? item.file.artist,
+              },
+            }
+          : item
+      ),
+    }));
   },
 }));
