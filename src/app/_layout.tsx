@@ -3,6 +3,8 @@ import { AppHeader } from '@/components/app-header';
 import { AsidePanel } from '@/components/aside-panel';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { MediaPanel } from '@/components/media-panel';
+import { MiniPlayer } from '@/components/miniplayer';
+import { Card } from '@/components/ui/card';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 
 export const Route = createFileRoute('/_layout')({
@@ -28,7 +30,10 @@ function LayoutComponent() {
         <ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
         <ResizablePanel minSize={50}>
-          <Outlet />
+          <Card className="w-full h-full gap-3">
+            <Outlet />
+            <MiniPlayer />
+          </Card>
         </ResizablePanel>
 
         <ResizableHandle className="bg-transparent mx-1.5 w-0" />
