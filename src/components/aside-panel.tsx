@@ -172,7 +172,7 @@ function QueueTab({
             <ContextMenuTrigger>
               <Button
                 variant="ghost"
-                className="w-full justify-between text-left p-3 h-auto gap-3 border border-primary/40 rounded-lg hover:bg-primary/10 hover:border-primary/60"
+                className="w-full justify-between text-left p-3 h-auto gap-3 border border-primary/40 rounded-lg bg-primary/5 hover:bg-primary/10 hover:border-primary/60"
                 onDoubleClick={() => onPlay(currentItem)}
               >
                 <div className="flex-1 min-w-0">
