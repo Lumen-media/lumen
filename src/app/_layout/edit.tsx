@@ -1,10 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Card } from '@/components/ui/card';
+import { CardContent } from '@/components/ui/card';
 
 export const Route = createFileRoute('/_layout/edit')({
   component: RouteComponent,
 });
 
 function RouteComponent() {
-  return <Card className="w-full h-full gap-3">Edit</Card>;
+  return (
+    <CardContent className="flex-1 rounded-lg bg-background/80 flex items-center justify-center min-h-0">
+      <span className="text-muted-foreground text-sm font-medium">Edit</span>
+    </CardContent>
+  );
 }
