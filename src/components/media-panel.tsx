@@ -161,10 +161,14 @@ export function MediaPanel() {
     try {
       const refreshed = await fileManagementService.refreshFiles(activeMedia);
       setFiles(refreshed);
-      toast.success('Folder synced');
+      toast.success('Folder synced', {
+        id: 'sync',
+      });
     } catch (err) {
       console.error('Failed to refresh folder:', err);
-      toast.error('Failed to refresh folder');
+      toast.error('Failed to refresh folder', {
+        id: 'sync-error',
+      });
     } finally {
       setIsLoading(false);
     }
