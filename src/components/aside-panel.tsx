@@ -61,7 +61,7 @@ export function AsidePanel() {
         <div ref={navRef} className="relative border-b border-border shrink-0">
           <TabsList
             variant="line"
-            className="w-full justify-start rounded-none border-none px-2 h-10"
+            className="w-full justify-between rounded-none border-none px-2 h-10"
           >
             {TABS.map((tab) => (
               <TabsTrigger
