@@ -1,4 +1,7 @@
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, Palette } from 'lucide-react';
+import type React from 'react';
+import { useRef } from 'react';
+import { TextEditor, type TextEditorRef } from './text-editor';
 import { Button } from './ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from './ui/card';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from './ui/dialog';
@@ -21,6 +24,12 @@ type LyricModalProps = {
 };
 
 export const LyricModal = ({ children }: LyricModalProps) => {
+  const editorRef = useRef<TextEditorRef | null>(null);
+
+  const handleChange = (md: string) => {
+    console.log(JSON.stringify(md));
+  };
+
   const fonts = [
     { label: 'Inter', value: 'inter' },
     { label: 'Bebas', value: 'bebas' },
@@ -115,7 +124,11 @@ export const LyricModal = ({ children }: LyricModalProps) => {
             <Input className="h-8 bg-background border-0" placeholder="Notes (Key, BPM...)" />
           </section>
 
-          <section className="flex flex-col gap-3"></section>
+          <section className="flex flex-col flex-1 gap-3">
+            <Label className="uppercase">Lyrics Editor</Label>
+            <TextEditor ref={editorRef} onChange={handleChange} />
+            <p className="opacity-60">Double ender creates a new slider</p>
+          </section>
           <CardFooter className="flex items-center gap-3 w-full px-0 mt-auto">
             <DialogClose
               className="flex-1 h-auto py-2"
