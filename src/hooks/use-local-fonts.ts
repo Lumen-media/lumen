@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 const FALLBACK_FONTS = [
   'Arial',
@@ -26,30 +26,24 @@ const FALLBACK_FONTS = [
 
 export function useLocalFonts() {
   const [fonts, setFonts] = useState<string[]>(FALLBACK_FONTS);
+  const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const requestFonts = useCallback(async () => {
+    if (loaded || !('queryLocalFonts' in window)) return;
 
-    async function loadFonts() {
-      if (!('queryLocalFonts' in window)) return;
+    try {
+      const localFonts: { family: string }[] = await (
+        window as unknown as { queryLocalFonts: () => Promise<{ family: string }[]> }
+      ).queryLocalFonts();
 
-      try {
-        const localFonts: { family: string }[] = await (
-          window as unknown as { queryLocalFonts: () => Promise<{ family: string }[]> }
-        ).queryLocalFonts();
-        if (cancelled) return;
-
-        const families = [...new Set(localFonts.map((f) => f.family))];
-        families.sort((a, b) => a.localeCompare(b));
-        setFonts(families);
-      } catch {}
+      const families = [...new Set(localFonts.map((f) => f.family))];
+      families.sort((a, b) => a.localeCompare(b));
+      setFonts(families);
+      setLoaded(true);
+    } catch {
+      // Permission denied — keep fallback
     }
+  }, [loaded]);
 
-    loadFonts();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return fonts;
+  return { fonts, requestFonts };
 }

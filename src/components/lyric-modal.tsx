@@ -58,7 +58,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
   const [alignment, setAlignment] = useState(['center']);
   const [selectedFont, setSelectedFont] = useState('');
   const [fontSize, setFontSize] = useState('48px');
-  const fonts = useLocalFonts();
+  const { fonts, requestFonts } = useLocalFonts();
 
   const slides = useMemo(() => parseSlides(markdown), [markdown]);
 
@@ -77,7 +77,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
           <CardHeader className="p-4 flex-row items-center gap-7">
             <h4 className="uppercase">Theme Settings</h4>
 
-            <Select value={selectedFont} onValueChange={(val) => setSelectedFont(val ?? '')}>
+            <Select value={selectedFont} onValueChange={(val) => setSelectedFont(val ?? '')} onOpenChange={(open) => { if (open) requestFonts(); }}>
               <SelectTrigger className="w-full max-w-44 h-8 bg-background dark:bg-background border-0">
                 <SelectValue placeholder="Font" />
               </SelectTrigger>
