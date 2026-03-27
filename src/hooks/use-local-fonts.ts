@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { useEffect, useState } from 'react';
 
 const FALLBACK_FONTS = [
   'Arial',
@@ -26,24 +27,14 @@ const FALLBACK_FONTS = [
 
 export function useLocalFonts() {
   const [fonts, setFonts] = useState<string[]>(FALLBACK_FONTS);
-  const [loaded, setLoaded] = useState(false);
 
-  const requestFonts = useCallback(async () => {
-    if (loaded || !('queryLocalFonts' in window)) return;
+  useEffect(() => {
+    invoke<string[]>('get_system_fonts')
+      .then((families) => {
+        if (families.length > 0) setFonts(families);
+      })
+      .catch(() => {});
+  }, []);
 
-    try {
-      const localFonts: { family: string }[] = await (
-        window as unknown as { queryLocalFonts: () => Promise<{ family: string }[]> }
-      ).queryLocalFonts();
-
-      const families = [...new Set(localFonts.map((f) => f.family))];
-      families.sort((a, b) => a.localeCompare(b));
-      setFonts(families);
-      setLoaded(true);
-    } catch {
-      // Permission denied — keep fallback
-    }
-  }, [loaded]);
-
-  return { fonts, requestFonts };
+  return { fonts };
 }
