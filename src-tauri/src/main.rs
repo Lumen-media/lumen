@@ -140,6 +140,14 @@ async fn save_window_position(
     Ok(())
 }
 
+#[tauri::command]
+fn get_system_fonts() -> Vec<String> {
+    let mut families: Vec<String> = font_loader::system_fonts::query_all();
+    families.sort_unstable();
+    families.dedup();
+    families
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -193,7 +201,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             get_exe_dir,
             open_folder,
             create_window,
-            save_window_position
+            save_window_position,
+            get_system_fonts
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

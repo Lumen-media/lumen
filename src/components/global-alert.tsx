@@ -15,8 +15,8 @@ export function GlobalAlert() {
   if (!config) return null;
 
   const handleConfirm = async () => {
-    await config.onConfirm?.();
     close();
+    await config.onConfirm?.();
   };
 
   const handleCancel = () => {

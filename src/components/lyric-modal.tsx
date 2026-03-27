@@ -1,13 +1,5 @@
-import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  Check,
-  Eye,
-  EyeOff,
-  ImagePlus,
-  Palette,
-} from 'lucide-react';
+import { t } from 'i18next';
+import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, ImagePlus, Palette } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
@@ -58,7 +50,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
   const [alignment, setAlignment] = useState(['center']);
   const [selectedFont, setSelectedFont] = useState('');
   const [fontSize, setFontSize] = useState('48px');
-  const { fonts, requestFonts } = useLocalFonts();
+  const { fonts } = useLocalFonts();
 
   const slides = useMemo(() => parseSlides(markdown), [markdown]);
 
@@ -77,14 +69,18 @@ export const LyricModal = ({ children }: LyricModalProps) => {
           <CardHeader className="p-4 flex-row items-center gap-7">
             <h4 className="uppercase">Theme Settings</h4>
 
-            <Select value={selectedFont} onValueChange={(val) => setSelectedFont(val ?? '')} onOpenChange={(open) => { if (open) requestFonts(); }}>
+            <Select value={selectedFont} onValueChange={(val) => setSelectedFont(val ?? '')}>
               <SelectTrigger className="w-full max-w-44 h-8 bg-background dark:bg-background border-0">
                 <SelectValue placeholder="Font" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="min-w-[--anchor-width] w-auto max-w-xs" align="center">
                 <SelectGroup>
                   {fontOptions.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
+                    <SelectItem
+                      key={item.value}
+                      value={item.value}
+                      textClassName="whitespace-pre-wrap text-ellipsis line-clamp-2"
+                    >
                       <span style={{ fontFamily: item.value }}>{item.label}</span>
                     </SelectItem>
                   ))}
@@ -218,7 +214,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
               )}
             />
             <Button className="flex-1 h-auto py-2 bg-cyan-500 hover:bg-cyan-600 text-white">
-              <Check /> Save Lyrics
+              {t('save')}
             </Button>
           </CardFooter>
         </Card>
