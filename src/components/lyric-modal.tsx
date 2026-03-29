@@ -1,9 +1,12 @@
+import { useForm } from '@tanstack/react-form';
 import { t } from 'i18next';
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, ImagePlus, Palette } from 'lucide-react';
 import type React from 'react';
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
+import { type LyricData, lyricService } from '@/services/lyric-service';
 import { TextEditor, type TextEditorRef } from './text-editor';
 import { Button } from './ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from './ui/card';
@@ -131,20 +134,68 @@ function SlidePreview({
   );
 }
 
+type LyricFormValues = {
+  name: string;
+  author: string;
+  notes: string;
+  font: string;
+  fontSize: string;
+  alignment: string[];
+  markdown: string;
+};
+
+const defaultValues: LyricFormValues = {
+  name: '',
+  author: '',
+  notes: '',
+  font: '',
+  fontSize: '48px',
+  alignment: ['center'],
+  markdown: '',
+};
+
 export const LyricModal = ({ children }: LyricModalProps) => {
   const editorRef = useRef<TextEditorRef | null>(null);
-  const [markdown, setMarkdown] = useState('');
-  const [alignment, setAlignment] = useState(['center']);
-  const [selectedFont, setSelectedFont] = useState('');
-  const [fontSize, setFontSize] = useState('48px');
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const [saving, setSaving] = useState(false);
   const { fonts } = useLocalFonts();
 
-  const slides = useMemo(() => parseSlides(markdown), [markdown]);
+  const form = useForm({
+    defaultValues,
+  });
 
-  const fontOptions = useMemo(() => fonts.map((f) => ({ label: f, value: f })), [fonts]);
+  const fontOptions = fonts.map((f) => ({ label: f, value: f }));
 
-  const textAlign = (alignment[0] || 'center') as React.CSSProperties['textAlign'];
-  const fontSizeNum = Number.parseFloat(fontSize) || 48;
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const values = form.state.values;
+      const slides = parseSlides(values.markdown);
+      const data: LyricData = {
+        metadata: {
+          name: values.name,
+          author: values.author,
+          notes: values.notes,
+          font: values.font,
+          fontSize: values.fontSize,
+          alignment: values.alignment[0] || 'center',
+          globalBackground: '',
+        },
+        slides: slides.map((s) => ({ lines: s.lines })),
+      };
+      await lyricService.save(data);
+      toast.success(t('Lyrics saved successfully.'));
+      form.reset();
+      editorRef.current?.setMarkdown('');
+      closeRef.current?.click();
+    } catch (err) {
+      console.error(err);
+      toast.error(t('Failed to save lyrics'));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Dialog>
@@ -153,150 +204,210 @@ export const LyricModal = ({ children }: LyricModalProps) => {
         showCloseButton={false}
         className="w-full sm:max-w-[90dvw] h-full max-h-[80dvh] flex"
       >
-        <Card className="flex-1 p-0 gap-0 overflow-hidden">
-          <CardHeader className="p-4 flex-row items-center gap-7">
-            <h4 className="uppercase">Theme Settings</h4>
+        <form.Subscribe
+          selector={(s) => ({
+            markdown: s.values.markdown,
+            alignment: s.values.alignment,
+            font: s.values.font,
+            fontSize: s.values.fontSize,
+          })}
+        >
+          {({ markdown, alignment, font: selectedFont, fontSize }) => {
+            const slides = parseSlides(markdown);
+            const textAlign = (alignment[0] || 'center') as React.CSSProperties['textAlign'];
+            const fontSizeNum = Number.parseFloat(fontSize) || 48;
 
-            <Select value={selectedFont} onValueChange={(val) => setSelectedFont(val ?? '')}>
-              <SelectTrigger className="w-full max-w-44 h-8 bg-background dark:bg-background border-0">
-                <SelectValue placeholder="Font" />
-              </SelectTrigger>
-              <SelectContent className="min-w-[--anchor-width] w-auto max-w-xs" align="center">
-                <SelectGroup>
-                  {fontOptions.map((item) => (
-                    <SelectItem
-                      key={item.value}
-                      value={item.value}
-                      textClassName="whitespace-pre-wrap text-ellipsis line-clamp-2"
+            return (
+              <>
+                <Card className="flex-1 p-0 gap-0 overflow-hidden">
+                  <CardHeader className="p-4 flex-row items-center gap-7">
+                    <h4 className="uppercase">Theme Settings</h4>
+
+                    <Select
+                      value={selectedFont}
+                      onValueChange={(val) => form.setFieldValue('font', val ?? '')}
                     >
-                      <span style={{ fontFamily: item.value }}>{item.label}</span>
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+                      <SelectTrigger className="w-full max-w-44 h-8 bg-background dark:bg-background border-0">
+                        <SelectValue placeholder="Font" />
+                      </SelectTrigger>
+                      <SelectContent
+                        className="min-w-[--anchor-width] w-auto max-w-xs"
+                        align="center"
+                      >
+                        <SelectGroup>
+                          {fontOptions.map((item) => (
+                            <SelectItem
+                              key={item.value}
+                              value={item.value}
+                              textClassName="whitespace-pre-wrap text-ellipsis line-clamp-2"
+                            >
+                              <span style={{ fontFamily: item.value }}>{item.label}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
 
-            <Input
-              className="max-w-24 h-8 bg-background border-0"
-              placeholder="Font size"
-              value={fontSize}
-              onChange={(e) => setFontSize(e.target.value)}
-              onBlur={() => {
-                const trimmed = fontSize.trim();
-                if (trimmed && /^\d+(\.\d+)?$/.test(trimmed)) {
-                  setFontSize(`${trimmed}px`);
-                }
-              }}
-            />
-
-            <Button variant="ghost">
-              <Palette /> Global Background
-            </Button>
-
-            <Toggle className="ml-auto data-[state=on]:bg-transparent aria-pressed:bg-transparent [&[aria-pressed=true]_.eye-open]:hidden [&[aria-pressed=false]_.eye-closed]:hidden">
-              <Eye className="eye-open" />
-              <EyeOff className="eye-closed" />
-              Live Preview
-            </Toggle>
-          </CardHeader>
-          <Separator />
-          <CardContent className="flex-1 overflow-hidden p-0">
-            <ScrollArea className="size-full">
-              {slides.length === 0 ? (
-                <div className="flex items-center justify-center h-full p-6">
-                  <p className="text-muted-foreground text-sm">
-                    Start typing in the editor to preview slides
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4 p-6">
-                  {slides.map((slide) => (
-                    <SlidePreview
-                      key={slide.id}
-                      slide={slide}
-                      textAlign={textAlign}
-                      selectedFont={selectedFont}
-                      fontSizeNum={fontSizeNum}
+                    <Input
+                      className="max-w-24 h-8 bg-background border-0"
+                      placeholder="Font size"
+                      value={fontSize}
+                      onChange={(e) => form.setFieldValue('fontSize', e.target.value)}
+                      onBlur={() => {
+                        const trimmed = fontSize.trim();
+                        if (trimmed && /^\d+(\.\d+)?$/.test(trimmed)) {
+                          form.setFieldValue('fontSize', `${trimmed}px`);
+                        }
+                      }}
                     />
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
 
-        <Card className="flex-1 max-w-1/5 overflow-hidden">
-          <section className="flex flex-col gap-3">
-            <Label className="uppercase text-xs">Text Alignment</Label>
-            <ToggleGroup
-              value={alignment}
-              onValueChange={(val) => setAlignment(val)}
-              variant="secondary"
-              spacing={4}
-              className="gap-2 p-2 bg-background w-full justify-between"
-            >
-              <ToggleGroupItem
-                value="left"
-                aria-label="Toggle left"
-                className="flex-1 rounded-[4px]"
-              >
-                <AlignLeft />
-              </ToggleGroupItem>
+                    <Button variant="ghost">
+                      <Palette /> Global Background
+                    </Button>
 
-              <ToggleGroupItem
-                value="center"
-                aria-label="Toggle center"
-                className="flex-1 rounded-[4px]"
-              >
-                <AlignCenter />
-              </ToggleGroupItem>
+                    <Toggle className="ml-auto data-[state=on]:bg-transparent aria-pressed:bg-transparent [&[aria-pressed=true]_.eye-open]:hidden [&[aria-pressed=false]_.eye-closed]:hidden">
+                      <Eye className="eye-open" />
+                      <EyeOff className="eye-closed" />
+                      Live Preview
+                    </Toggle>
+                  </CardHeader>
+                  <Separator />
+                  <CardContent className="flex-1 overflow-hidden p-0">
+                    <ScrollArea className="size-full">
+                      {slides.length === 0 ? (
+                        <div className="flex items-center justify-center h-full p-6">
+                          <p className="text-muted-foreground text-sm">
+                            Start typing in the editor to preview slides
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-4 p-6">
+                          {slides.map((slide) => (
+                            <SlidePreview
+                              key={slide.id}
+                              slide={slide}
+                              textAlign={textAlign}
+                              selectedFont={selectedFont}
+                              fontSizeNum={fontSizeNum}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
 
-              <ToggleGroupItem
-                value="right"
-                aria-label="Toggle right"
-                className="flex-1 rounded-[4px]"
-              >
-                <AlignRight />
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </section>
+                <Card className="flex-1 max-w-1/5 overflow-hidden">
+                  <section className="flex flex-col gap-3">
+                    <Label className="uppercase text-xs">Text Alignment</Label>
+                    <ToggleGroup
+                      value={alignment}
+                      onValueChange={(val) => form.setFieldValue('alignment', val)}
+                      variant="secondary"
+                      spacing={4}
+                      className="gap-2 p-2 bg-background w-full justify-between"
+                    >
+                      <ToggleGroupItem
+                        value="left"
+                        aria-label="Toggle left"
+                        className="flex-1 rounded-[4px]"
+                      >
+                        <AlignLeft />
+                      </ToggleGroupItem>
 
-          <section className="flex flex-col gap-3">
-            <Label className="uppercase text-xs">Metadata</Label>
-            <Input className="h-8 bg-background border-0" placeholder="Name" />
-            <Input className="h-8 bg-background border-0" placeholder="Author" />
-            <Input className="h-8 bg-background border-0" placeholder="Notes (Key, BPM...)" />
-          </section>
+                      <ToggleGroupItem
+                        value="center"
+                        aria-label="Toggle center"
+                        className="flex-1 rounded-[4px]"
+                      >
+                        <AlignCenter />
+                      </ToggleGroupItem>
 
-          <section className="flex flex-col flex-1 gap-3 min-h-0">
-            <Label className="uppercase">Lyrics Editor</Label>
+                      <ToggleGroupItem
+                        value="right"
+                        aria-label="Toggle right"
+                        className="flex-1 rounded-[4px]"
+                      >
+                        <AlignRight />
+                      </ToggleGroupItem>
+                    </ToggleGroup>
+                  </section>
 
-            <ScrollArea className="flex-1 overflow-hidden bg-background rounded-xl pb-4">
-              <TextEditor
-                ref={editorRef}
-                onChange={(md) => setMarkdown(md)}
-                debounce={300}
-                placeholder="Type your lyrics here..."
-              />
-            </ScrollArea>
+                  <section className="flex flex-col gap-3">
+                    <Label className="uppercase text-xs">Metadata</Label>
+                    <form.Field name="name">
+                      {(field) => (
+                        <Input
+                          className="h-8 bg-background border-0"
+                          placeholder="Name"
+                          value={field.state.value}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          onBlur={field.handleBlur}
+                        />
+                      )}
+                    </form.Field>
+                    <form.Field name="author">
+                      {(field) => (
+                        <Input
+                          className="h-8 bg-background border-0"
+                          placeholder="Author"
+                          value={field.state.value}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          onBlur={field.handleBlur}
+                        />
+                      )}
+                    </form.Field>
+                    <form.Field name="notes">
+                      {(field) => (
+                        <Input
+                          className="h-8 bg-background border-0"
+                          placeholder="Notes (Key, BPM...)"
+                          value={field.state.value}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          onBlur={field.handleBlur}
+                        />
+                      )}
+                    </form.Field>
+                  </section>
 
-            <p className="opacity-60">Double enter creates a new slide</p>
-          </section>
+                  <section className="flex flex-col flex-1 gap-3 min-h-0">
+                    <Label className="uppercase">Lyrics Editor</Label>
 
-          <CardFooter className="flex items-center gap-3 w-full px-0 mt-auto">
-            <DialogClose
-              className="flex-1 h-auto py-2"
-              render={(props) => (
-                <Button {...props} variant="secondary">
-                  Cancel
-                </Button>
-              )}
-            />
-            <Button className="flex-1 h-auto py-2 bg-cyan-500 hover:bg-cyan-600 text-white">
-              {t('save')}
-            </Button>
-          </CardFooter>
-        </Card>
+                    <ScrollArea className="flex-1 overflow-hidden bg-background rounded-xl pb-4">
+                      <TextEditor
+                        ref={editorRef}
+                        onChange={(md) => form.setFieldValue('markdown', md)}
+                        debounce={300}
+                        placeholder="Type your lyrics here..."
+                      />
+                    </ScrollArea>
+
+                    <p className="opacity-60">Double enter creates a new slide</p>
+                  </section>
+
+                  <CardFooter className="flex items-center gap-3 w-full px-0 mt-auto">
+                    <DialogClose ref={closeRef} className="hidden" />
+                    <DialogClose
+                      className="flex-1 h-auto py-2"
+                      render={(props) => (
+                        <Button {...props} variant="secondary">
+                          Cancel
+                        </Button>
+                      )}
+                    />
+                    <Button
+                      className="flex-1 h-auto py-2 bg-cyan-500 hover:bg-cyan-600 text-white"
+                      disabled={saving}
+                      onClick={handleSave}
+                    >
+                      {t('save')}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </>
+            );
+          }}
+        </form.Subscribe>
       </DialogContent>
     </Dialog>
   );
