@@ -2,6 +2,7 @@ import { t } from 'i18next';
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, ImagePlus, Palette } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useRef, useState } from 'react';
+import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
 import { TextEditor, type TextEditorRef } from './text-editor';
 import { Button } from './ui/button';
@@ -44,6 +45,92 @@ function parseSlides(markdown: string): Slide[] {
   }, []);
 }
 
+const VIRTUAL_W = 1920;
+const VIRTUAL_H = 1080;
+
+const AVAILABLE_H = VIRTUAL_H - VIRTUAL_W * 0.1;
+
+function SlidePreview({
+  slide,
+  textAlign,
+  selectedFont,
+  fontSizeNum,
+}: {
+  slide: Slide;
+  textAlign: React.CSSProperties['textAlign'];
+  selectedFont: string;
+  fontSizeNum: number;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null!);
+  const textRef = useRef<HTMLDivElement>(null);
+
+  const { width: containerWidth = 0 } = useResizeObserver({ ref: containerRef });
+  const scale = containerWidth / VIRTUAL_W;
+
+  useIsomorphicLayoutEffect(() => {
+    const text = textRef.current;
+    if (!text) return;
+
+    let lo = 1;
+    let hi = fontSizeNum;
+
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      text.style.fontSize = `${mid}px`;
+      if (text.scrollHeight <= AVAILABLE_H) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+
+    text.style.fontSize = `${lo}px`;
+    if (text.scrollHeight > AVAILABLE_H) {
+      text.style.fontSize = `${Math.max(lo - 1, 1)}px`;
+    }
+  });
+
+  return (
+    <div className="relative aspect-video bg-black rounded-lg border border-border/20 overflow-hidden">
+      <span className="absolute top-2 left-2 bg-primary text-primary-foreground text-xs font-bold rounded px-1.5 py-0.5 min-w-5 text-center z-10">
+        {slide.id}
+      </span>
+      <button
+        type="button"
+        className="absolute top-2 right-2 p-1 rounded bg-white/10 hover:bg-white/20 transition-colors z-10"
+        title="Set slide background"
+      >
+        <ImagePlus className="size-3.5 text-white" />
+      </button>
+      <div ref={containerRef} className="absolute inset-0">
+        <div
+          className="absolute top-1/2 left-1/2 flex items-center justify-center overflow-hidden"
+          style={{
+            width: `${VIRTUAL_W}px`,
+            height: `${VIRTUAL_H}px`,
+            padding: '5%',
+            transform: `translate(-50%, -50%) scale(${scale})`,
+            opacity: scale > 0 ? 1 : 0,
+          }}
+        >
+          <div
+            ref={textRef}
+            className="text-white uppercase leading-relaxed w-full font-semibold"
+            style={{
+              textAlign,
+              fontFamily: selectedFont || undefined,
+            }}
+          >
+            {slide.lines.map((line, i) => (
+              <div key={`${slide.id}-${i}`}>{line}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const LyricModal = ({ children }: LyricModalProps) => {
   const editorRef = useRef<TextEditorRef | null>(null);
   const [markdown, setMarkdown] = useState('');
@@ -57,6 +144,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
   const fontOptions = useMemo(() => fonts.map((f) => ({ label: f, value: f })), [fonts]);
 
   const textAlign = (alignment[0] || 'center') as React.CSSProperties['textAlign'];
+  const fontSizeNum = Number.parseFloat(fontSize) || 48;
 
   return (
     <Dialog>
@@ -93,6 +181,12 @@ export const LyricModal = ({ children }: LyricModalProps) => {
               placeholder="Font size"
               value={fontSize}
               onChange={(e) => setFontSize(e.target.value)}
+              onBlur={() => {
+                const trimmed = fontSize.trim();
+                if (trimmed && /^\d+(\.\d+)?$/.test(trimmed)) {
+                  setFontSize(`${trimmed}px`);
+                }
+              }}
             />
 
             <Button variant="ghost">
@@ -117,32 +211,13 @@ export const LyricModal = ({ children }: LyricModalProps) => {
               ) : (
                 <div className="grid grid-cols-2 gap-4 p-6">
                   {slides.map((slide) => (
-                    <div
+                    <SlidePreview
                       key={slide.id}
-                      className="relative aspect-video bg-black rounded-lg flex items-center justify-center p-6 border border-border/20 overflow-hidden"
-                    >
-                      <span className="absolute top-2 left-2 bg-primary text-primary-foreground text-xs font-bold rounded px-1.5 py-0.5 min-w-5 text-center z-10">
-                        {slide.id}
-                      </span>
-                      <button
-                        type="button"
-                        className="absolute top-2 right-2 p-1 rounded bg-white/10 hover:bg-white/20 transition-colors z-10"
-                        title="Set slide background"
-                      >
-                        <ImagePlus className="size-3.5 text-white" />
-                      </button>
-                      <div
-                        className="text-white uppercase text-sm leading-relaxed w-full font-semibold"
-                        style={{
-                          textAlign,
-                          fontFamily: selectedFont || undefined,
-                        }}
-                      >
-                        {slide.lines.map((line, i) => (
-                          <div key={`${slide.id}-${i}`}>{line}</div>
-                        ))}
-                      </div>
-                    </div>
+                      slide={slide}
+                      textAlign={textAlign}
+                      selectedFont={selectedFont}
+                      fontSizeNum={fontSizeNum}
+                    />
                   ))}
                 </div>
               )}
