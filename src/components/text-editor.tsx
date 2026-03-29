@@ -120,13 +120,13 @@ const TextEditor = forwardRef<TextEditorRef, TextEditorProps>(
     return (
       <div
         data-slot="text-editor"
-        className={cn('relative size-full flex-1 overflow-auto', className)}
+        className={cn('relative size-full flex-1', className)}
         {...props}
       >
         {children}
         <EditorContent
           editor={editor}
-          className="prose prose-sm bg-background rounded-xl flex-1 h-full w-full dark:prose-invert max-w-none size-full [&_.tiptap]:size-full [&_.tiptap]:p-4 [&_.tiptap_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.tiptap_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.tiptap_p.is-editor-empty:first-child::before]:float-left [&_.tiptap_p.is-editor-empty:first-child::before]:h-0 [&_.tiptap_p.is-editor-empty:first-child::before]:pointer-events-none"
+          className="prose prose-sm flex-1 h-full w-full dark:prose-invert max-w-none size-full [&_.tiptap]:size-full [&_.tiptap]:p-4 [&_.tiptap_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.tiptap_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.tiptap_p.is-editor-empty:first-child::before]:float-left [&_.tiptap_p.is-editor-empty:first-child::before]:h-0 [&_.tiptap_p.is-editor-empty:first-child::before]:pointer-events-none"
         />
       </div>
     );
