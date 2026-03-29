@@ -25,6 +25,11 @@ export async function getMediaBasePath(): Promise<string> {
   return join(base, 'files', 'media');
 }
 
+export async function getThemesPath(): Promise<string> {
+  const base = await getAppBasePath();
+  return join(base, 'files', 'themes');
+}
+
 export async function getDbPath(): Promise<string> {
   const base = await getAppBasePath();
   const dbFile = await join(base, 'lumen.db');
