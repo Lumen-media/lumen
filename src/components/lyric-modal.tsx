@@ -104,7 +104,7 @@ function SlidePreview({
       </button>
       <div ref={containerRef} className="absolute inset-0">
         <div
-          className="absolute top-1/2 left-1/2 flex items-center justify-center overflow-hidden"
+          className="absolute top-1/2 left-1/2 flex items-center justify-center overflow-hidden pointer-events-none"
           style={{
             width: `${VIRTUAL_W}px`,
             height: `${VIRTUAL_H}px`,
@@ -225,7 +225,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
           </CardContent>
         </Card>
 
-        <Card className="flex-1 max-w-1/5">
+        <Card className="flex-1 max-w-1/5 overflow-hidden">
           <section className="flex flex-col gap-3">
             <Label className="uppercase text-xs">Text Alignment</Label>
             <ToggleGroup
@@ -268,14 +268,18 @@ export const LyricModal = ({ children }: LyricModalProps) => {
             <Input className="h-8 bg-background border-0" placeholder="Notes (Key, BPM...)" />
           </section>
 
-          <section className="flex flex-col flex-1 gap-3">
+          <section className="flex flex-col flex-1 gap-3 min-h-0">
             <Label className="uppercase">Lyrics Editor</Label>
-            <TextEditor
-              ref={editorRef}
-              onChange={(md) => setMarkdown(md)}
-              debounce={300}
-              placeholder="Type your lyrics here..."
-            />
+
+            <ScrollArea className="flex-1 overflow-hidden bg-background rounded-xl pb-4">
+              <TextEditor
+                ref={editorRef}
+                onChange={(md) => setMarkdown(md)}
+                debounce={300}
+                placeholder="Type your lyrics here..."
+              />
+            </ScrollArea>
+
             <p className="opacity-60">Double enter creates a new slide</p>
           </section>
 
