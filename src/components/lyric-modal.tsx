@@ -7,10 +7,7 @@ import { toast } from 'sonner';
 import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
 import { type LyricData, lyricService } from '@/services/lyric-service';
-import {
-  LyricBackgroundModal,
-  type LyricBackgroundModalRef,
-} from './lyric-background-modal';
+import { LyricBackgroundModal, type LyricBackgroundModalRef } from './lyric-background-modal';
 import { TextEditor, type TextEditorRef } from './text-editor';
 import { Button } from './ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from './ui/card';
@@ -110,9 +107,7 @@ function SlidePreview({
         type="button"
         onClick={onSetBackground}
         className={`absolute top-2 right-2 p-1 rounded transition-colors z-10 ${
-          background
-            ? 'bg-cyan-500/80 hover:bg-cyan-400/80'
-            : 'bg-white/10 hover:bg-white/20'
+          background ? 'bg-primary/80 hover:bg-primary/80' : 'bg-white/10 hover:bg-white/20'
         }`}
         title={background ? 'Change slide background' : 'Set slide background'}
       >
@@ -237,7 +232,14 @@ export const LyricModal = ({ children }: LyricModalProps) => {
               slideBackgrounds: s.values.slideBackgrounds,
             })}
           >
-            {({ markdown, alignment, font: selectedFont, fontSize, globalBackground, slideBackgrounds }) => {
+            {({
+              markdown,
+              alignment,
+              font: selectedFont,
+              fontSize,
+              globalBackground,
+              slideBackgrounds,
+            }) => {
               const slides = parseSlides(markdown);
               const textAlign = (alignment[0] || 'center') as React.CSSProperties['textAlign'];
               const fontSizeNum = Number.parseFloat(fontSize) || 48;
@@ -289,7 +291,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
                       <Button
                         type="button"
                         variant="ghost"
-                        className={globalBackground ? 'text-cyan-400' : ''}
+                        className={globalBackground ? 'text-primary' : ''}
                         onClick={() =>
                           backgroundModalRef.current?.open((bg) =>
                             form.setFieldValue('globalBackground', bg.src)
@@ -438,11 +440,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
                           </Button>
                         )}
                       />
-                      <Button
-                        className="flex-1 h-auto py-2 bg-cyan-500 hover:bg-cyan-600 text-white"
-                        disabled={saving}
-                        onClick={handleSave}
-                      >
+                      <Button className="flex-1 h-auto py-2" disabled={saving} onClick={handleSave}>
                         {t('save')}
                       </Button>
                     </CardFooter>
