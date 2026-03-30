@@ -2,6 +2,7 @@
 
 import { Tabs as TabsPrimitive } from '@base-ui/react/tabs';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -62,6 +63,49 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   );
 }
 
+function TabsIndicator({ className }: { className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [style, setStyle] = useState({ left: 0, width: 0 });
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const update = () => {
+      const parent = el.parentElement;
+      if (!parent) return;
+      const active = parent.querySelector<HTMLElement>('[data-slot="tabs-trigger"][data-active]');
+      if (!active) return;
+      const parentRect = parent.getBoundingClientRect();
+      const activeRect = active.getBoundingClientRect();
+      setStyle({ left: activeRect.left - parentRect.left, width: activeRect.width });
+      setReady(true);
+    };
+
+    update();
+
+    const observer = new MutationObserver(update);
+    const parent = el.parentElement;
+    if (parent) observer.observe(parent, { subtree: true, attributeFilter: ['data-active'] });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <span
+      ref={ref}
+      className={cn('absolute bottom-0 h-0.5 rounded-full', className)}
+      style={{
+        opacity: ready ? 1 : 0,
+        left: style.left,
+        width: style.width,
+        transition: 'left 250ms ease, width 250ms ease',
+      }}
+    />
+  );
+}
+
 function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
@@ -72,4 +116,4 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   );
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants };
+export { Tabs, TabsList, TabsTrigger, TabsContent, TabsIndicator, tabsListVariants };
