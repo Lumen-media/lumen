@@ -68,6 +68,11 @@ const UNSPLASH_IMAGES: UnsplashItem[] = [
     name: 'Waterfall',
   },
   {
+    id: '8',
+    src: 'https://images.unsplash.com/photo-1773781556147-2106e3145777?w=400&q=80',
+    name: 'Snowy mountain',
+  },
+  {
     id: '10',
     src: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=400&q=80',
     name: 'Milky Way',
@@ -364,11 +369,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button
-            className="bg-primary text-black font-semibold hover:bg-cyan-300"
-            disabled={!selected}
-            onClick={handleConfirm}
-          >
+          <Button className="font-semibold" disabled={!selected} onClick={handleConfirm}>
             Set Background
           </Button>
         </div>

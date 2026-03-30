@@ -1,3 +1,4 @@
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { useForm } from '@tanstack/react-form';
 import { t } from 'i18next';
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, ImagePlus, Palette } from 'lucide-react';
@@ -54,12 +55,18 @@ const VIRTUAL_H = 1080;
 
 const AVAILABLE_H = VIRTUAL_H - VIRTUAL_W * 0.1;
 
+function resolveBackgroundSrc(src: string): string {
+  if (!src || src.startsWith('http') || src.startsWith('#')) return src;
+  return convertFileSrc(src);
+}
+
 function SlidePreview({
   slide,
   textAlign,
   selectedFont,
   fontSizeNum,
   background,
+  globalBackground,
   onSetBackground,
 }: {
   slide: Slide;
@@ -67,6 +74,7 @@ function SlidePreview({
   selectedFont: string;
   fontSizeNum: number;
   background?: string;
+  globalBackground?: string;
   onSetBackground: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null!);
@@ -98,8 +106,14 @@ function SlidePreview({
     }
   });
 
+  const effectiveBg = background || globalBackground;
+  const bgSrc = effectiveBg ? resolveBackgroundSrc(effectiveBg) : undefined;
+
   return (
     <div className="relative aspect-video bg-black rounded-lg border border-border/20 overflow-hidden">
+      {bgSrc && (
+        <img src={bgSrc} alt="" className="absolute inset-0 w-full h-full object-cover" aria-hidden />
+      )}
       <span className="absolute top-2 left-2 bg-primary text-primary-foreground text-xs font-bold rounded px-1.5 py-0.5 min-w-5 text-center z-10">
         {slide.id}
       </span>
@@ -326,6 +340,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
                                 selectedFont={selectedFont}
                                 fontSizeNum={fontSizeNum}
                                 background={slideBackgrounds[i]}
+                                globalBackground={globalBackground}
                                 onSetBackground={() =>
                                   backgroundModalRef.current?.open((bg) =>
                                     form.setFieldValue('slideBackgrounds', {
