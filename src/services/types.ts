@@ -1,4 +1,4 @@
-export type MediaType = 'lyrics' | 'video' | 'image' | 'text' | 'audio' | 'files';
+export type MediaType = 'lyrics' | 'video' | 'image' | 'text' | 'audio' | 'files' | 'themes';
 
 export interface FileInfo {
   name: string;

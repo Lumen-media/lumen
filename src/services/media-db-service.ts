@@ -49,6 +49,20 @@ class MediaDbService {
     `);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_mf_type ON media_files (media_type)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_mf_name ON media_files (name COLLATE NOCASE)`);
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS theme_files (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT    NOT NULL,
+        path        TEXT    NOT NULL UNIQUE,
+        size        INTEGER NOT NULL DEFAULT 0,
+        modified_at INTEGER NOT NULL DEFAULT 0,
+        extension   TEXT    NOT NULL DEFAULT '',
+        created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+      )
+    `);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_tf_name ON theme_files (name COLLATE NOCASE)`);
+
     return db;
   }
 
@@ -143,6 +157,64 @@ class MediaDbService {
   async deleteFile(path: string): Promise<void> {
     const db = await this.ready();
     await db.execute('DELETE FROM media_files WHERE path = $1', [path]);
+  }
+
+  async syncThemes(fsFiles: FileInfo[]): Promise<void> {
+    const db = await this.ready();
+    const existing = await db.select<{ path: string }[]>('SELECT path FROM theme_files');
+    const existingPaths = new Set(existing.map((r) => r.path));
+    const fsPaths = new Set(fsFiles.map((f) => f.path));
+
+    for (const file of fsFiles) {
+      if (!existingPaths.has(file.path)) {
+        await db.execute(
+          `INSERT OR IGNORE INTO theme_files (name, path, size, modified_at, extension)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            file.name,
+            file.path,
+            file.size,
+            file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
+            file.extension,
+          ]
+        );
+      }
+    }
+
+    for (const { path } of existing) {
+      if (!fsPaths.has(path)) {
+        await db.execute('DELETE FROM theme_files WHERE path = $1', [path]);
+      }
+    }
+  }
+
+  async listThemes(): Promise<FileInfo[]> {
+    const db = await this.ready();
+    const rows = await db.select<Omit<DbRow, 'media_type' | 'duration' | 'artist'>[]>(
+      'SELECT * FROM theme_files ORDER BY name COLLATE NOCASE'
+    );
+    return rows.map((row) => ({
+      name: row.name,
+      path: row.path,
+      size: row.size,
+      modifiedAt: new Date(row.modified_at),
+      extension: row.extension,
+    }));
+  }
+
+  async insertTheme(file: FileInfo): Promise<void> {
+    const db = await this.ready();
+    await db.execute(
+      `INSERT OR IGNORE INTO theme_files (name, path, size, modified_at, extension)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        file.name,
+        file.path,
+        file.size,
+        file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
+        file.extension,
+      ]
+    );
   }
 }
 

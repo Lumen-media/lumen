@@ -35,6 +35,7 @@ class FileInitServiceImpl implements FileInitService {
     'text',
     'audio',
     'files',
+    'themes',
   ];
 
   async initializeMediaFolders(): Promise<void> {
@@ -61,7 +62,11 @@ class FileInitServiceImpl implements FileInitService {
       for (const mediaType of this.MEDIA_TYPES) {
         try {
           const fsFiles = await this.readFolderFiles(mediaType);
-          await mediaDbService.syncMediaType(mediaType, fsFiles);
+          if (mediaType === 'themes') {
+            await mediaDbService.syncThemes(fsFiles);
+          } else {
+            await mediaDbService.syncMediaType(mediaType, fsFiles);
+          }
         } catch (err) {
           console.warn(`DB sync skipped for ${mediaType}:`, err);
         }
