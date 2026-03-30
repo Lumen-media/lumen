@@ -26,8 +26,7 @@ export async function getMediaBasePath(): Promise<string> {
 }
 
 export async function getThemesPath(): Promise<string> {
-  const base = await getAppBasePath();
-  return join(base, 'files', 'themes');
+  return join(await getMediaBasePath(), 'themes');
 }
 
 export async function getDbPath(): Promise<string> {
