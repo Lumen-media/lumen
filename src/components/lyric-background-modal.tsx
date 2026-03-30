@@ -13,7 +13,7 @@ import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from './ui/tabs';
 
 type MediaTab = 'themes' | 'images' | 'video';
 
@@ -239,30 +239,22 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
           }}
           orientation="vertical"
         >
-          <div className="border-b border-border/50">
+          <div className="relative border-b border-border/50">
             <TabsList
               variant="line"
               className="w-fit justify-start px-6 rounded-none h-auto py-0 gap-4"
             >
-              <TabsTrigger
-                value="themes"
-                className="after:bg-cyan-400 data-active:text-cyan-400 pb-3 px-0"
-              >
+              <TabsTrigger value="themes" className="pb-3 px-0 after:hidden">
                 Themes
               </TabsTrigger>
-              <TabsTrigger
-                value="images"
-                className="after:bg-cyan-400 data-active:text-cyan-400 pb-3 px-0"
-              >
+              <TabsTrigger value="images" className="pb-3 px-0 after:hidden">
                 Images
               </TabsTrigger>
-              <TabsTrigger
-                value="video"
-                className="after:bg-cyan-400 data-active:text-cyan-400 pb-3 px-0"
-              >
+              <TabsTrigger value="video" className="pb-3 px-0 after:hidden">
                 Video
               </TabsTrigger>
             </TabsList>
+            <TabsIndicator className="bg-primary" />
           </div>
 
           <TabsContent value="themes" className="px-6 py-4">
@@ -302,7 +294,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
               />
             </div>
             <ScrollArea className="min-h-[22rem] h-[34dvh]">
-              <div className="grid grid-cols-4 gap-3 pr-1">
+              <div className="grid grid-cols-4 gap-3 pr-1 mt-1">
                 {filteredImages.map((item) => {
                   const itemSrc = item.src ?? '#000000';
                   const isSelected = selected?.src === itemSrc;
@@ -373,7 +365,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
             Cancel
           </Button>
           <Button
-            className="bg-cyan-400 text-black font-semibold hover:bg-cyan-300"
+            className="bg-primary text-black font-semibold hover:bg-cyan-300"
             disabled={!selected}
             onClick={handleConfirm}
           >
