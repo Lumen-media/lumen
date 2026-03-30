@@ -1,9 +1,9 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { useForm } from '@tanstack/react-form';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { t } from 'i18next';
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, ImagePlus, Palette } from 'lucide-react';
 import type React from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
@@ -55,11 +55,6 @@ const VIRTUAL_H = 1080;
 
 const AVAILABLE_H = VIRTUAL_H - VIRTUAL_W * 0.1;
 
-function resolveBackgroundSrc(src: string): string {
-  if (!src || src.startsWith('http') || src.startsWith('#')) return src;
-  return convertFileSrc(src);
-}
-
 function SlidePreview({
   slide,
   textAlign,
@@ -107,7 +102,21 @@ function SlidePreview({
   });
 
   const effectiveBg = background || globalBackground;
-  const bgSrc = effectiveBg ? resolveBackgroundSrc(effectiveBg) : undefined;
+  const [bgSrc, setBgSrc] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (!effectiveBg) { setBgSrc(undefined); return; }
+    if (effectiveBg.startsWith('http') || effectiveBg.startsWith('#')) {
+      setBgSrc(effectiveBg);
+      return;
+    }
+    let url: string;
+    readFile(effectiveBg).then((bytes) => {
+      url = URL.createObjectURL(new Blob([bytes]));
+      setBgSrc(url);
+    }).catch(() => setBgSrc(undefined));
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [effectiveBg]);
 
   return (
     <div className="relative aspect-video bg-black rounded-lg border border-border/20 overflow-hidden">
