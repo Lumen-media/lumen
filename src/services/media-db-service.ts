@@ -216,6 +216,10 @@ class MediaDbService {
       ]
     );
   }
+  async deleteTheme(path: string): Promise<void> {
+    const db = await this.ready();
+    await db.execute('DELETE FROM theme_files WHERE path = $1', [path]);
+  }
 }
 
 function rowToFileInfo(row: DbRow): FileInfo {

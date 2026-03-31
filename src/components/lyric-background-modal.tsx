@@ -1,8 +1,8 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { join } from '@tauri-apps/api/path';
-import { exists, mkdir, readDir, readFile, stat, writeFile } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, readDir, readFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs';
 import { t } from 'i18next';
-import { CheckIcon, DownloadIcon, Loader2, RefreshCw, SearchIcon } from 'lucide-react';
+import { CheckIcon, DownloadIcon, Loader2, RefreshCw, SearchIcon, Trash2Icon } from 'lucide-react';
 import {
   type Ref,
   useCallback,
@@ -68,6 +68,7 @@ interface MediaThumbnailProps {
   file: FileInfo;
   selected: boolean;
   onClick: () => void;
+  onDelete?: () => void;
 }
 
 const MIME: Record<string, string> = {
@@ -86,7 +87,7 @@ const MIME: Record<string, string> = {
 
 const THUMB_WIDTH = 400;
 
-function MediaThumbnail({ file, selected, onClick }: MediaThumbnailProps) {
+function MediaThumbnail({ file, selected, onClick, onDelete }: MediaThumbnailProps) {
   const ext = file.extension.toLowerCase();
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
 
@@ -124,11 +125,15 @@ function MediaThumbnail({ file, selected, onClick }: MediaThumbnailProps) {
   }, [file.path, ext]);
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') onClick();
+      }}
       className={cn(
-        'relative aspect-video rounded-lg overflow-hidden transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'group relative aspect-video rounded-lg overflow-hidden transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer',
         selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'hover:opacity-90'
       )}
     >
@@ -146,7 +151,20 @@ function MediaThumbnail({ file, selected, onClick }: MediaThumbnailProps) {
           </div>
         </div>
       )}
-    </button>
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="absolute top-1.5 right-1.5 p-1 rounded bg-black/50 hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+          title={t('Delete')}
+        >
+          <Trash2Icon className="size-3 text-white" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -290,6 +308,19 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
     }
   };
 
+  const handleDeleteTheme = async (file: FileInfo) => {
+    try {
+      await remove(file.path);
+      await mediaDbService.deleteTheme(file.path);
+      setThemes((prev) => prev.filter((f) => f.path !== file.path));
+      if (selected?.src === file.path) setSelected(null);
+      toast.success(t('Theme deleted.'));
+    } catch (err) {
+      console.error(err);
+      toast.error(t('Failed to delete theme.'));
+    }
+  };
+
   const handleConfirm = () => {
     if (selected) onSelectRef.current?.(selected);
     setOpen(false);
@@ -378,6 +409,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
                             onClick={() =>
                               setSelected({ type: 'theme', src: file.path, name: file.name })
                             }
+                            onDelete={() => handleDeleteTheme(file)}
                           />
                         ))}
                       </div>
