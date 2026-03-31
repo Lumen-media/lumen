@@ -1,12 +1,20 @@
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { join } from '@tauri-apps/api/path';
 import { exists, mkdir, readDir, readFile, stat, writeFile } from '@tauri-apps/plugin-fs';
 import { t } from 'i18next';
-import { CheckIcon, DownloadIcon, Loader2, RefreshCw, SearchIcon, VideoIcon } from 'lucide-react';
-import { type Ref, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { CheckIcon, DownloadIcon, Loader2, RefreshCw, SearchIcon } from 'lucide-react';
+import {
+  type Ref,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getThemesPath } from '@/services/app-paths';
-import { extractVideoThumbnail } from '@/services/get-video-tumb';
 import { mediaDbService } from '@/services/media-db-service';
 import type { FileInfo } from '@/services/types';
 import { Button } from './ui/button';
@@ -76,30 +84,44 @@ const MIME: Record<string, string> = {
   '.mkv': 'video/x-matroska',
 };
 
+const THUMB_WIDTH = 400;
+
 function MediaThumbnail({ file, selected, onClick }: MediaThumbnailProps) {
   const ext = file.extension.toLowerCase();
-  const isVideo = VIDEO_EXTS.has(ext);
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
 
   useEffect(() => {
-    let blobUrl: string | null = null;
+    let thumbUrl: string | null = null;
+    let cancelled = false;
 
     readFile(file.path)
-      .then((bytes) => {
+      .then(async (bytes) => {
+        if (cancelled) return;
         const mime = MIME[ext] ?? 'application/octet-stream';
-        blobUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
-        if (isVideo) {
-          extractVideoThumbnail(blobUrl).then(setDisplaySrc);
-        } else {
-          setDisplaySrc(blobUrl);
+        const blob = new Blob([bytes], { type: mime });
+        const bmp = await createImageBitmap(blob, {
+          resizeWidth: THUMB_WIDTH,
+          resizeQuality: 'low',
+        });
+        if (cancelled) {
+          bmp.close();
+          return;
         }
+        const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(bmp, 0, 0);
+        bmp.close();
+        const thumbBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 });
+        thumbUrl = URL.createObjectURL(thumbBlob);
+        if (!cancelled) setDisplaySrc(thumbUrl);
       })
       .catch(() => {});
 
     return () => {
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      cancelled = true;
+      if (thumbUrl) URL.revokeObjectURL(thumbUrl);
     };
-  }, [file.path, ext, isVideo]);
+  }, [file.path, ext]);
 
   return (
     <button
@@ -113,8 +135,8 @@ function MediaThumbnail({ file, selected, onClick }: MediaThumbnailProps) {
       {displaySrc ? (
         <img src={displaySrc} alt={file.name} className="w-full h-full object-cover" />
       ) : (
-        <div className="w-full h-full bg-muted flex items-center justify-center">
-          {isVideo && <VideoIcon className="size-5 text-muted-foreground" />}
+        <div className="w-full h-full bg-card animate-pulse opacity-70 flex items-center justify-center">
+          <Loader2 className="size-4 text-muted-foreground animate-spin" />
         </div>
       )}
       {selected && (
@@ -151,10 +173,10 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
   const [selected, setSelected] = useState<SelectedBackground | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [themes, setThemes] = useState<FileInfo[]>([]);
-  const [videos, setVideos] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<Set<string>>(new Set());
   const onSelectRef = useRef<((bg: SelectedBackground) => void) | undefined>(undefined);
+  const themesScrollRef = useRef<HTMLDivElement>(null);
 
   useImperativeHandle(ref, () => ({
     open(onSelect?: (bg: SelectedBackground) => void) {
@@ -166,18 +188,12 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
     },
   }));
 
-  const loadAll = useCallback(async () => {
+  const loadThemes = useCallback(async () => {
     setLoading(true);
     try {
-      const [themeList, videoList] = await Promise.all([
-        mediaDbService.listThemes(),
-        mediaDbService.listFiles('video'),
-      ]);
-      setThemes(themeList);
-      setVideos(videoList);
+      setThemes(await mediaDbService.listThemes());
     } catch {
       setThemes([]);
-      setVideos([]);
     } finally {
       setLoading(false);
     }
@@ -218,8 +234,25 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
 
   useEffect(() => {
     if (!open) return;
-    loadAll();
-  }, [open, loadAll]);
+    loadThemes();
+  }, [open, loadThemes]);
+
+  const COLS = 4;
+  const GAP = 12;
+  const themeRows = useMemo(() => {
+    const rows: FileInfo[][] = [];
+    for (let i = 0; i < themes.length; i += COLS) {
+      rows.push(themes.slice(i, i + COLS));
+    }
+    return rows;
+  }, [themes]);
+
+  const themesVirtualizer = useVirtualizer({
+    count: themeRows.length,
+    getScrollElement: () => themesScrollRef.current,
+    estimateSize: () => 130,
+    gap: GAP,
+  });
 
   const handleDownload = async (item: UnsplashItem) => {
     if (!item.photo || downloading.has(item.id)) return;
@@ -292,9 +325,6 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
               <TabsTrigger value="images" className="pb-3 px-0 after:hidden">
                 Images
               </TabsTrigger>
-              <TabsTrigger value="video" className="pb-3 px-0 after:hidden">
-                Video
-              </TabsTrigger>
               <TabsIndicator className="bg-primary" />
             </TabsList>
 
@@ -313,29 +343,49 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
           </div>
 
           <TabsContent value="themes" className="px-6 py-4 flex flex-col gap-3">
-            <ScrollArea className="min-h-[25rem] h-[40dvh]" viewportClassName="flex flex-col">
-              {loading ? (
-                <LoadingGrid />
-              ) : themes.length === 0 ? (
-                <EmptyState
-                  message={t("No themes found in the 'files/themes' folder.")}
-                  hint={t('Add GIFs or videos to the files/themes folder.')}
-                />
-              ) : (
-                <div className="grid grid-cols-4 gap-3 pr-1 pt-1">
-                  {themes.map((file) => (
-                    <MediaThumbnail
-                      key={file.path}
-                      file={file}
-                      selected={selected?.src === file.path}
-                      onClick={() =>
-                        setSelected({ type: 'theme', src: file.path, name: file.name })
-                      }
-                    />
-                  ))}
+            {loading ? (
+              <LoadingGrid />
+            ) : themes.length === 0 ? (
+              <EmptyState
+                message={t("No themes found in the 'files/themes' folder.")}
+                hint={t('Add GIFs or videos to the files/themes folder.')}
+              />
+            ) : (
+              <div
+                ref={themesScrollRef}
+                className="min-h-[25rem] h-[40dvh] overflow-y-auto pt-1 px-1"
+              >
+                <div
+                  className="relative w-full"
+                  style={{ height: themesVirtualizer.getTotalSize() }}
+                >
+                  {themesVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const row = themeRows[virtualRow.index];
+                    return (
+                      <div
+                        key={virtualRow.index}
+                        className="absolute left-0 right-0 grid grid-cols-4 gap-3 pr-1"
+                        style={{
+                          height: virtualRow.size,
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        {row.map((file) => (
+                          <MediaThumbnail
+                            key={file.path}
+                            file={file}
+                            selected={selected?.src === file.path}
+                            onClick={() =>
+                              setSelected({ type: 'theme', src: file.path, name: file.name })
+                            }
+                          />
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-            </ScrollArea>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="images" className="px-6 py-4 flex flex-col gap-4">
@@ -420,7 +470,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="video" className="px-6 py-4">
+          {/* <TabsContent value="video" className="px-6 py-4">
             <ScrollArea className="min-h-[25rem] h-[40dvh]">
               {loading ? (
                 <LoadingGrid />
@@ -444,7 +494,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
                 </div>
               )}
             </ScrollArea>
-          </TabsContent>
+          </TabsContent> */}
         </Tabs>
 
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-border/50">
