@@ -2,7 +2,15 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { join } from '@tauri-apps/api/path';
 import { exists, mkdir, readDir, readFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs';
 import { t } from 'i18next';
-import { CheckIcon, DownloadIcon, Loader2, RefreshCw, SearchIcon, Trash2Icon } from 'lucide-react';
+import {
+  CheckIcon,
+  DownloadIcon,
+  ImageIcon,
+  Loader2,
+  RefreshCw,
+  SearchIcon,
+  Trash2Icon,
+} from 'lucide-react';
 import {
   type Ref,
   useCallback,
@@ -19,6 +27,7 @@ import { mediaDbService } from '@/services/media-db-service';
 import type { FileInfo } from '@/services/types';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './ui/empty';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
 import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from './ui/tabs';
@@ -172,15 +181,6 @@ function LoadingGrid() {
   return (
     <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
       Loading…
-    </div>
-  );
-}
-
-function EmptyState({ message, hint }: { message: string; hint?: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-32 my-auto gap-1 text-sm text-muted-foreground">
-      <p>{message}</p>
-      {hint && <p className="text-xs opacity-60">{hint}</p>}
     </div>
   );
 }
@@ -377,10 +377,17 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
             {loading ? (
               <LoadingGrid />
             ) : themes.length === 0 ? (
-              <EmptyState
-                message={t("No themes found in the 'files/themes' folder.")}
-                hint={t('Add GIFs or videos to the files/themes folder.')}
-              />
+              <Empty className="min-h-[25rem] h-[40dvh]">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <ImageIcon />
+                  </EmptyMedia>
+                  <EmptyTitle>{t('No themes yet')}</EmptyTitle>
+                  <EmptyDescription>
+                    {t('Add images or videos to the files/themes folder and sync.')}
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
               <div
                 ref={themesScrollRef}
@@ -431,74 +438,86 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
               />
             </div>
             <ScrollArea className="min-h-[22rem] h-[34dvh]">
-              <div
-                className={cn('grid grid-cols-4 gap-3 pr-1 mt-1', {
-                  'px-2.5': filteredImages.length > 8,
-                })}
-              >
-                {filteredImages.map((item) => {
-                  const fullSrc = item.photo ? unsplashUrl(item.photo, 3840, 100) : null;
-                  const thumbSrc = item.photo ? unsplashUrl(item.photo, 400) : null;
-                  const selectedSrc = fullSrc ?? '#000000';
-                  const isSelected = selected?.src === selectedSrc;
-                  const isDownloading = downloading.has(item.id);
-                  return (
-                    <div
-                      key={item.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() =>
-                        setSelected({ type: 'image', src: selectedSrc, name: item.name })
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ')
-                          setSelected({ type: 'image', src: selectedSrc, name: item.name });
-                      }}
-                      className={cn(
-                        'relative aspect-video rounded-lg overflow-hidden transition-all focus-visible:outline-none cursor-pointer',
-                        isSelected
-                          ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                          : 'hover:opacity-90'
-                      )}
-                    >
-                      {thumbSrc ? (
-                        <img
-                          src={thumbSrc}
-                          alt={item.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-black" />
-                      )}
-                      {isSelected && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                          <div className="rounded-full bg-black/60 p-1.5">
-                            <CheckIcon className="size-4 text-white" />
+              {filteredImages.length === 0 ? (
+                <Empty className="h-full">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <SearchIcon />
+                    </EmptyMedia>
+                    <EmptyTitle>{t('No results')}</EmptyTitle>
+                    <EmptyDescription>{t('No images match your search.')}</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <div
+                  className={cn('grid grid-cols-4 gap-3 pr-1 mt-1', {
+                    'px-2.5': filteredImages.length > 8,
+                  })}
+                >
+                  {filteredImages.map((item) => {
+                    const fullSrc = item.photo ? unsplashUrl(item.photo, 3840, 100) : null;
+                    const thumbSrc = item.photo ? unsplashUrl(item.photo, 400) : null;
+                    const selectedSrc = fullSrc ?? '#000000';
+                    const isSelected = selected?.src === selectedSrc;
+                    const isDownloading = downloading.has(item.id);
+                    return (
+                      <div
+                        key={item.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() =>
+                          setSelected({ type: 'image', src: selectedSrc, name: item.name })
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ')
+                            setSelected({ type: 'image', src: selectedSrc, name: item.name });
+                        }}
+                        className={cn(
+                          'relative aspect-video rounded-lg overflow-hidden transition-all focus-visible:outline-none cursor-pointer',
+                          isSelected
+                            ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                            : 'hover:opacity-90'
+                        )}
+                      >
+                        {thumbSrc ? (
+                          <img
+                            src={thumbSrc}
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-black" />
+                        )}
+                        {isSelected && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                            <div className="rounded-full bg-black/60 p-1.5">
+                              <CheckIcon className="size-4 text-white" />
+                            </div>
                           </div>
-                        </div>
-                      )}
-                      {item.photo && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownload(item);
-                          }}
-                          disabled={isDownloading}
-                          className="absolute bottom-1.5 right-1.5 p-1 rounded bg-black/50 hover:bg-black/70 transition-colors"
-                          title={t('Save to themes')}
-                        >
-                          {isDownloading ? (
-                            <Loader2 className="size-3 text-white animate-spin" />
-                          ) : (
-                            <DownloadIcon className="size-3 text-white" />
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        )}
+                        {item.photo && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(item);
+                            }}
+                            disabled={isDownloading}
+                            className="absolute bottom-1.5 right-1.5 p-1 rounded bg-black/50 hover:bg-black/70 transition-colors"
+                            title={t('Save to themes')}
+                          >
+                            {isDownloading ? (
+                              <Loader2 className="size-3 text-white animate-spin" />
+                            ) : (
+                              <DownloadIcon className="size-3 text-white" />
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </ScrollArea>
           </TabsContent>
 
