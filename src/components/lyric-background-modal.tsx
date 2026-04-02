@@ -160,6 +160,26 @@ const MIME: Record<string, string> = {
 };
 
 const THUMB_WIDTH = 400;
+const MAX_CONCURRENT_THUMBS = 3;
+let activeThumbs = 0;
+const thumbQueue: Array<() => void> = [];
+
+function acquireThumbSlot(): Promise<() => void> {
+  return new Promise((resolve) => {
+    const tryRun = () => {
+      if (activeThumbs < MAX_CONCURRENT_THUMBS) {
+        activeThumbs++;
+        resolve(() => {
+          activeThumbs--;
+          thumbQueue.shift()?.();
+        });
+      } else {
+        thumbQueue.push(tryRun);
+      }
+    };
+    tryRun();
+  });
+}
 
 function MediaThumbnail({ file, selected, onClick, onDelete }: MediaThumbnailProps) {
   const ext = file.extension.toLowerCase();
@@ -169,8 +189,13 @@ function MediaThumbnail({ file, selected, onClick, onDelete }: MediaThumbnailPro
     let thumbUrl: string | null = null;
     let cancelled = false;
 
-    readFile(file.path)
-      .then(async (bytes) => {
+    acquireThumbSlot().then(async (release) => {
+      if (cancelled) {
+        release();
+        return;
+      }
+      try {
+        const bytes = await readFile(file.path);
         if (cancelled) return;
         const mime = MIME[ext] ?? 'application/octet-stream';
         const blob = new Blob([bytes], { type: mime });
@@ -186,11 +211,14 @@ function MediaThumbnail({ file, selected, onClick, onDelete }: MediaThumbnailPro
         const ctx = canvas.getContext('2d')!;
         ctx.drawImage(bmp, 0, 0);
         bmp.close();
-        const thumbBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 });
+        const thumbBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.2 });
         thumbUrl = URL.createObjectURL(thumbBlob);
         if (!cancelled) setDisplaySrc(thumbUrl);
-      })
-      .catch(() => {});
+      } catch {
+      } finally {
+        release();
+      }
+    });
 
     return () => {
       cancelled = true;
@@ -490,9 +518,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
             value="themes"
             className="px-6 py-4 flex flex-col gap-3 min-h-[25rem] h-[40dvh]"
           >
-            {loading ? (
-              <ImageLoader className="mx-auto my-auto size-16" />
-            ) : themes.length === 0 ? (
+            {themes.length === 0 ? (
               <Empty className="min-h-[25rem] h-[40dvh]">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
