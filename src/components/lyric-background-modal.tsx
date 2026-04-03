@@ -468,8 +468,25 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
     setOpen(false);
   };
 
+  const unsplashScrollRef = useRef<HTMLDivElement>(null);
+
   const hasSearched = searchQuery.trim().length > 0;
   const displayedImages = hasSearched ? unsplashResults : DEFAULT_IMAGES;
+
+  const unsplashRows = useMemo(() => {
+    const rows: UnsplashPhoto[][] = [];
+    for (let i = 0; i < displayedImages.length; i += COLS) {
+      rows.push(displayedImages.slice(i, i + COLS));
+    }
+    return rows;
+  }, [displayedImages]);
+
+  const unsplashVirtualizer = useVirtualizer({
+    count: unsplashRows.length,
+    getScrollElement: () => unsplashScrollRef.current,
+    estimateSize: () => 130,
+    gap: GAP,
+  });
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -580,7 +597,11 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
                 className="pl-9"
               />
             </div>
-            <ScrollArea className="min-h-[22rem] h-[34dvh]">
+            <ScrollArea
+              ref={unsplashScrollRef}
+              className="min-h-[22rem] h-[34dvh]"
+              viewportClassName="pt-1 px-1.5"
+            >
               {unsplashLoading && unsplashResults.length === 0 ? (
                 <div className="flex items-center justify-center min-h-[20rem]">
                   <ImageLoader className="mx-auto" />
@@ -597,54 +618,71 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
                 </Empty>
               ) : (
                 <div className="flex flex-col gap-4">
-                  <div className="grid grid-cols-4 gap-3 pr-1 mt-1">
-                    {displayedImages.map((photo) => {
-                      const isSelected = selected?.src === photo.urls.raw;
-                      const isDownloading = downloading.has(photo.id);
-                      const label = photo.alt_description ?? photo.id;
+                  <div
+                    className="relative w-full"
+                    style={{ height: unsplashVirtualizer.getTotalSize() }}
+                  >
+                    {unsplashVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const row = unsplashRows[virtualRow.index];
                       return (
                         <div
-                          key={photo.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() =>
-                            setSelected({ type: 'image', src: photo.urls.raw, name: label })
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ')
-                              setSelected({ type: 'image', src: photo.urls.raw, name: label });
+                          key={virtualRow.index}
+                          className="absolute left-0 right-0 grid grid-cols-4 gap-3 pr-1"
+                          style={{
+                            height: virtualRow.size,
+                            transform: `translateY(${virtualRow.start}px)`,
                           }}
-                          className={cn(
-                            'group relative aspect-video rounded-lg overflow-hidden transition-all focus-visible:outline-none cursor-pointer',
-                            isSelected
-                              ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                              : 'hover:opacity-90'
-                          )}
                         >
-                          <UnsplashImage src={photo.urls.small} alt={label} />
-                          {isSelected && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                              <div className="rounded-full bg-black/60 p-1.5">
-                                <CheckIcon className="size-4 text-white" />
+                          {row.map((photo) => {
+                            const isSelected = selected?.src === photo.urls.raw;
+                            const isDownloading = downloading.has(photo.id);
+                            const label = photo.alt_description ?? photo.id;
+                            return (
+                              <div
+                                key={photo.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() =>
+                                  setSelected({ type: 'image', src: photo.urls.raw, name: label })
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ')
+                                    setSelected({ type: 'image', src: photo.urls.raw, name: label });
+                                }}
+                                className={cn(
+                                  'group relative aspect-video rounded-lg overflow-hidden transition-all focus-visible:outline-none cursor-pointer',
+                                  isSelected
+                                    ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                                    : 'hover:opacity-90'
+                                )}
+                              >
+                                <UnsplashImage src={photo.urls.small} alt={label} />
+                                {isSelected && (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                    <div className="rounded-full bg-black/60 p-1.5">
+                                      <CheckIcon className="size-4 text-white" />
+                                    </div>
+                                  </div>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownload(photo);
+                                  }}
+                                  disabled={isDownloading}
+                                  className="absolute bottom-1.5 right-1.5 p-1 rounded bg-black/50 hover:bg-black/70 transition-colors opacity-0 group-hover:opacity-100"
+                                  title={t('Save to themes')}
+                                >
+                                  {isDownloading ? (
+                                    <Loader2 className="size-3 text-white animate-spin" />
+                                  ) : (
+                                    <DownloadIcon className="size-3 text-white" />
+                                  )}
+                                </button>
                               </div>
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownload(photo);
-                            }}
-                            disabled={isDownloading}
-                            className="absolute bottom-1.5 right-1.5 p-1 rounded bg-black/50 hover:bg-black/70 transition-colors opacity-0 group-hover:opacity-100"
-                            title={t('Save to themes')}
-                          >
-                            {isDownloading ? (
-                              <Loader2 className="size-3 text-white animate-spin" />
-                            ) : (
-                              <DownloadIcon className="size-3 text-white" />
-                            )}
-                          </button>
+                            );
+                          })}
                         </div>
                       );
                     })}
