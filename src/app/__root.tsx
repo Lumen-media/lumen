@@ -1,6 +1,7 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router';
 import * as React from 'react';
 import { GlobalAlert } from '@/components/global-alert';
+import { LyricModal } from '@/components/lyric-modal';
 import { QuickShortcutsModal } from '@/components/quick-shortcuts-modal';
 import { Toaster } from '@/components/ui/sonner';
 import { useSingleInstance } from '@/hooks/use-single-instance';
@@ -18,6 +19,7 @@ function RootComponent() {
       <Toaster />
       <GlobalAlert />
       <QuickShortcutsModal />
+      <LyricModal />
     </React.Fragment>
   );
 }

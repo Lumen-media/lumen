@@ -8,11 +8,12 @@ import { toast } from 'sonner';
 import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
 import { type LyricData, lyricService } from '@/services/lyric-service';
+import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { LyricBackgroundModal, type LyricBackgroundModalRef } from './lyric-background-modal';
 import { TextEditor, type TextEditorRef } from './text-editor';
 import { Button } from './ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from './ui/card';
-import { Dialog, DialogClose, DialogContent, DialogTrigger } from './ui/dialog';
+import { Dialog, DialogClose, DialogContent } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
@@ -27,10 +28,6 @@ import {
 import { Separator } from './ui/separator';
 import { Toggle } from './ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
-
-type LyricModalProps = {
-  children: React.ReactNode;
-};
 
 type Slide = {
   id: number;
@@ -105,23 +102,35 @@ function SlidePreview({
   const [bgSrc, setBgSrc] = useState<string | undefined>();
 
   useEffect(() => {
-    if (!effectiveBg) { setBgSrc(undefined); return; }
+    if (!effectiveBg) {
+      setBgSrc(undefined);
+      return;
+    }
     if (effectiveBg.startsWith('http') || effectiveBg.startsWith('#')) {
       setBgSrc(effectiveBg);
       return;
     }
     let url: string;
-    readFile(effectiveBg).then((bytes) => {
-      url = URL.createObjectURL(new Blob([bytes]));
-      setBgSrc(url);
-    }).catch(() => setBgSrc(undefined));
-    return () => { if (url) URL.revokeObjectURL(url); };
+    readFile(effectiveBg)
+      .then((bytes) => {
+        url = URL.createObjectURL(new Blob([bytes]));
+        setBgSrc(url);
+      })
+      .catch(() => setBgSrc(undefined));
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
   }, [effectiveBg]);
 
   return (
     <div className="relative aspect-video bg-black rounded-lg border border-border/20 overflow-hidden">
       {bgSrc && (
-        <img src={bgSrc} alt="" className="absolute inset-0 w-full h-full object-cover" aria-hidden />
+        <img
+          src={bgSrc}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+          aria-hidden
+        />
       )}
       <span className="absolute top-2 left-2 bg-primary text-primary-foreground text-xs font-bold rounded px-1.5 py-0.5 min-w-5 text-center z-10">
         {slide.id}
@@ -189,16 +198,56 @@ const defaultValues: LyricFormValues = {
   slideBackgrounds: {},
 };
 
-export const LyricModal = ({ children }: LyricModalProps) => {
+export const LyricModal = () => {
+  const { isOpen, filePath, close } = useLyricModalStore();
   const editorRef = useRef<TextEditorRef | null>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
   const backgroundModalRef = useRef<LyricBackgroundModalRef>(null);
   const [saving, setSaving] = useState(false);
+  const [loadingFile, setLoadingFile] = useState(false);
   const { fonts } = useLocalFonts();
+  const loadedPathRef = useRef<string | null>(null);
 
   const form = useForm({
     defaultValues,
   });
+
+  useEffect(() => {
+    if (!isOpen) {
+      loadedPathRef.current = null;
+      return;
+    }
+    if (!filePath || filePath === loadedPathRef.current) return;
+
+    setLoadingFile(true);
+    lyricService
+      .load(filePath)
+      .then((data) => {
+        loadedPathRef.current = filePath;
+        const markdown = data.slides.map((s) => s.lines.join('\n')).join('\n\n\n');
+        const slideBackgrounds: Record<number, string> = {};
+        for (let i = 0; i < data.slides.length; i++) {
+          if (data.slides[i].background) {
+            slideBackgrounds[i] = data.slides[i].background!;
+          }
+        }
+        form.reset();
+        form.setFieldValue('name', data.metadata.name);
+        form.setFieldValue('author', data.metadata.author);
+        form.setFieldValue('notes', data.metadata.notes);
+        form.setFieldValue('font', data.metadata.font);
+        form.setFieldValue('fontSize', data.metadata.fontSize);
+        form.setFieldValue('alignment', [data.metadata.alignment || 'center']);
+        form.setFieldValue('globalBackground', data.metadata.globalBackground);
+        form.setFieldValue('slideBackgrounds', slideBackgrounds);
+        form.setFieldValue('markdown', markdown);
+        editorRef.current?.setMarkdown(markdown);
+      })
+      .catch((err) => {
+        console.error('Failed to load lyric file:', err);
+        toast.error(t('Failed to load lyric file'));
+      })
+      .finally(() => setLoadingFile(false));
+  }, [isOpen, filePath, form.reset, form.setFieldValue]);
 
   const fontOptions = fonts.map((f) => ({ label: f, value: f }));
 
@@ -223,11 +272,11 @@ export const LyricModal = ({ children }: LyricModalProps) => {
           background: values.slideBackgrounds[i],
         })),
       };
-      await lyricService.save(data);
+      await lyricService.save(data, filePath ?? undefined);
       toast.success(t('Lyrics saved successfully.'));
       form.reset();
       editorRef.current?.setMarkdown('');
-      closeRef.current?.click();
+      close();
     } catch (err) {
       console.error(err);
       toast.error(t('Failed to save lyrics'));
@@ -236,11 +285,18 @@ export const LyricModal = ({ children }: LyricModalProps) => {
     }
   };
 
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      close();
+      form.reset();
+      editorRef.current?.setMarkdown('');
+    }
+  };
+
   return (
     <>
       <LyricBackgroundModal ref={backgroundModalRef} />
-      <Dialog>
-        <DialogTrigger>{children}</DialogTrigger>
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogContent
           showCloseButton={false}
           className="w-full sm:max-w-[90dvw] h-full max-h-[80dvh] flex"
@@ -271,7 +327,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
                 <>
                   <Card className="flex-1 p-0 gap-0 overflow-hidden">
                     <CardHeader className="p-4 flex-row items-center gap-7">
-                      <h4 className="uppercase">Theme Settings</h4>
+                      <h4 className="uppercase">{t('Theme Settings')}</h4>
 
                       <Select
                         value={selectedFont}
@@ -300,7 +356,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
 
                       <Input
                         className="max-w-24 h-8 bg-background border-0"
-                        placeholder="Font size"
+                        placeholder={t('Font size')}
                         value={fontSize}
                         onChange={(e) => form.setFieldValue('fontSize', e.target.value)}
                         onBlur={() => {
@@ -321,13 +377,13 @@ export const LyricModal = ({ children }: LyricModalProps) => {
                           )
                         }
                       >
-                        <Palette /> Global Background
+                        <Palette /> {t('Global Background')}
                       </Button>
 
                       <Toggle className="ml-auto data-[state=on]:bg-transparent aria-pressed:bg-transparent [&[aria-pressed=true]_.eye-open]:hidden [&[aria-pressed=false]_.eye-closed]:hidden">
                         <Eye className="eye-open" />
                         <EyeOff className="eye-closed" />
-                        Live Preview
+                        {t('Live Preview')}
                       </Toggle>
                     </CardHeader>
                     <Separator />
@@ -336,7 +392,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
                         {slides.length === 0 ? (
                           <div className="flex items-center justify-center h-full p-6">
                             <p className="text-muted-foreground text-sm">
-                              Start typing in the editor to preview slides
+                              {t('Start typing in the editor to preview slides')}
                             </p>
                           </div>
                         ) : (
@@ -368,7 +424,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
 
                   <Card className="flex-1 max-w-1/5 overflow-hidden">
                     <section className="flex flex-col gap-3">
-                      <Label className="uppercase text-xs">Text Alignment</Label>
+                      <Label className="uppercase text-xs">{t('Text Alignment')}</Label>
                       <ToggleGroup
                         value={alignment}
                         onValueChange={(val) => form.setFieldValue('alignment', val)}
@@ -403,12 +459,12 @@ export const LyricModal = ({ children }: LyricModalProps) => {
                     </section>
 
                     <section className="flex flex-col gap-3">
-                      <Label className="uppercase text-xs">Metadata</Label>
+                      <Label className="uppercase text-xs">{t('Metadata')}</Label>
                       <form.Field name="name">
                         {(field) => (
                           <Input
                             className="h-8 bg-background border-0"
-                            placeholder="Name"
+                            placeholder={t('Name')}
                             value={field.state.value}
                             onChange={(e) => field.handleChange(e.target.value)}
                             onBlur={field.handleBlur}
@@ -419,7 +475,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
                         {(field) => (
                           <Input
                             className="h-8 bg-background border-0"
-                            placeholder="Author"
+                            placeholder={t('Author')}
                             value={field.state.value}
                             onChange={(e) => field.handleChange(e.target.value)}
                             onBlur={field.handleBlur}
@@ -430,7 +486,7 @@ export const LyricModal = ({ children }: LyricModalProps) => {
                         {(field) => (
                           <Input
                             className="h-8 bg-background border-0"
-                            placeholder="Notes (Key, BPM...)"
+                            placeholder={t('Notes (Key, BPM...)')}
                             value={field.state.value}
                             onChange={(e) => field.handleChange(e.target.value)}
                             onBlur={field.handleBlur}
@@ -440,31 +496,34 @@ export const LyricModal = ({ children }: LyricModalProps) => {
                     </section>
 
                     <section className="flex flex-col flex-1 gap-3 min-h-0">
-                      <Label className="uppercase">Lyrics Editor</Label>
+                      <Label className="uppercase">{t('Lyrics Editor')}</Label>
 
                       <ScrollArea className="flex-1 overflow-hidden bg-background rounded-xl pb-4">
                         <TextEditor
                           ref={editorRef}
                           onChange={(md) => form.setFieldValue('markdown', md)}
                           debounce={300}
-                          placeholder="Type your lyrics here..."
+                          placeholder={t('Type your lyrics here...')}
                         />
                       </ScrollArea>
 
-                      <p className="opacity-60">Double enter creates a new slide</p>
+                      <p className="opacity-60">{t('Double enter creates a new slide')}</p>
                     </section>
 
                     <CardFooter className="flex items-center gap-3 w-full px-0 mt-auto">
-                      <DialogClose ref={closeRef} className="hidden" />
                       <DialogClose
                         className="flex-1 h-auto py-2"
                         render={(props) => (
                           <Button {...props} variant="secondary">
-                            Cancel
+                            {t('Cancel')}
                           </Button>
                         )}
                       />
-                      <Button className="flex-1 h-auto py-2" disabled={saving} onClick={handleSave}>
+                      <Button
+                        className="flex-1 h-auto py-2"
+                        disabled={saving || loadingFile}
+                        onClick={handleSave}
+                      >
                         {t('save')}
                       </Button>
                     </CardFooter>
