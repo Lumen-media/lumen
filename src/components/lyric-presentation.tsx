@@ -35,7 +35,6 @@ function useBackgroundSrc(path?: string) {
   return src;
 }
 
-/** Keeps old src visible until the new one is fully loaded, preventing flashes. */
 function useSlideBgSrc(path?: string) {
   const [displayedSrc, setDisplayedSrc] = useState<string | undefined>();
   const blobUrlsRef = useRef<string[]>([]);
@@ -60,7 +59,6 @@ function useSlideBgSrc(path?: string) {
         blobUrlsRef.current.push(url);
         setDisplayedSrc(url);
 
-        // Revoke all but the latest blob URL
         while (blobUrlsRef.current.length > 1) {
           URL.revokeObjectURL(blobUrlsRef.current.shift()!);
         }
@@ -72,7 +70,6 @@ function useSlideBgSrc(path?: string) {
     };
   }, [path]);
 
-  // Cleanup all blob URLs on unmount
   useEffect(() => {
     return () => {
       for (const url of blobUrlsRef.current) {
@@ -90,7 +87,6 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null!);
   const textRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
   const [containerWidth, setContainerWidth] = useState(window.innerWidth);
 
   useEffect(() => {
@@ -101,7 +97,6 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
 
   const scale = containerWidth / VIRTUAL_W;
 
-  // Load lyric file
   useEffect(() => {
     if (!filePath) return;
     readTextFile(filePath)
@@ -112,28 +107,6 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
       })
       .catch(console.error);
   }, [filePath]);
-
-  // WebSocket connection for sending events back
-  useEffect(() => {
-    const socket = new WebSocket('ws://localhost:8080');
-    socket.onopen = () => {
-      wsRef.current = socket;
-    };
-    socket.onclose = () => {
-      wsRef.current = null;
-    };
-    return () => {
-      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
-        socket.close();
-      }
-    };
-  }, []);
-
-  const sendWs = useCallback((message: object) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message));
-    }
-  }, []);
 
   const totalSlides = lyricData?.slides.length ?? 0;
   const [textVisible, setTextVisible] = useState(true);
@@ -152,12 +125,9 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
 
   const goNext = useCallback(() => {
     if (!lyricData || pendingSlideRef.current !== null) return;
-    if (currentSlide >= totalSlides - 1) {
-      sendWs({ event: 'stop' });
-      return;
-    }
+    if (currentSlide >= totalSlides - 1) return;
     changeSlide(currentSlide + 1);
-  }, [currentSlide, totalSlides, lyricData, sendWs, changeSlide]);
+  }, [currentSlide, totalSlides, lyricData, changeSlide]);
 
   const goPrev = useCallback(() => {
     if (pendingSlideRef.current !== null) return;
@@ -165,7 +135,6 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
     changeSlide(currentSlide - 1);
   }, [currentSlide, changeSlide]);
 
-  // Listen for Tauri events (next/previous)
   useEffect(() => {
     const unlistenNext = listen('next', () => goNext());
     const unlistenPrev = listen('previous', () => goPrev());
@@ -176,7 +145,6 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
     };
   }, [goNext, goPrev]);
 
-  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
@@ -191,7 +159,6 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goNext, goPrev]);
 
-  // Auto-fit text size
   const slide = lyricData?.slides[currentSlide];
   const fontSizeNum = Number.parseFloat(lyricData?.metadata.fontSize ?? '48') || 48;
 
@@ -229,7 +196,6 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
 
   return (
     <div className="h-full w-full bg-black relative overflow-hidden">
-      {/* Global background - always visible */}
       {globalBgSrc && (
         <img
           src={globalBgSrc}
@@ -239,7 +205,6 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
         />
       )}
 
-      {/* Slide-specific background - overlays when present */}
       {slideBgSrc && (
         <img
           src={slideBgSrc}
@@ -249,7 +214,6 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
         />
       )}
 
-      {/* Text content */}
       <div ref={containerRef} className="absolute inset-0 z-[2]">
         <div
           className="absolute top-1/2 left-1/2 flex items-center justify-center overflow-hidden"

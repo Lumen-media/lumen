@@ -181,10 +181,6 @@ export const Videoplayer = ({
       }
     });
 
-    const unlistenLoadLyric = listen('load-lyric', () => {
-      setPlaying(false);
-    });
-
     const unlistenLoadUrl = listen<{ url: string; time: number }>('load-url', async (event) => {
       const { url: filePath, time: seekTime } = event.payload;
       if (currentBlobUrl.current) {
@@ -229,7 +225,6 @@ export const Videoplayer = ({
       unlistenLoop.then((f) => f());
       unlistenStop.then((f) => f());
       unlistenLoadUrl.then((f) => f());
-      unlistenLoadLyric.then((f) => f());
     };
   }, [handleMute, handlePlayPause]);
 
