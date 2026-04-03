@@ -11,7 +11,7 @@ interface PlayerStore {
   localTitle: string;
   localArtist: string;
   localUrl: string | undefined;
-  localMediaType: 'audio' | 'video' | 'stream' | 'lyric' | undefined;
+  localMediaType: 'audio' | 'video' | 'stream' | undefined;
   isLoop: boolean;
   isScreenOpen: boolean;
   volume: number;
@@ -36,6 +36,7 @@ interface PlayerStore {
   handleSliderChange: (value: number[]) => void;
   setIsDragging: (dragging: boolean) => void;
   loadFile: (filePath: string, seekTime?: number) => Promise<void>;
+  presentLyric: (filePath: string) => Promise<void>;
   restoreLastMedia: () => Promise<void>;
 }
 
@@ -86,10 +87,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             lastSavedDuration = event.payload.duration;
             saveSetting('last_duration', String(event.payload.duration)).catch(() => {});
 
-            if (get().currentFilePath) {
+            const filePath = get().currentFilePath;
+            if (filePath) {
               useQueueStore
                 .getState()
-                .updateMetadata(get().currentFilePath, { duration: event.payload.duration })
+                .updateMetadata(filePath, { duration: event.payload.duration })
                 .catch(() => {});
             }
           }
@@ -105,10 +107,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         saveSetting('last_title', title).catch(() => {});
         saveSetting('last_artist', artist).catch(() => {});
 
-        if (get().currentFilePath) {
+        const metaFilePath = get().currentFilePath;
+        if (metaFilePath) {
           useQueueStore
             .getState()
-            .updateMetadata(get().currentFilePath, { title, artist })
+            .updateMetadata(metaFilePath, { title, artist })
             .catch(() => {});
         }
       }
@@ -210,7 +213,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     const existing = await getMediaWindow();
     if (!existing) {
-      if (localMediaType !== 'video' && localMediaType !== 'lyric') return;
+      if (localMediaType !== 'video') return;
       try {
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
         const win = await getMediaWindow();
@@ -225,7 +228,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       await existing.hide();
       set({ isScreenOpen: false });
     } else {
-      if (localMediaType !== 'video' && localMediaType !== 'lyric') return;
+      if (localMediaType !== 'video') return;
       await existing.show();
       set({ isScreenOpen: true });
     }
@@ -241,10 +244,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   loadFile: async (filePath: string, seekTime = 0) => {
     const videoExtensions = ['mp4', 'webm', 'mkv', 'avi', 'mov'];
-    const lyricExtensions = ['md'];
     const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
     const isVideo = videoExtensions.includes(ext);
-    const isLyric = lyricExtensions.includes(ext);
 
     let win = await getMediaWindow();
     if (!win) {
@@ -264,27 +265,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       await new Promise((r) => setTimeout(r, 50));
     }
 
-    if (isLyric) {
-      get().sendWs({ event: 'load_lyric', url: filePath });
-      const name = filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || '';
-      set({
-        isPlaying: true,
-        localMediaType: 'lyric',
-        restoredFilePath: null,
-        currentFilePath: filePath,
-        localTime: 0,
-        localDuration: 0,
-        localTitle: name,
-        localArtist: '',
-      });
-
-      if (win) {
-        await win.show();
-        set({ isScreenOpen: true });
-      }
-      return;
-    }
-
     get().sendWs({ event: 'load_url', url: filePath, value: seekTime });
     set({
       isPlaying: true,
@@ -300,6 +280,32 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     saveSetting('last_time', '0').catch(() => {});
 
     if (isVideo && win) {
+      await win.show();
+      set({ isScreenOpen: true });
+    }
+  },
+
+  presentLyric: async (filePath: string) => {
+    let win = await getMediaWindow();
+    if (!win) {
+      try {
+        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+        await new Promise((r) => setTimeout(r, 800));
+        win = await getMediaWindow();
+      } catch {
+        return;
+      }
+    }
+
+    const deadline = Date.now() + 3000;
+    while (get().ws?.readyState !== WebSocket.OPEN) {
+      if (Date.now() >= deadline) return;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+
+    get().sendWs({ event: 'load_lyric', url: filePath });
+
+    if (win) {
       await win.show();
       set({ isScreenOpen: true });
     }
