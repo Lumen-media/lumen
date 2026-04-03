@@ -366,7 +366,9 @@ export function MediaPanel() {
                               console.log('File clicked:', file.name);
                             }}
                             onDoubleClick={
-                              activeMedia === 'audio' || activeMedia === 'video'
+                              activeMedia === 'audio' ||
+                              activeMedia === 'video' ||
+                              activeMedia === 'lyrics'
                                 ? (file) => player.loadFile(file.path)
                                 : undefined
                             }
@@ -375,8 +377,16 @@ export function MediaPanel() {
                                 ? (file) => openLyricModal(file.path)
                                 : undefined
                             }
-                            onPlayNext={activeMedia === 'video' ? playNext : undefined}
-                            onAddToQueue={activeMedia === 'video' ? addToQueue : undefined}
+                            onPlayNext={
+                              activeMedia === 'video' || activeMedia === 'lyrics'
+                                ? playNext
+                                : undefined
+                            }
+                            onAddToQueue={
+                              activeMedia === 'video' || activeMedia === 'lyrics'
+                                ? addToQueue
+                                : undefined
+                            }
                           />
                         </div>
                       </div>
