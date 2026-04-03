@@ -223,13 +223,17 @@ export const LyricModal = () => {
       .load(filePath)
       .then((data) => {
         loadedPathRef.current = filePath;
-        const markdown = data.slides.map((s) => s.lines.join('\n')).join('\n\n\n');
         const slideBackgrounds: Record<number, string> = {};
         for (let i = 0; i < data.slides.length; i++) {
           if (data.slides[i].background) {
             slideBackgrounds[i] = data.slides[i].background!;
           }
         }
+
+        const html = data.slides
+          .map((s) => s.lines.map((l) => `<p>${l}</p>`).join(''))
+          .join('<p></p>');
+
         form.reset();
         form.setFieldValue('name', data.metadata.name);
         form.setFieldValue('author', data.metadata.author);
@@ -239,8 +243,9 @@ export const LyricModal = () => {
         form.setFieldValue('alignment', [data.metadata.alignment || 'center']);
         form.setFieldValue('globalBackground', data.metadata.globalBackground);
         form.setFieldValue('slideBackgrounds', slideBackgrounds);
+        editorRef.current?.editor?.commands.setContent(html);
+        const markdown = editorRef.current?.getMarkdown() ?? '';
         form.setFieldValue('markdown', markdown);
-        editorRef.current?.setMarkdown(markdown);
       })
       .catch((err) => {
         console.error('Failed to load lyric file:', err);
