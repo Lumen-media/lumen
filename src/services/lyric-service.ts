@@ -1,5 +1,5 @@
 import { join } from '@tauri-apps/api/path';
-import { exists, readTextFile, stat, writeTextFile } from '@tauri-apps/plugin-fs';
+import { exists, readTextFile, rename, stat, writeTextFile } from '@tauri-apps/plugin-fs';
 import { fileInitService } from './file-init-service';
 import { mediaDbService } from './media-db-service';
 
@@ -128,7 +128,24 @@ class LyricService {
     let filePath: string;
 
     if (existingPath && (await exists(existingPath))) {
-      filePath = existingPath;
+      const existingName = existingPath.split(/[\\/]/).pop() || '';
+      if (existingName !== fileName) {
+        const folder = existingPath.substring(0, existingPath.length - existingName.length);
+        let newPath = await join(folder, fileName);
+        if (newPath !== existingPath && (await exists(newPath))) {
+          let counter = 1;
+          const base = fileName.replace(/\.md$/, '');
+          while (await exists(newPath)) {
+            newPath = await join(folder, `${base} (${counter}).md`);
+            counter++;
+          }
+        }
+        await rename(existingPath, newPath);
+        await mediaDbService.deleteFile(existingPath);
+        filePath = newPath;
+      } else {
+        filePath = existingPath;
+      }
     } else {
       const lyricsFolder = await fileInitService.getMediaTypePath('lyrics');
       filePath = await join(lyricsFolder, fileName);
