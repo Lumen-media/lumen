@@ -11,7 +11,7 @@ interface PlayerStore {
   localTitle: string;
   localArtist: string;
   localUrl: string | undefined;
-  localMediaType: 'audio' | 'video' | 'stream' | undefined;
+  localMediaType: 'audio' | 'video' | 'stream' | 'lyric' | undefined;
   isLoop: boolean;
   isScreenOpen: boolean;
   volume: number;
@@ -210,7 +210,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     const existing = await getMediaWindow();
     if (!existing) {
-      if (localMediaType !== 'video') return;
+      if (localMediaType !== 'video' && localMediaType !== 'lyric') return;
       try {
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
         const win = await getMediaWindow();
@@ -225,7 +225,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       await existing.hide();
       set({ isScreenOpen: false });
     } else {
-      if (localMediaType !== 'video') return;
+      if (localMediaType !== 'video' && localMediaType !== 'lyric') return;
       await existing.show();
       set({ isScreenOpen: true });
     }
@@ -241,8 +241,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   loadFile: async (filePath: string, seekTime = 0) => {
     const videoExtensions = ['mp4', 'webm', 'mkv', 'avi', 'mov'];
+    const lyricExtensions = ['md'];
     const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
     const isVideo = videoExtensions.includes(ext);
+    const isLyric = lyricExtensions.includes(ext);
 
     let win = await getMediaWindow();
     if (!win) {
@@ -260,6 +262,27 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     while (get().ws?.readyState !== WebSocket.OPEN) {
       if (Date.now() >= deadline) return;
       await new Promise((r) => setTimeout(r, 50));
+    }
+
+    if (isLyric) {
+      get().sendWs({ event: 'load_lyric', url: filePath });
+      const name = filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || '';
+      set({
+        isPlaying: true,
+        localMediaType: 'lyric',
+        restoredFilePath: null,
+        currentFilePath: filePath,
+        localTime: 0,
+        localDuration: 0,
+        localTitle: name,
+        localArtist: '',
+      });
+
+      if (win) {
+        await win.show();
+        set({ isScreenOpen: true });
+      }
+      return;
     }
 
     get().sendWs({ event: 'load_url', url: filePath, value: seekTime });

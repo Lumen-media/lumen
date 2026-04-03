@@ -104,6 +104,15 @@ async fn handle_connection(
                                     )
                                     .map_err(|e| e.to_string())?;
                                 }
+                                "load_lyric" => {
+                                    app.emit(
+                                        "load-lyric",
+                                        serde_json::json!({
+                                            "url": audio_event.url.unwrap_or_default(),
+                                        }),
+                                    )
+                                    .map_err(|e| e.to_string())?;
+                                }
                                 "set_loop" => {
                                     let enabled =
                                         audio_event.value.map(|v| v != 0.0).unwrap_or(false);

@@ -1,6 +1,8 @@
+import { listen } from '@tauri-apps/api/event';
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
+import { LyricPresentation } from '@/components/lyric-presentation';
 import { Videoplayer } from '@/components/ui/videoplayer';
 
 export const Route = createFileRoute('/media-window')({
@@ -9,6 +11,8 @@ export const Route = createFileRoute('/media-window')({
 
 function MediaWindowComponent() {
   const [isFullscreen, setIsFullscreen] = useState(true);
+  const [mode, setMode] = useState<'video' | 'lyric'>('video');
+  const [lyricPath, setLyricPath] = useState('');
 
   const saveCurrentPosition = useCallback(async () => {
     try {
@@ -117,6 +121,22 @@ function MediaWindowComponent() {
 
   useEventListener('keydown', handleKeyDown);
 
+  useEffect(() => {
+    const unlistenLyric = listen<{ url: string }>('load-lyric', (event) => {
+      setMode('lyric');
+      setLyricPath(event.payload.url);
+    });
+
+    const unlistenLoadUrl = listen('load-url', () => {
+      setMode('video');
+    });
+
+    return () => {
+      unlistenLyric.then((f) => f());
+      unlistenLoadUrl.then((f) => f());
+    };
+  }, []);
+
   useInterval(
     () => {
       void debouncedSavePosition();
@@ -127,6 +147,11 @@ function MediaWindowComponent() {
   return (
     <div className="h-dvh w-dvw bg-black">
       <Videoplayer className="h-full w-full" url="" autoplay muted={false} interactive={false} />
+      {mode === 'lyric' && lyricPath && (
+        <div className="absolute inset-0 z-10">
+          <LyricPresentation filePath={lyricPath} />
+        </div>
+      )}
     </div>
   );
 }
