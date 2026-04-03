@@ -8,6 +8,7 @@ import {
   ListPlus,
   ListVideo,
   Music,
+  Pencil,
   Trash2,
   Video,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ interface FileListItemProps {
   mediaType: MediaType;
   onClick?: (file: FileInfo) => void;
   onDoubleClick?: (file: FileInfo) => void;
+  onEdit?: (file: FileInfo) => void;
   onPlayNext?: (file: FileInfo) => void;
   onAddToQueue?: (file: FileInfo) => void;
   isFocused?: boolean;
@@ -75,6 +77,7 @@ export function FileListItem({
   mediaType,
   onClick,
   onDoubleClick,
+  onEdit,
   onPlayNext,
   onAddToQueue,
   isFocused,
@@ -155,6 +158,15 @@ export function FileListItem({
                 Add to queue
               </ContextMenuItem>
             )}
+            <ContextMenuSeparator />
+          </>
+        )}
+        {onEdit && (
+          <>
+            <ContextMenuItem onClick={() => onEdit(file)}>
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+              Edit
+            </ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}

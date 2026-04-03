@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/card';
 import { useAnnounce } from '@/hooks/use-announce';
 import { cn } from '@/lib/utils';
 import { type FileInfo, fileInitService, fileManagementService, type MediaType } from '@/services';
+import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { useQueueStore } from '@/stores/queue-store';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
@@ -38,6 +39,7 @@ export function MediaPanel() {
   const { t } = useTranslation();
   const player = usePlayerStore();
   const { addToQueue, playNext } = useQueueStore();
+  const openLyricModal = useLyricModalStore((s) => s.open);
   const [activeMedia, setActiveMedia] = useState<MediaType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
@@ -366,6 +368,11 @@ export function MediaPanel() {
                             onDoubleClick={
                               activeMedia === 'audio' || activeMedia === 'video'
                                 ? (file) => player.loadFile(file.path)
+                                : undefined
+                            }
+                            onEdit={
+                              activeMedia === 'lyrics'
+                                ? (file) => openLyricModal(file.path)
                                 : undefined
                             }
                             onPlayNext={activeMedia === 'video' ? playNext : undefined}
