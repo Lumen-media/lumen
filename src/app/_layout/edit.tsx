@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { Pencil } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,23 @@ function RouteComponent() {
   const openLyricModal = useLyricModalStore((s) => s.open);
   const { filePath, lyricData, slideIds, selectedSlideIndex, selectSlide, isLoading, restore } =
     useLyricEditStore();
+
+  const thumbRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+  const slideRowRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+
+  const handleSelectSlide = useCallback(
+    (index: number) => {
+      const next = selectedSlideIndex === index ? null : index;
+      selectSlide(next);
+      if (next !== null) {
+        thumbRefs.current
+          .get(next)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        slideRowRefs.current.get(next)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    },
+    [selectedSlideIndex, selectSlide]
+  );
 
   useEffect(() => {
     if (!filePath) restore();
@@ -58,10 +75,14 @@ function RouteComponent() {
             <div key={slideIds[index]}>
               {index > 0 && <Separator className="my-1" />}
               <SlideRow
+                ref={(el: HTMLButtonElement | null) => {
+                  if (el) slideRowRefs.current.set(index, el);
+                  else slideRowRefs.current.delete(index);
+                }}
                 slide={slide}
                 index={index}
                 isSelected={selectedSlideIndex === index}
-                onClick={() => selectSlide(selectedSlideIndex === index ? null : index)}
+                onClick={() => handleSelectSlide(index)}
                 textAlign={lyricData.metadata.alignment as React.CSSProperties['textAlign']}
                 font={lyricData.metadata.font}
               />
@@ -70,19 +91,23 @@ function RouteComponent() {
         </div>
       </ScrollArea>
 
-      <div className="border-t border-border px-6 py-3">
+      <div className="border-t border-border pt-2 mx-6">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
           {t('Sequence Preview')}
         </h3>
         <ScrollArea className="w-full">
-          <div className="flex gap-3 py-1 px-1">
+          <div className="flex gap-3 py-1 pb-3 px-1">
             {lyricData.slides.map((slide, index) => (
               <SequenceThumbnail
+                ref={(el: HTMLButtonElement | null) => {
+                  if (el) thumbRefs.current.set(index, el);
+                  else thumbRefs.current.delete(index);
+                }}
                 key={slideIds[index]}
                 slide={slide}
                 isSelected={selectedSlideIndex === index}
                 lyricData={lyricData}
-                onClick={() => selectSlide(selectedSlideIndex === index ? null : index)}
+                onClick={() => handleSelectSlide(index)}
               />
             ))}
           </div>
@@ -93,27 +118,24 @@ function RouteComponent() {
   );
 }
 
-function SlideRow({
-  slide,
-  index,
-  isSelected,
-  onClick,
-  textAlign,
-  font,
-}: {
-  slide: LyricSlide;
-  index: number;
-  isSelected: boolean;
-  onClick: () => void;
-  textAlign?: React.CSSProperties['textAlign'];
-  font?: string;
-}) {
+const SlideRow = forwardRef<
+  HTMLButtonElement,
+  {
+    slide: LyricSlide;
+    index: number;
+    isSelected: boolean;
+    onClick: () => void;
+    textAlign?: React.CSSProperties['textAlign'];
+    font?: string;
+  }
+>(({ slide, index, isSelected, onClick, textAlign, font }, ref) => {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       className={cn(
-        'flex items-start gap-4 text-left rounded-lg px-4 py-3 transition-colors outline-none',
+        'flex items-start w-full gap-4 text-left rounded-lg px-4 py-3 transition-colors outline-none',
         isSelected ? 'bg-primary/10' : 'hover:bg-muted/50'
       )}
     >
@@ -138,7 +160,7 @@ function SlideRow({
       </div>
     </button>
   );
-}
+});
 
 function getSlideLabel(index: number): string {
   return `Slide ${index + 1}`;
@@ -175,17 +197,15 @@ function useBackgroundSrc(path?: string) {
   return src;
 }
 
-function SequenceThumbnail({
-  slide,
-  isSelected,
-  lyricData,
-  onClick,
-}: {
-  slide: LyricSlide;
-  isSelected: boolean;
-  lyricData: LyricData;
-  onClick: () => void;
-}) {
+const SequenceThumbnail = forwardRef<
+  HTMLButtonElement,
+  {
+    slide: LyricSlide;
+    isSelected: boolean;
+    lyricData: LyricData;
+    onClick: () => void;
+  }
+>(({ slide, isSelected, lyricData, onClick }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null!);
   const textRef = useRef<HTMLDivElement>(null);
   const { width: containerWidth = 0 } = useResizeObserver({ ref: containerRef });
@@ -222,6 +242,7 @@ function SequenceThumbnail({
 
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       className={cn(
@@ -265,4 +286,4 @@ function SequenceThumbnail({
       </div>
     </button>
   );
-}
+});
