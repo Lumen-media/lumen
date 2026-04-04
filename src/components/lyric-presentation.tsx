@@ -1,12 +1,8 @@
 import { listen } from '@tauri-apps/api/event';
 import { readFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useIsomorphicLayoutEffect } from 'usehooks-ts';
+import { useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
 import { type LyricData, parseLyricFile } from '@/services/lyric-service';
-
-const VIRTUAL_W = 1920;
-const VIRTUAL_H = 1080;
-const AVAILABLE_H = VIRTUAL_H - VIRTUAL_W * 0.1;
 
 function useBackgroundSrc(path?: string) {
   const [src, setSrc] = useState<string | undefined>();
@@ -85,17 +81,9 @@ function useSlideBgSrc(path?: string) {
 export function LyricPresentation({ filePath }: { filePath: string }) {
   const [lyricData, setLyricData] = useState<LyricData | null>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null!);
   const textRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(window.innerWidth);
-
-  useEffect(() => {
-    const handleResize = () => setContainerWidth(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const scale = containerWidth / VIRTUAL_W;
+  const { width: winW, height: winH } = useWindowSize();
+  const availableH = winH - winW * 0.1;
 
   useEffect(() => {
     if (!filePath) return;
@@ -172,7 +160,7 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
     while (hi - lo > 1) {
       const mid = Math.floor((lo + hi) / 2);
       text.style.fontSize = `${mid}px`;
-      if (text.scrollHeight <= AVAILABLE_H) {
+      if (text.scrollHeight <= availableH) {
         lo = mid;
       } else {
         hi = mid;
@@ -180,7 +168,7 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
     }
 
     text.style.fontSize = `${lo}px`;
-    if (text.scrollHeight > AVAILABLE_H) {
+    if (text.scrollHeight > availableH) {
       text.style.fontSize = `${Math.max(lo - 1, 1)}px`;
     }
   });
@@ -214,31 +202,25 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
         />
       )}
 
-      <div ref={containerRef} className="absolute inset-0 z-[2]">
+      <div
+        className="absolute inset-0 z-[2] flex items-center justify-center overflow-hidden p-[5%]"
+        style={{
+          opacity: textVisible ? 1 : 0,
+          transition: `opacity ${fadeMs}ms ease`,
+        }}
+      >
         <div
-          className="absolute top-1/2 left-1/2 flex items-center justify-center overflow-hidden"
+          ref={textRef}
+          className="text-white uppercase leading-relaxed w-full font-semibold"
           style={{
-            width: `${VIRTUAL_W}px`,
-            height: `${VIRTUAL_H}px`,
-            padding: '5%',
-            transform: `translate(-50%, -50%) scale(${scale})`,
-            opacity: scale > 0 && textVisible ? 1 : 0,
-            transition: `opacity ${fadeMs}ms ease`,
+            textAlign,
+            fontFamily: lyricData.metadata.font || undefined,
           }}
         >
-          <div
-            ref={textRef}
-            className="text-white uppercase leading-relaxed w-full font-semibold"
-            style={{
-              textAlign,
-              fontFamily: lyricData.metadata.font || undefined,
-            }}
-          >
-            {slide.lines.map((line) => {
-              const id = crypto.randomUUID();
-              return <div key={`${currentSlide}-${id}`}>{line}</div>;
-            })}
-          </div>
+          {slide.lines.map((line) => {
+            const id = crypto.randomUUID();
+            return <div key={`${currentSlide}-${id}`}>{line}</div>;
+          })}
         </div>
       </div>
     </div>
