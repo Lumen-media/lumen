@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/card';
 import { useAnnounce } from '@/hooks/use-announce';
 import { cn } from '@/lib/utils';
 import { type FileInfo, fileInitService, fileManagementService, type MediaType } from '@/services';
+import { useLyricEditStore } from '@/stores/lyric-edit-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { useQueueStore } from '@/stores/queue-store';
@@ -39,6 +40,7 @@ export function MediaPanel() {
   const { t } = useTranslation();
   const player = usePlayerStore();
   const { addToQueue, playNext } = useQueueStore();
+  const loadLyricPreview = useLyricEditStore((s) => s.loadLyric);
   const openLyricModal = useLyricModalStore((s) => s.open);
   const [activeMedia, setActiveMedia] = useState<MediaType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -249,7 +251,7 @@ export function MediaPanel() {
               <Button
                 size="icon"
                 className="rounded-full"
-                onClick={handleAddFiles}
+                onClick={activeMedia === 'lyrics' ? () => openLyricModal() : handleAddFiles}
                 aria-label={`Add files to ${currentItem?.label.toLowerCase()}`}
                 disabled={isLoading}
               >
@@ -363,7 +365,9 @@ export function MediaPanel() {
                             mediaType={activeMedia}
                             isFocused={virtualItem.index === focusedIndex}
                             onClick={(file) => {
-                              console.log('File clicked:', file.name);
+                              if (activeMedia === 'lyrics') {
+                                loadLyricPreview(file.path);
+                              }
                             }}
                             onDoubleClick={
                               activeMedia === 'audio' || activeMedia === 'video'
