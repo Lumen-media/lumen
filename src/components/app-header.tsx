@@ -1,8 +1,9 @@
 import { Link, useRouterState } from '@tanstack/react-router';
-import { Monitor, Settings, Star, Volume2, Wifi } from 'lucide-react';
+import { Monitor, Star, Volume2, Wifi } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import { SettingsDialog } from './settings-dialog';
 import { Card } from './ui/card';
 
 const NAV_TABS = [
@@ -86,7 +87,7 @@ export function AppHeader() {
           <Wifi className="size-4 text-muted-foreground" />
           <Monitor className="size-4 text-muted-foreground" />
           <Volume2 className="size-4 text-muted-foreground" />
-          <Settings className="size-4 text-muted-foreground" />
+          <SettingsDialog />
           <Avatar size="sm">
             <AvatarImage src="" alt="User" />
             <AvatarFallback>U</AvatarFallback>
