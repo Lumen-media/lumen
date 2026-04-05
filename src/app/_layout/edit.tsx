@@ -130,13 +130,13 @@ const SlideRow = forwardRef<
   }
 >(({ slide, index, isSelected, onClick, textAlign, font }, ref) => {
   return (
-    <button
+    <Button
       ref={ref}
-      type="button"
+      variant="ghost"
       onClick={onClick}
       className={cn(
-        'flex items-start w-full gap-4 text-left rounded-lg px-4 py-3 transition-colors outline-none',
-        isSelected ? 'bg-primary/10' : 'hover:bg-muted/50'
+        'flex items-start justify-start w-full gap-4 text-left h-auto px-4 py-3 whitespace-normal',
+        isSelected && 'bg-primary/10'
       )}
     >
       <span className="text-xs font-bold uppercase tracking-wider text-primary shrink-0 pt-1 min-w-16">
@@ -158,7 +158,7 @@ const SlideRow = forwardRef<
           );
         })}
       </div>
-    </button>
+    </Button>
   );
 });
 
