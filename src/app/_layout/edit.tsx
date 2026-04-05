@@ -70,7 +70,7 @@ function RouteComponent() {
       </div>
 
       <ScrollArea className="flex-1 min-h-0">
-        <div className="flex flex-col px-6 pb-4">
+        <div className="flex flex-col px-6 pb-4 py-1">
           {lyricData.slides.map((slide, index) => (
             <div key={slideIds[index]}>
               {index > 0 && <Separator className="my-1" />}
