@@ -1,9 +1,9 @@
 [package]
 name = "lumen"
-version = "0.1.0"
-description = "A Tauri App"
+version = "0.2.0"
+description = "Desktop presentation software for live events — control lyrics, media, and raffles from a single interface"
 authors = ["gabrielSantos1101"]
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
