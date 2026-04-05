@@ -83,7 +83,6 @@ function RouteComponent() {
                 index={index}
                 isSelected={selectedSlideIndex === index}
                 onClick={() => handleSelectSlide(index)}
-                textAlign={lyricData.metadata.alignment as React.CSSProperties['textAlign']}
                 font={lyricData.metadata.font}
               />
             </div>
@@ -125,10 +124,9 @@ const SlideRow = forwardRef<
     index: number;
     isSelected: boolean;
     onClick: () => void;
-    textAlign?: React.CSSProperties['textAlign'];
     font?: string;
   }
->(({ slide, index, isSelected, onClick, textAlign, font }, ref) => {
+>(({ slide, index, isSelected, onClick, font }, ref) => {
   return (
     <Button
       ref={ref}
@@ -145,7 +143,6 @@ const SlideRow = forwardRef<
       <div
         className="flex-1"
         style={{
-          textAlign: textAlign || 'left',
           fontFamily: font || undefined,
         }}
       >
