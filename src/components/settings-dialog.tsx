@@ -1,5 +1,6 @@
 'use client';
 
+import { t } from 'i18next';
 import {
   BookOpen,
   ChevronDown,
@@ -29,12 +30,13 @@ import { ScrollArea } from './ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Separator } from './ui/separator';
 import { Switch } from './ui/switch';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
 type NavSection = 'theme' | 'remote_general' | 'remote_permissions' | 'advanced' | 'about';
 
 const SECTION_TITLES: Record<NavSection, { label: string; title: string }> = {
   theme: { label: 'Application settings', title: 'Configure themes, devices and transmission' },
-  remote_general: { label: 'Remote Access', title: 'General Access & Connection' },
+  remote_general: { label: 'Remote Access', title: 'General Access' },
   remote_permissions: { label: 'Remote Access', title: 'Device Permissions' },
   advanced: { label: 'Application settings', title: 'Advanced Configuration' },
   about: { label: 'Application settings', title: 'About Lumen' },
@@ -90,16 +92,16 @@ export const SettingsDialog = () => {
 
       <DialogContent
         showCloseButton={false}
-        className="w-full sm:max-w-[90dvw] h-full max-h-[80dvh] flex"
+        className="w-full p-0 gap-0 sm:max-w-[60dvw] h-full max-h-[70dvh] flex"
       >
-        <Card className="w-56 shrink-0 p-0 gap-0 overflow-hidden">
+        <Card className="w-56 shrink-0 p-0 border-0 rounded-l-xl rounded-r-none gap-0">
           <CardHeader className="p-3 flex-row items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="size-4 text-primary" />
               <span className="font-semibold text-sm">Lumen</span>
             </div>
             <DialogClose render={<Button variant="ghost" size="icon-sm" />}>
-              <span className="sr-only">Close</span>×
+              <span className="sr-only">{t('Close')}</span>×
             </DialogClose>
           </CardHeader>
 
@@ -107,8 +109,10 @@ export const SettingsDialog = () => {
 
           <div className="p-2">
             <div className="rounded-lg bg-muted/60 px-3 py-2.5">
-              <p className="text-xs text-muted-foreground">Workspace</p>
-              <p className="text-sm font-medium leading-tight mt-0.5">Default Studio Profile</p>
+              <p className="text-xs text-muted-foreground">{t('Workspace')}</p>
+              <p className="text-sm font-medium leading-tight mt-0.5">
+                {t('Default Studio Profile')}
+              </p>
             </div>
           </div>
 
@@ -125,7 +129,7 @@ export const SettingsDialog = () => {
               )}
             >
               <Palette className="size-4" />
-              Theme & Profiles
+              {t('Theme & Profiles')}
             </button>
 
             <div>
@@ -143,7 +147,7 @@ export const SettingsDialog = () => {
                 )}
               >
                 <Monitor className="size-4" />
-                <span className="flex-1">Remote Access</span>
+                <span className="flex-1">{t('Remote Access')}</span>
                 <ChevronDown
                   className={cn('size-3.5 transition-transform', remoteOpen && 'rotate-180')}
                 />
@@ -161,7 +165,7 @@ export const SettingsDialog = () => {
                     )}
                   >
                     <Wifi className="size-3.5" />
-                    General Access
+                    {t('General Access')}
                   </button>
                   <button
                     onClick={() => handleNavClick('remote_permissions')}
@@ -173,7 +177,7 @@ export const SettingsDialog = () => {
                     )}
                   >
                     <Users className="size-3.5" />
-                    Device Permissions
+                    {t('Device Permissions')}
                   </button>
                 </div>
               )}
@@ -189,7 +193,7 @@ export const SettingsDialog = () => {
               )}
             >
               <SlidersHorizontal className="size-4" />
-              Advanced
+              {t('Advanced')}
             </button>
 
             <button
@@ -202,7 +206,7 @@ export const SettingsDialog = () => {
               )}
             >
               <Info className="size-4" />
-              About
+              {t('About')}
             </button>
           </nav>
 
@@ -210,37 +214,39 @@ export const SettingsDialog = () => {
 
           <div className="p-3 text-xs text-muted-foreground space-y-1.5">
             <div className="flex items-center justify-between">
-              <span>Remote access</span>
+              <span>{t('Remote access')}</span>
               <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
                 <span className="size-1.5 rounded-full bg-emerald-400" />
-                Enabled
+                {t('Enabled')}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span>Version</span>
+              <span>{t('Version')}</span>
               <span>1.4.2</span>
             </div>
           </div>
         </Card>
 
-        <Card className="flex-1 p-0 gap-0 overflow-hidden">
+        <Separator orientation="vertical" />
+
+        <Card className="flex-1 p-0 border-0 rounded-l-none rounded-r-xl gap-0">
           <CardHeader className="p-4 flex-row items-start justify-between gap-4">
             <div>
               <p className="text-xs font-medium text-primary">
-                {SECTION_TITLES[activeSection].label}
+                {t(SECTION_TITLES[activeSection].label)}
               </p>
               <h2 className="text-xl font-bold leading-tight mt-0.5">
-                {SECTION_TITLES[activeSection].title}
+                {t(SECTION_TITLES[activeSection].title)}
               </h2>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button variant="secondary" size="sm">
                 <RotateCcw className="size-3.5" />
-                Reset
+                {t('Reset')}
               </Button>
               <Button size="sm">
                 <Save className="size-3.5" />
-                Save Changes
+                {t('Save Changes')}
               </Button>
             </div>
           </CardHeader>
@@ -262,14 +268,14 @@ export const SettingsDialog = () => {
                 {activeSection === 'remote_permissions' && <DevicePermissionsSection />}
                 {activeSection === 'advanced' && (
                   <PlaceholderSection
-                    title="Advanced"
-                    description="Advanced configuration options."
+                    title={t('Advanced')}
+                    description={t('Advanced configuration options.')}
                   />
                 )}
                 {activeSection === 'about' && (
                   <PlaceholderSection
-                    title="About"
-                    description="Lumen version 1.4.2. Built for worship teams."
+                    title={t('About')}
+                    description={t('Lumen version 1.4.2. Built for worship teams.')}
                   />
                 )}
               </div>
@@ -294,21 +300,20 @@ function ThemeSection({
 }) {
   return (
     <>
-      <div className="mb-2">
-        <h3 className="text-base font-semibold">Theme & Profiles</h3>
+      <div className="mb-6">
+        <h3 className="text-base font-semibold">{t('Theme & Profiles')}</h3>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Choose default visuals for lyrics and media states, and store them in custom profiles.
+          {t(
+            'Choose default visuals for lyrics and media states, and store them in custom profiles.'
+          )}
         </p>
       </div>
 
-      <Card className="p-0 gap-0 overflow-hidden">
-        <CardHeader className="p-4 flex-row items-center">
-          <h4 className="uppercase text-xs font-semibold tracking-widest text-muted-foreground">
-            Active Profile
+      <div className="space-y-6">
+        <div>
+          <h4 className="uppercase text-xs font-semibold tracking-widest text-muted-foreground mb-3">
+            {t('Active Profile')}
           </h4>
-        </CardHeader>
-        <Separator />
-        <CardContent className="p-4">
           <div className="flex flex-wrap items-center gap-2">
             {PROFILES.map((profile) => (
               <button
@@ -322,55 +327,50 @@ function ThemeSection({
                 )}
               >
                 {activeProfile === profile && <span className="size-2 rounded-full bg-primary" />}
-                {profile}
+                {t(profile)}
               </button>
             ))}
             <button className="rounded-lg border border-dashed border-border px-4 py-2 text-sm text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors">
-              + New Profile
+              {t('+ New Profile')}
             </button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card className="p-0 gap-0 overflow-hidden">
-        <CardHeader className="p-4 flex-row items-center">
-          <h4 className="uppercase text-xs font-semibold tracking-widest text-muted-foreground">
-            Appearance Settings
+        <div>
+          <h4 className="uppercase text-xs font-semibold tracking-widest text-muted-foreground mb-3">
+            {t('Appearance Settings')}
           </h4>
-        </CardHeader>
-        <Separator />
-        <CardContent className="p-4">
           <div className="flex flex-wrap items-end gap-6">
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">Profile Theme</p>
+              <p className="text-sm font-medium">{t('Profile Theme')}</p>
               <Select defaultValue="lumen-cyan">
                 <SelectTrigger className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="lumen-cyan">Lumen Cyan</SelectItem>
-                  <SelectItem value="lumen-dark">Lumen Dark</SelectItem>
-                  <SelectItem value="lumen-light">Lumen Light</SelectItem>
+                  <SelectItem value="lumen-cyan">{t('Lumen Cyan')}</SelectItem>
+                  <SelectItem value="lumen-dark">{t('Lumen Dark')}</SelectItem>
+                  <SelectItem value="lumen-light">{t('Lumen Light')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">Accent Preset</p>
+              <p className="text-sm font-medium">{t('Accent Preset')}</p>
               <Select defaultValue="ocean-cyan">
                 <SelectTrigger className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ocean-cyan">Ocean Cyan</SelectItem>
-                  <SelectItem value="forest-green">Forest Green</SelectItem>
-                  <SelectItem value="sunset-amber">Sunset Amber</SelectItem>
+                  <SelectItem value="ocean-cyan">{t('Ocean Cyan')}</SelectItem>
+                  <SelectItem value="forest-green">{t('Forest Green')}</SelectItem>
+                  <SelectItem value="sunset-amber">{t('Sunset Amber')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">App Colors</p>
+              <p className="text-sm font-medium">{t('App Colors')}</p>
               <div className="flex items-center gap-2">
                 {APP_COLORS.map(({ color, label }) => (
                   <button
@@ -383,34 +383,30 @@ function ThemeSection({
                         ? 'ring-2 ring-offset-2 ring-offset-background ring-foreground/50'
                         : 'opacity-70 hover:opacity-100'
                     )}
-                    title={label}
+                    title={t(label)}
                   />
                 ))}
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card className="p-0 gap-0 overflow-hidden">
-        <CardHeader className="p-4 flex-row items-center">
-          <h4 className="uppercase text-xs font-semibold tracking-widest text-muted-foreground">
-            Default Backgrounds
+        {/* Default Backgrounds Section */}
+        <div>
+          <h4 className="uppercase text-xs font-semibold tracking-widest text-muted-foreground mb-3">
+            {t('Default Backgrounds')}
           </h4>
-        </CardHeader>
-        <Separator />
-        <CardContent className="p-4">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="aspect-video rounded-lg overflow-hidden bg-muted border border-border">
               <div className="size-full bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900" />
             </div>
             <button className="aspect-video rounded-lg border border-dashed border-border bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors">
               <ImagePlus className="size-5" />
-              <span className="text-xs">Add background</span>
+              <span className="text-xs">{t('Add background')}</span>
             </button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </>
   );
 }
@@ -422,63 +418,52 @@ function GeneralAccessSection() {
   return (
     <>
       <div className="mb-2">
-        <h3 className="text-base font-semibold">Connection & Control</h3>
+        <h3 className="text-base font-semibold">{t('Connection & Control')}</h3>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Manage connected devices and presentation broadcasting settings.
+          {t('Manage connected devices and presentation broadcasting settings.')}
         </p>
       </div>
 
-      <Card className="p-0 gap-0 overflow-hidden">
-        <CardHeader className="p-4 flex-row items-center">
-          <h4 className="uppercase text-xs font-semibold tracking-widest text-muted-foreground">
-            Network
-          </h4>
-        </CardHeader>
-        <Separator />
-        <CardContent className="p-0 divide-y divide-border">
-          <div className="flex items-center justify-between px-4 py-4">
-            <div>
-              <p className="text-sm font-medium">Enable Remote Access</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Allow other devices on the same network to connect to this session.
-              </p>
-            </div>
-            <Switch checked={remoteEnabled} onCheckedChange={setRemoteEnabled} />
+      <div className="flex flex-col p-0 gap-4">
+        <Card className="flex-row items-center justify-between px-4 py-4 bg-background/55 rounded-lg">
+          <div>
+            <p className="text-sm font-medium">{t('Enable Remote Access')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('Allow other devices on the same network to connect to this session.')}
+            </p>
           </div>
-          <div className="flex items-center justify-between px-4 py-4">
-            <div>
-              <p className="text-sm font-medium">Enable Remote Transmission</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Broadcast the live presentation feed to connected mobile/tablet apps.
-              </p>
-            </div>
-            <Switch checked={transmissionEnabled} onCheckedChange={setTransmissionEnabled} />
-          </div>
-        </CardContent>
-      </Card>
+          <Switch defaultChecked={remoteEnabled} onCheckedChange={setRemoteEnabled} />
+        </Card>
 
-      <Card className="p-0 gap-0 overflow-hidden">
-        <CardHeader className="p-4 flex-row items-center">
-          <h4 className="uppercase text-xs font-semibold tracking-widest text-muted-foreground">
-            Connection Password
-          </h4>
-        </CardHeader>
-        <Separator />
+        <Card className="flex-row items-center justify-between px-4 py-4 bg-background/55 rounded-lg">
+          <div>
+            <p className="text-sm font-medium">{t('Enable Remote Transmission')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('Broadcast the live presentation feed to connected mobile/tablet apps.')}
+            </p>
+          </div>
+          <Switch defaultChecked={transmissionEnabled} onCheckedChange={setTransmissionEnabled} />
+        </Card>
+      </div>
+
+      <Card className="p-0 gap-0 overflow-hidden bg-background/55">
         <CardContent className="p-4">
           <div className="flex items-start gap-5">
-            <div className="size-20 shrink-0 rounded-lg bg-white flex items-center justify-center">
-              <QrCode className="size-12 text-black" />
+            <div className="p-2 shrink-0 rounded-lg bg-white flex items-center justify-center">
+              <QrCode className="size-20.5 text-black" />
             </div>
             <div className="flex-1 space-y-2">
+              <h3>{t('Connection Password')}</h3>
               <div className="flex items-center gap-2">
-                <Input className="h-8 max-w-48" defaultValue="lumen-stage-123" />
+                <Input className="h-8 max-w-48 bg-background" defaultValue="lumen-stage-123" />
                 <Button variant="secondary" size="sm">
-                  Update
+                  {t('Update')}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Users can connect by scanning the QR code or entering the IP address and this
-                password in the Remote App.
+                {t(
+                  'Set a password for manual connection. Users can connect by scanning the QR code or entering the IP address and this password in the Remote App.'
+                )}
               </p>
             </div>
           </div>
@@ -509,57 +494,51 @@ function DevicePermissionsSection() {
   return (
     <>
       <div className="mb-2">
-        <h3 className="text-base font-semibold">Device Permissions</h3>
+        <h3 className="text-base font-semibold">{t('Device Permissions')}</h3>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Choose which features each connected device is allowed to access.
+          {t('Choose which features each connected device is allowed to access.')}
         </p>
       </div>
 
-      <Card className="p-0 gap-0 overflow-hidden">
-        <CardHeader className="p-4 flex-row items-center gap-2">
-          <Users className="size-4 text-muted-foreground" />
-          <h4 className="uppercase text-xs font-semibold tracking-widest text-muted-foreground">
-            Connected Devices
-          </h4>
-        </CardHeader>
-        <Separator />
+      <Card className="p-0 gap-0 rounded-lg overflow-hidden">
         <CardContent className="p-0">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  Device
-                </th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  Type
-                </th>
+          <Table>
+            <TableHeader className="bg-muted/40">
+              <TableRow className="hover:bg-muted/40">
+                <TableHead className="px-4 py-2.5 text-xs font-semibold uppercase">
+                  {t('Device')}
+                </TableHead>
+                <TableHead className="px-4 py-2.5 text-xs font-semibold uppercase">
+                  {t('Type')}
+                </TableHead>
                 {PERMISSION_FEATURES.map((f) => (
-                  <th
+                  <TableHead
                     key={f.id}
-                    className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground w-20"
+                    className="px-4 py-2.5 text-center text-xs font-semibold uppercase w-20"
                   >
-                    {f.label}
-                  </th>
+                    {t(f.label)}
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {CONNECTED_DEVICES.map((device) => (
-                <tr key={device.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3 font-medium">{device.name}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{device.type}</td>
+                <TableRow key={device.id}>
+                  <TableCell className="px-4 py-3 font-medium">{device.name}</TableCell>
+                  <TableCell className="px-4 py-3 text-xs">{t(device.type)}</TableCell>
                   {PERMISSION_FEATURES.map((f) => (
-                    <td key={f.id} className="px-4 py-3 text-center">
+                    <TableCell key={f.id} className="py-3 px-0 text-center">
                       <Checkbox
+                        className="mx-auto"
                         checked={permissions[device.id][f.id]}
                         onCheckedChange={() => toggle(device.id, f.id)}
                       />
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </>
