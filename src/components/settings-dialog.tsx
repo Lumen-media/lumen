@@ -17,6 +17,7 @@ import {
 import { useState } from 'react';
 
 import { cn } from '@/lib/utils';
+import { AboutSection } from './settings/about-section';
 import { DevicePermissionsSection } from './settings/device-permissions-section';
 import { GeneralAccessSection } from './settings/general-access-section';
 import { PlaceholderSection } from './settings/placeholder-section';
@@ -29,12 +30,16 @@ import { Separator } from './ui/separator';
 
 type NavSection = 'theme' | 'remote_general' | 'remote_permissions' | 'advanced' | 'about';
 
-const SECTION_TITLES: Record<NavSection, { label: string; title: string }> = {
+const SECTION_TITLES: Record<NavSection, { label: string; title: string; description?: string }> = {
   theme: { label: 'Application settings', title: 'Configure themes, devices and transmission' },
   remote_general: { label: 'Remote Access', title: 'General Access' },
   remote_permissions: { label: 'Remote Access', title: 'Device Permissions' },
   advanced: { label: 'Application settings', title: 'Advanced Configuration' },
-  about: { label: 'Application settings', title: 'About Lumen' },
+  about: {
+    label: 'Application settings',
+    title: 'About',
+    description: 'Review app version details, system information, and quick access to release notes and legal resources.',
+  },
 };
 
 export const SettingsDialog = () => {
@@ -76,8 +81,6 @@ export const SettingsDialog = () => {
             </DialogClose>
           </CardHeader>
 
-          <Separator />
-
           <div className="p-2">
             <div className="rounded-lg bg-muted/60 px-3 py-2.5">
               <p className="text-xs text-muted-foreground">{t('Workspace')}</p>
@@ -86,8 +89,6 @@ export const SettingsDialog = () => {
               </p>
             </div>
           </div>
-
-          <Separator />
 
           <nav className="flex flex-1 flex-col gap-0.5 p-2">
             <button
@@ -209,6 +210,11 @@ export const SettingsDialog = () => {
               <h2 className="text-xl font-bold leading-tight mt-0.5">
                 {t(SECTION_TITLES[activeSection].title)}
               </h2>
+              {SECTION_TITLES[activeSection].description && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {t(SECTION_TITLES[activeSection].description!)}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button variant="secondary" size="sm">
@@ -221,8 +227,6 @@ export const SettingsDialog = () => {
               </Button>
             </div>
           </CardHeader>
-
-          <Separator />
 
           <CardContent className="flex-1 overflow-hidden p-0">
             <ScrollArea className="size-full">
@@ -243,12 +247,7 @@ export const SettingsDialog = () => {
                     description={t('Advanced configuration options.')}
                   />
                 )}
-                {activeSection === 'about' && (
-                  <PlaceholderSection
-                    title={t('About')}
-                    description={t('Lumen version 1.4.2. Built for worship teams.')}
-                  />
-                )}
+                {activeSection === 'about' && <AboutSection />}
               </div>
             </ScrollArea>
           </CardContent>
