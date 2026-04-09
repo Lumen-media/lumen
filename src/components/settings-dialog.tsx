@@ -2,25 +2,25 @@
 
 import { t } from 'i18next';
 import {
-  ChevronDown,
-  Info,
-  Monitor,
-  Palette,
-  RotateCcw,
-  Save,
-  Settings,
-  SlidersHorizontal,
-  Sparkles,
-  Users,
-  Wifi,
+    ChevronDown,
+    Info,
+    Monitor,
+    Palette,
+    RotateCcw,
+    Save,
+    Settings,
+    SlidersHorizontal,
+    Sparkles,
+    Users,
+    Wifi,
 } from 'lucide-react';
 import { useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import { AboutSection } from './settings/about-section';
+import { AdvancedSection } from './settings/advanced-section';
 import { DevicePermissionsSection } from './settings/device-permissions-section';
 import { GeneralAccessSection } from './settings/general-access-section';
-import { PlaceholderSection } from './settings/placeholder-section';
 import { ThemeSection } from './settings/theme-section';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader } from './ui/card';
@@ -34,7 +34,7 @@ const SECTION_TITLES: Record<NavSection, { label: string; title: string; descrip
   theme: { label: 'Application settings', title: 'Configure themes, devices and transmission' },
   remote_general: { label: 'Remote Access', title: 'General Access' },
   remote_permissions: { label: 'Remote Access', title: 'Device Permissions' },
-  advanced: { label: 'Application settings', title: 'Advanced Configuration' },
+  advanced: { label: 'Application settings', title: 'Advanced Settings' },
   about: {
     label: 'Application settings',
     title: 'About',
@@ -241,12 +241,7 @@ export const SettingsDialog = () => {
                 )}
                 {activeSection === 'remote_general' && <GeneralAccessSection />}
                 {activeSection === 'remote_permissions' && <DevicePermissionsSection />}
-                {activeSection === 'advanced' && (
-                  <PlaceholderSection
-                    title={t('Advanced')}
-                    description={t('Advanced configuration options.')}
-                  />
-                )}
+                {activeSection === 'advanced' && <AdvancedSection />}
                 {activeSection === 'about' && <AboutSection />}
               </div>
             </ScrollArea>
