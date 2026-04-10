@@ -4,7 +4,7 @@ mod websocket;
 
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::{async_runtime, Emitter, Manager, State};
+use tauri::{Emitter, Manager, State, async_runtime};
 use tokio::net::TcpListener;
 
 struct WindowState {
@@ -150,6 +150,7 @@ fn get_system_fonts() -> Vec<String> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .manage(WindowState {
