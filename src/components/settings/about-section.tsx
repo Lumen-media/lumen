@@ -1,5 +1,6 @@
 'use client';
 
+import { platform } from '@tauri-apps/plugin-os';
 import { t } from 'i18next';
 import { ArrowRight, Code2, FileText, Lock, RefreshCw, Shield, Sparkles } from 'lucide-react';
 
@@ -23,6 +24,7 @@ const RESOURCES = [
 ];
 
 export function AboutSection() {
+  console.log(platform());
   return (
     <div className="space-y-4">
       <Card className="flex-row items-center justify-between p-4 bg-background/55">
