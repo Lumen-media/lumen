@@ -148,6 +148,78 @@ fn get_system_fonts() -> Vec<String> {
     families
 }
 
+#[derive(serde::Serialize)]
+struct SystemHardwareInfo {
+    total_memory_gb: f64,
+    gpu_name: String,
+}
+
+#[tauri::command]
+fn get_system_info() -> SystemHardwareInfo {
+    use sysinfo::System;
+
+    let mut sys = System::new();
+    sys.refresh_memory();
+
+    let total_memory_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
+
+    SystemHardwareInfo {
+        total_memory_gb: (total_memory_gb * 10.0).round() / 10.0,
+        gpu_name: get_gpu_name(),
+    }
+}
+
+fn get_gpu_name() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(out) = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "(Get-WmiObject Win32_VideoController | Select-Object -First 1).Name",
+            ])
+            .output()
+        {
+            let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !name.is_empty() {
+                return name;
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(out) = std::process::Command::new("system_profiler")
+            .args(["SPDisplaysDataType"])
+            .output()
+        {
+            let text = String::from_utf8_lossy(&out.stdout);
+            for line in text.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("Chipset Model:") {
+                    if let Some(name) = trimmed.strip_prefix("Chipset Model:") {
+                        return name.trim().to_string();
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(out) = std::process::Command::new("lspci").output() {
+            let text = String::from_utf8_lossy(&out.stdout);
+            for line in text.lines() {
+                let lower = line.to_lowercase();
+                if lower.contains("vga") || lower.contains("3d controller") || lower.contains("display") {
+                    if let Some(pos) = line.find(": ") {
+                        return line[pos + 2..].trim().to_string();
+                    }
+                }
+            }
+        }
+    }
+    "Unknown".to_string()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
@@ -203,7 +275,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             open_folder,
             create_window,
             save_window_position,
-            get_system_fonts
+            get_system_fonts,
+            get_system_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

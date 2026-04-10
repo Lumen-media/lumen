@@ -1,20 +1,12 @@
 'use client';
 
-import { platform } from '@tauri-apps/plugin-os';
 import { t } from 'i18next';
 import { ArrowRight, Code2, FileText, Lock, RefreshCw, Shield, Sparkles } from 'lucide-react';
 
+import { useSystemInfo } from '@/hooks/use-system-info';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Separator } from '../ui/separator';
-
-const SYSTEM_INFO = [
-  { label: 'Operating System', value: 'macOS 14.2.1 Sonoma' },
-  { label: 'Architecture', value: 'Apple Silicon (arm64)' },
-  { label: 'Available Memory', value: '32 GB' },
-  { label: 'Graphics Renderer', value: 'Metal Performance Shaders' },
-  { label: 'Media Engine', value: 'Lumen Render Core 5.6' },
-];
 
 const RESOURCES = [
   { label: 'Release Notes', icon: <FileText className="size-3.5" /> },
@@ -24,7 +16,16 @@ const RESOURCES = [
 ];
 
 export function AboutSection() {
-  console.log(platform());
+  const { os, arch, memory, gpu } = useSystemInfo();
+
+  const SYSTEM_INFO = [
+    { label: 'Operating System', value: os },
+    { label: 'Architecture', value: arch },
+    { label: 'Available Memory', value: memory },
+    { label: 'Graphics Renderer', value: gpu },
+    { label: 'Media Engine', value: 'Lumen Render Core 1.0' },
+  ];
+
   return (
     <div className="space-y-4">
       <Card className="flex-row items-center justify-between p-4 bg-background/55">
