@@ -6,6 +6,7 @@ import { ImagePlus } from 'lucide-react';
 import { useTheme } from '@/hooks/use-theme';
 import { cn } from '@/lib/utils';
 import { ACCENT_PRESETS } from '@/stores/theme-store';
+import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 const PROFILES = ['Default Studio', 'Youth Night', 'Sunday Service'];
@@ -31,16 +32,17 @@ export function ThemeSection() {
           </h4>
           <div className="flex flex-wrap items-center gap-2">
             {PROFILES.map((profile) => (
-              <button
-                key={profile}
-                className="flex items-center gap-1.5 rounded-lg border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-              >
+              <Button key={profile} variant="ghost" size="sm">
                 {t(profile)}
-              </button>
+              </Button>
             ))}
-            <button className="rounded-lg border border-dashed border-border px-4 py-2 text-sm text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="border border-dashed border-border text-muted-foreground hover:text-foreground"
+            >
               {t('+ New Profile')}
-            </button>
+            </Button>
           </div>
         </div>
 
