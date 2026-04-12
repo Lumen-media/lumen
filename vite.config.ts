@@ -7,6 +7,8 @@ import { defineConfig } from 'vite';
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+const buildDate = new Date().toISOString().split('T')[0];
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -16,6 +18,10 @@ export default defineConfig({
       routesDirectory: "./src/app",
     }),
   ],
+
+  define: {
+    __BUILD_DATE__: JSON.stringify(buildDate),
+  },
 
   clearScreen: false,
 
