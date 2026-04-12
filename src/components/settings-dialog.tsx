@@ -2,17 +2,17 @@
 
 import { t } from 'i18next';
 import {
-    ChevronDown,
-    Info,
-    Monitor,
-    Palette,
-    RotateCcw,
-    Save,
-    Settings,
-    SlidersHorizontal,
-    Sparkles,
-    Users,
-    Wifi,
+  ChevronDown,
+  Info,
+  Monitor,
+  Palette,
+  RotateCcw,
+  Save,
+  Settings,
+  SlidersHorizontal,
+  Sparkles,
+  Users,
+  Wifi,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -39,7 +39,8 @@ const SECTION_TITLES: Record<NavSection, { label: string; title: string; descrip
   about: {
     label: 'Application settings',
     title: 'About',
-    description: 'Review app version details, system information, and quick access to release notes and legal resources.',
+    description:
+      'Review app version details, system information, and quick access to release notes and legal resources.',
   },
 };
 
@@ -90,96 +91,92 @@ export const SettingsDialog = () => {
             </div>
           </div>
 
-          <nav className="flex flex-1 flex-col gap-0.5 p-2">
-            <button
+          <nav className="flex flex-1 flex-col gap-1.5 p-2">
+            <Button
+              variant="ghost"
               onClick={() => handleNavClick('theme')}
               className={cn(
-                'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors text-left',
-                activeSection === 'theme'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                'w-full justify-start gap-2.5',
+                activeSection === 'theme' && 'bg-primary/10 text-primary font-medium'
               )}
             >
               <Palette className="size-4" />
               {t('Theme & Profiles')}
-            </button>
+            </Button>
 
             <div>
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => {
                   const next = !remoteOpen;
                   setRemoteOpen(next);
                   if (next && !isRemoteSection) setActiveSection('remote_general');
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors text-left',
-                  isRemoteSection
-                    ? 'bg-primary/10 text-primary font-medium'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  'w-full justify-start gap-2.5',
+                  isRemoteSection && 'bg-primary/10 text-primary font-medium'
                 )}
               >
                 <Monitor className="size-4" />
-                <span className="flex-1">{t('Remote Access')}</span>
+                <span className="flex-1 text-left">{t('Remote Access')}</span>
                 <ChevronDown
                   className={cn('size-3.5 transition-transform', remoteOpen && 'rotate-180')}
                 />
-              </button>
+              </Button>
 
               {remoteOpen && (
-                <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-3">
-                  <button
+                <div className="ml-3 mt-1 flex flex-col gap-1 border-l border-border pl-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => handleNavClick('remote_general')}
                     className={cn(
-                      'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors text-left',
-                      activeSection === 'remote_general'
-                        ? 'text-primary font-medium'
-                        : 'text-muted-foreground hover:text-foreground'
+                      'w-full justify-start gap-2',
+                      activeSection === 'remote_general' && 'text-primary font-medium'
                     )}
                   >
                     <Wifi className="size-3.5" />
                     {t('General Access')}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => handleNavClick('remote_permissions')}
                     className={cn(
-                      'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors text-left',
-                      activeSection === 'remote_permissions'
-                        ? 'text-primary font-medium'
-                        : 'text-muted-foreground hover:text-foreground'
+                      'w-full justify-start gap-2',
+                      activeSection === 'remote_permissions' && 'text-primary font-medium'
                     )}
                   >
                     <Users className="size-3.5" />
                     {t('Device Permissions')}
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
 
-            <button
+            <Button
+              variant="ghost"
               onClick={() => handleNavClick('advanced')}
               className={cn(
-                'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors text-left',
-                activeSection === 'advanced'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                'w-full justify-start gap-2.5',
+                activeSection === 'advanced' && 'bg-primary/10 text-primary font-medium'
               )}
             >
               <SlidersHorizontal className="size-4" />
               {t('Advanced')}
-            </button>
+            </Button>
 
-            <button
+            <Button
+              variant="ghost"
               onClick={() => handleNavClick('about')}
               className={cn(
-                'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors text-left',
-                activeSection === 'about'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                'w-full justify-start gap-2.5',
+                activeSection === 'about' && 'bg-primary/10 text-primary font-medium'
               )}
             >
               <Info className="size-4" />
               {t('About')}
-            </button>
+            </Button>
           </nav>
 
           <Separator />
@@ -231,9 +228,7 @@ export const SettingsDialog = () => {
           <CardContent className="flex-1 overflow-hidden p-0">
             <ScrollArea className="size-full">
               <div className="p-4 space-y-4">
-                {activeSection === 'theme' && (
-                  <ThemeSection />
-                )}
+                {activeSection === 'theme' && <ThemeSection />}
                 {activeSection === 'remote_general' && <GeneralAccessSection />}
                 {activeSection === 'remote_permissions' && <DevicePermissionsSection />}
                 {activeSection === 'advanced' && <AdvancedSection />}

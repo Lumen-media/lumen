@@ -86,16 +86,17 @@ export function AboutSection() {
           </div>
           <div className="mt-4 space-y-1">
             {RESOURCES.map(({ label, icon }) => (
-              <button
+              <Button
                 key={label}
-                className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2.5 text-sm transition-colors hover:bg-muted/50"
+                variant="ghost"
+                className="w-full justify-between px-3 py-2.5 h-auto"
               >
                 <span className="flex items-center gap-2.5">
                   {icon}
                   {t(label)}
                 </span>
                 <ArrowRight className="size-3.5 text-muted-foreground" />
-              </button>
+              </Button>
             ))}
           </div>
           {/* <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
