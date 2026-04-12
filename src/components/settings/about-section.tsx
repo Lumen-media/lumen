@@ -39,7 +39,7 @@ export function AboutSection() {
             <h2 className="text-2xl font-bold">Lumen</h2>
             <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
               <span>Version {version}</span>
-              <span className="rounded bg-muted px-1.5 py-0.5 font-mono">Build 2024.10.15</span>
+              <span className="rounded bg-muted px-1.5 py-0.5 font-mono">Build {__BUILD_DATE__}</span>
               <span className="rounded bg-muted px-1.5 py-0.5">Desktop App</span>
             </div>
           </div>
