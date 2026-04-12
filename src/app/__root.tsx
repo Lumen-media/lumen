@@ -4,6 +4,7 @@ import { GlobalAlert } from '@/components/global-alert';
 import { LyricModal } from '@/components/lyric-modal';
 import { QuickShortcutsModal } from '@/components/quick-shortcuts-modal';
 import { Toaster } from '@/components/ui/sonner';
+import { useProfiles } from '@/hooks/use-profiles';
 import { useSingleInstance } from '@/hooks/use-single-instance';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -14,6 +15,7 @@ export const Route = createRootRoute({
 function RootComponent() {
   useSingleInstance();
   useTheme();
+  useProfiles();
 
   return (
     <React.Fragment>
