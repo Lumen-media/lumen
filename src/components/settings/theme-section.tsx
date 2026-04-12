@@ -3,32 +3,16 @@
 import { t } from 'i18next';
 import { ImagePlus } from 'lucide-react';
 
+import { useTheme } from '@/hooks/use-theme';
 import { cn } from '@/lib/utils';
+import { ACCENT_PRESETS } from '@/stores/theme-store';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 const PROFILES = ['Default Studio', 'Youth Night', 'Sunday Service'];
 
-const APP_COLORS = [
-  { color: 'bg-primary', label: 'Cyan' },
-  { color: 'bg-emerald-400', label: 'Green' },
-  { color: 'bg-violet-400', label: 'Purple' },
-  { color: 'bg-amber-400', label: 'Amber' },
-  { color: 'bg-rose-400', label: 'Rose' },
-];
+export function ThemeSection() {
+  const { colorMode, accentId, setColorMode, setAccentId } = useTheme();
 
-interface ThemeSectionProps {
-  activeProfile: string;
-  setActiveProfile: (p: string) => void;
-  activeColor: string;
-  setActiveColor: (c: string) => void;
-}
-
-export function ThemeSection({
-  activeProfile,
-  setActiveProfile,
-  activeColor,
-  setActiveColor,
-}: ThemeSectionProps) {
   return (
     <>
       <div className="mb-6">
@@ -49,15 +33,8 @@ export function ThemeSection({
             {PROFILES.map((profile) => (
               <button
                 key={profile}
-                onClick={() => setActiveProfile(profile)}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-medium transition-colors',
-                  activeProfile === profile
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-transparent text-foreground hover:bg-muted'
-                )}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-transparent px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
               >
-                {activeProfile === profile && <span className="size-2 rounded-full bg-primary" />}
                 {t(profile)}
               </button>
             ))}
@@ -73,48 +50,33 @@ export function ThemeSection({
           </h4>
           <div className="flex flex-wrap items-end gap-6">
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">{t('Profile Theme')}</p>
-              <Select defaultValue="lumen-cyan">
+              <p className="text-sm font-medium">{t('Color Mode')}</p>
+              <Select value={colorMode} onValueChange={(v) => setColorMode(v as 'dark' | 'light')}>
                 <SelectTrigger className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="p-1">
-                  <SelectItem value="lumen-cyan">{t('Lumen Cyan')}</SelectItem>
-                  <SelectItem value="lumen-dark">{t('Lumen Dark')}</SelectItem>
-                  <SelectItem value="lumen-light">{t('Lumen Light')}</SelectItem>
+                  <SelectItem value="light">{t('Lumen Light')}</SelectItem>
+                  <SelectItem value="dark">{t('Lumen Dark')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <p className="text-sm font-medium">{t('Accent Preset')}</p>
-              <Select defaultValue="ocean-cyan">
-                <SelectTrigger className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="p-1">
-                  <SelectItem value="ocean-cyan">{t('Ocean Cyan')}</SelectItem>
-                  <SelectItem value="forest-green">{t('Forest Green')}</SelectItem>
-                  <SelectItem value="sunset-amber">{t('Sunset Amber')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">{t('App Colors')}</p>
+              <p className="text-sm font-medium">{t('Accent Color')}</p>
               <div className="flex items-center gap-2">
-                {APP_COLORS.map(({ color, label }) => (
+                {ACCENT_PRESETS.map(({ id, label, oklch }) => (
                   <button
-                    key={label}
-                    onClick={() => setActiveColor(label)}
+                    key={id}
+                    onClick={() => setAccentId(id)}
+                    title={t(label)}
                     className={cn(
                       'size-8 rounded-full transition-all',
-                      color,
-                      activeColor === label
+                      accentId === id
                         ? 'ring-2 ring-offset-2 ring-offset-background ring-foreground/50'
                         : 'opacity-70 hover:opacity-100'
                     )}
-                    title={t(label)}
+                    style={{ backgroundColor: `color-mix(in oklch, ${oklch}, transparent 0%)` }}
                   />
                 ))}
               </div>
