@@ -36,6 +36,7 @@ interface ProfileState {
     patch: Partial<Pick<Profile, 'name' | 'colorMode' | 'accentId' | 'defaultBackground'>>
   ) => Promise<void>;
   removeProfile: (id: string) => Promise<void>;
+  resetProfile: (id: string) => Promise<void>;
 }
 
 export const useProfileStore = create<ProfileState>((set, get) => ({
@@ -110,5 +111,13 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       applyProfile(remaining[0]);
     }
     set({ profiles: remaining, activeProfileId: newActiveId });
+  },
+
+  resetProfile: async (id) => {
+    await get().updateProfile(id, {
+      colorMode: 'dark',
+      accentId: 'cyan',
+      defaultBackground: null,
+    });
   },
 }));
