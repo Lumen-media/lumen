@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getSetting, saveSetting } from '@/services/db';
+import { loadConfig, saveConfigKey } from '@/services/config';
 
 export type ColorMode = 'dark' | 'light';
 export type AccentId = 'cyan' | 'green' | 'purple' | 'amber' | 'rose';
@@ -32,15 +32,17 @@ export const useThemeStore = create<ThemeState>((set) => ({
   accentId: 'cyan',
   setColorMode: (colorMode) => {
     set({ colorMode });
-    saveSetting('theme_color_mode', colorMode);
+    saveConfigKey('theme', { colorMode, accentId: useThemeStore.getState().accentId });
   },
   setAccentId: (accentId) => {
     set({ accentId });
-    saveSetting('theme_accent_id', accentId);
+    saveConfigKey('theme', { colorMode: useThemeStore.getState().colorMode, accentId });
   },
   init: async () => {
-    const colorMode = ((await getSetting('theme_color_mode')) as ColorMode | null) ?? 'dark';
-    const accentId = ((await getSetting('theme_accent_id')) as AccentId | null) ?? 'cyan';
-    set({ colorMode, accentId });
+    const config = await loadConfig();
+    set({
+      colorMode: config.theme.colorMode,
+      accentId: config.theme.accentId as AccentId,
+    });
   },
 }));
