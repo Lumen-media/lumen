@@ -47,8 +47,6 @@ export const SettingsDialog = () => {
   const version = useAppVersion();
   const [activeSection, setActiveSection] = useState<NavSection>('theme');
   const [remoteOpen, setRemoteOpen] = useState(false);
-  const [activeProfile, setActiveProfile] = useState('Default Studio');
-  const [activeColor, setActiveColor] = useState('Cyan');
 
   const isRemoteSection =
     activeSection === 'remote_general' || activeSection === 'remote_permissions';
@@ -234,12 +232,7 @@ export const SettingsDialog = () => {
             <ScrollArea className="size-full">
               <div className="p-4 space-y-4">
                 {activeSection === 'theme' && (
-                  <ThemeSection
-                    activeProfile={activeProfile}
-                    setActiveProfile={setActiveProfile}
-                    activeColor={activeColor}
-                    setActiveColor={setActiveColor}
-                  />
+                  <ThemeSection />
                 )}
                 {activeSection === 'remote_general' && <GeneralAccessSection />}
                 {activeSection === 'remote_permissions' && <DevicePermissionsSection />}
