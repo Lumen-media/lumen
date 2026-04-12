@@ -8,6 +8,7 @@ export interface AppConfig {
     colorMode: 'dark' | 'light';
     accentId: string;
   };
+  activeProfileId: string | null;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -15,6 +16,7 @@ const DEFAULT_CONFIG: AppConfig = {
     colorMode: 'dark',
     accentId: 'cyan',
   },
+  activeProfileId: null,
 };
 
 let store: Store | null = null;
@@ -37,8 +39,10 @@ async function getStore(): Promise<Store> {
 export async function loadConfig(): Promise<AppConfig> {
   const s = await getStore();
   const theme = await s.get<AppConfig['theme']>('theme');
+  const activeProfileId = await s.get<string>('activeProfileId');
   return {
     theme: theme ?? DEFAULT_CONFIG.theme,
+    activeProfileId: activeProfileId ?? null,
   };
 }
 
