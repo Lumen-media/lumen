@@ -130,7 +130,7 @@ export function ThemeSection() {
       <div className="space-y-6">
         <div>
           <h4 className="uppercase text-xs font-semibold tracking-widest text-muted-foreground mb-3">
-            {t('Active Profile')}
+            {t('Workspace')}
           </h4>
           <div className="flex flex-wrap items-center gap-2">
             {profiles.map((profile) => (
