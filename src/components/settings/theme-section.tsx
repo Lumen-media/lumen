@@ -78,7 +78,7 @@ export function ThemeSection({
                 <SelectTrigger className="w-44">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="p-1">
                   <SelectItem value="lumen-cyan">{t('Lumen Cyan')}</SelectItem>
                   <SelectItem value="lumen-dark">{t('Lumen Dark')}</SelectItem>
                   <SelectItem value="lumen-light">{t('Lumen Light')}</SelectItem>
@@ -92,7 +92,7 @@ export function ThemeSection({
                 <SelectTrigger className="w-44">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="p-1">
                   <SelectItem value="ocean-cyan">{t('Ocean Cyan')}</SelectItem>
                   <SelectItem value="forest-green">{t('Forest Green')}</SelectItem>
                   <SelectItem value="sunset-amber">{t('Sunset Amber')}</SelectItem>
