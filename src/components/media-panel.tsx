@@ -401,7 +401,7 @@ export function MediaPanel() {
                 <Button
                   key={item.id}
                   onClick={() => setActiveMedia(item.id)}
-                  className="justify-start"
+                  className="justify-start p-5 px-3"
                   type="button"
                   variant="ghost"
                   aria-label={`Open ${item.label} category`}
