@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+import { useAppVersion } from '@/hooks/use-app-version';
 import { cn } from '@/lib/utils';
 import { AboutSection } from './settings/about-section';
 import { AdvancedSection } from './settings/advanced-section';
@@ -43,6 +44,7 @@ const SECTION_TITLES: Record<NavSection, { label: string; title: string; descrip
 };
 
 export const SettingsDialog = () => {
+  const version = useAppVersion();
   const [activeSection, setActiveSection] = useState<NavSection>('theme');
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [activeProfile, setActiveProfile] = useState('Default Studio');
@@ -194,7 +196,7 @@ export const SettingsDialog = () => {
             </div>
             <div className="flex items-center justify-between">
               <span>{t('Version')}</span>
-              <span>1.4.2</span>
+              <span>{version}</span>
             </div>
           </div>
         </Card>
