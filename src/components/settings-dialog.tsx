@@ -7,7 +7,6 @@ import {
   Monitor,
   Palette,
   RotateCcw,
-  Save,
   Settings,
   SlidersHorizontal,
   Sparkles,
@@ -18,6 +17,7 @@ import { useState } from 'react';
 
 import { useAppVersion } from '@/hooks/use-app-version';
 import { cn } from '@/lib/utils';
+import { useProfileStore } from '@/stores/profile-store';
 import { AboutSection } from './settings/about-section';
 import { AdvancedSection } from './settings/advanced-section';
 import { DevicePermissionsSection } from './settings/device-permissions-section';
@@ -46,6 +46,8 @@ const SECTION_TITLES: Record<NavSection, { label: string; title: string; descrip
 
 export const SettingsDialog = () => {
   const version = useAppVersion();
+  const { profiles, activeProfileId, resetProfile } = useProfileStore();
+  const activeProfile = profiles.find((p) => p.id === activeProfileId);
   const [activeSection, setActiveSection] = useState<NavSection>('theme');
   const [remoteOpen, setRemoteOpen] = useState(false);
 
@@ -83,10 +85,10 @@ export const SettingsDialog = () => {
           </CardHeader>
 
           <div className="p-2">
-            <div className="rounded-lg bg-muted/60 px-3 py-2.5">
-              <p className="text-xs text-muted-foreground">{t('Workspace')}</p>
+            <div className="rounded-lg bg-muted/35 px-3 py-2.5">
+              <p className="text-xs text-muted-foreground">{t('Active Profile')}</p>
               <p className="text-sm font-medium leading-tight mt-0.5">
-                {t('Default Studio Profile')}
+                {activeProfile?.name ?? t('Default')}
               </p>
             </div>
           </div>
@@ -213,16 +215,17 @@ export const SettingsDialog = () => {
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button variant="secondary" size="sm">
+            {activeSection === 'theme' && activeProfileId && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="shrink-0"
+                onClick={() => resetProfile(activeProfileId)}
+              >
                 <RotateCcw className="size-3.5" />
                 {t('Reset')}
               </Button>
-              <Button size="sm">
-                <Save className="size-3.5" />
-                {t('Save Changes')}
-              </Button>
-            </div>
+            )}
           </CardHeader>
 
           <CardContent className="flex-1 overflow-hidden p-0">
