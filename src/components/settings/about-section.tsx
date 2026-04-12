@@ -3,6 +3,7 @@
 import { t } from 'i18next';
 import { ArrowRight, Code2, FileText, Lock, RefreshCw, Shield, Sparkles } from 'lucide-react';
 
+import { useAppVersion } from '@/hooks/use-app-version';
 import { useSystemInfo } from '@/hooks/use-system-info';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -16,6 +17,7 @@ const RESOURCES = [
 ];
 
 export function AboutSection() {
+  const version = useAppVersion();
   const { os, arch, memory, gpu } = useSystemInfo();
 
   const SYSTEM_INFO = [
@@ -36,7 +38,7 @@ export function AboutSection() {
           <div>
             <h2 className="text-2xl font-bold">Lumen</h2>
             <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Version 1.4.2</span>
+              <span>Version {version}</span>
               <span className="rounded bg-muted px-1.5 py-0.5 font-mono">Build 2024.10.15</span>
               <span className="rounded bg-muted px-1.5 py-0.5">Desktop App</span>
             </div>
