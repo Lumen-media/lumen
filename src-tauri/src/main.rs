@@ -209,7 +209,10 @@ fn get_gpu_name() -> String {
             let text = String::from_utf8_lossy(&out.stdout);
             for line in text.lines() {
                 let lower = line.to_lowercase();
-                if lower.contains("vga") || lower.contains("3d controller") || lower.contains("display") {
+                if lower.contains("vga")
+                    || lower.contains("3d controller")
+                    || lower.contains("display")
+                {
                     if let Some(pos) = line.find(": ") {
                         return line[pos + 2..].trim().to_string();
                     }
@@ -222,6 +225,7 @@ fn get_gpu_name() -> String {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_stronghold::Builder::new(|pass| todo!()).build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_sql::Builder::new().build())
