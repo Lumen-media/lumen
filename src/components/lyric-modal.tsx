@@ -9,6 +9,7 @@ import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
 import { type LyricData, lyricService } from '@/services/lyric-service';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
+import { useProfileStore } from '@/stores/profile-store';
 import { LyricBackgroundModal, type LyricBackgroundModalRef } from './lyric-background-modal';
 import { TextEditor, type TextEditorRef } from './text-editor';
 import { Button } from './ui/button';
@@ -59,6 +60,7 @@ function SlidePreview({
   fontSizeNum,
   background,
   globalBackground,
+  profileBackground,
   onSetBackground,
 }: {
   slide: Slide;
@@ -67,6 +69,7 @@ function SlidePreview({
   fontSizeNum: number;
   background?: string;
   globalBackground?: string;
+  profileBackground?: string;
   onSetBackground: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null!);
@@ -98,7 +101,7 @@ function SlidePreview({
     }
   });
 
-  const effectiveBg = background || globalBackground;
+  const effectiveBg = background || globalBackground || profileBackground;
   const [bgSrc, setBgSrc] = useState<string | undefined>();
 
   useEffect(() => {
@@ -200,6 +203,9 @@ const defaultValues: LyricFormValues = {
 
 export const LyricModal = () => {
   const { isOpen, filePath, close } = useLyricModalStore();
+  const { profiles, activeProfileId } = useProfileStore();
+  const activeProfile = profiles.find((p) => p.id === activeProfileId);
+  const profileBackground = activeProfile?.defaultBackground?.src ?? undefined;
   const editorRef = useRef<TextEditorRef | null>(null);
   const backgroundModalRef = useRef<LyricBackgroundModalRef>(null);
   const [saving, setSaving] = useState(false);
@@ -410,7 +416,7 @@ export const LyricModal = () => {
                                 selectedFont={selectedFont}
                                 fontSizeNum={fontSizeNum}
                                 background={slideBackgrounds[i]}
-                                globalBackground={globalBackground}
+                                globalBackground={globalBackground || profileBackground}
                                 onSetBackground={() =>
                                   backgroundModalRef.current?.open((bg) =>
                                     form.setFieldValue('slideBackgrounds', {
