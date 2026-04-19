@@ -68,7 +68,7 @@ export function MiniPlayer({ className }: MiniPlayerProps) {
             max={player.localDuration}
             value={[player.localTime]}
             onValueChange={player.handleSliderChange}
-            onValueCommit={() => player.setIsDragging(false)}
+            onValueCommit={player.handleSliderCommit}
             onPointerDown={() => player.setIsDragging(true)}
             trackClassName="bg-muted"
             rangeClassName="bg-primary"
@@ -190,6 +190,7 @@ export function MiniPlayer({ className }: MiniPlayerProps) {
               max={100}
               value={[player.volume]}
               onValueChange={player.handleVolumeChange}
+              onValueCommit={player.handleVolumeCommit}
               className="h-7"
               trackClassName="bg-muted"
               rangeClassName="bg-primary"

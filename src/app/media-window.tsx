@@ -1,4 +1,4 @@
-import { listen } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
@@ -100,6 +100,10 @@ function MediaWindowComponent() {
 
   useEffect(() => {
     checkFullscreenState();
+  }, []);
+
+  useEffect(() => {
+    emit('media-window-ready').catch(() => {});
   }, []);
 
   const handleKeyDown = useCallback(
