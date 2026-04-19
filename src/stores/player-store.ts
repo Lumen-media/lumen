@@ -1,8 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { create } from 'zustand';
 import { getSetting, saveSetting } from '@/services/db';
+import { remoteSyncService } from '@/services/remote-sync-service';
 import { useQueueStore } from '@/stores/queue-store';
 
 interface PlayerStore {
@@ -21,6 +22,9 @@ interface PlayerStore {
   ws: WebSocket | null;
   restoredFilePath: string | null;
   currentFilePath: string | null;
+  currentLyricPath: string | null;
+  currentLyricSlideIndex: number;
+  currentLyricTotalSlides: number;
 
   initWs: () => () => void;
   initListeners: () => () => void;
@@ -31,17 +35,61 @@ interface PlayerStore {
   handleNext: () => void;
   handleLoop: () => void;
   handleVolumeChange: (value: number[]) => void;
+  handleVolumeCommit: (value: number[]) => void;
   handleMuteToggle: () => void;
   handleToggleScreen: () => Promise<void>;
   handleSliderChange: (value: number[]) => void;
+  handleSliderCommit: (value: number[]) => void;
   setIsDragging: (dragging: boolean) => void;
   loadFile: (filePath: string, seekTime?: number) => Promise<void>;
   presentLyric: (filePath: string) => Promise<void>;
   restoreLastMedia: () => Promise<void>;
 }
 
+let volumeCommitTimeout: ReturnType<typeof setTimeout> | null = null;
+let seekCommitTimeout: ReturnType<typeof setTimeout> | null = null;
+const SOCKET_COMMIT_DEBOUNCE_MS = 150;
+
 async function getMediaWindow() {
   return WebviewWindow.getByLabel('media-window');
+}
+
+async function waitForMediaWindowReady(timeoutMs = 3000): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let done = false;
+    let timeoutId: number | undefined;
+    let cleanupPromise: Promise<UnlistenFn> | null = null;
+
+    const finish = (callback: () => void) => {
+      if (done) return;
+      done = true;
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+      if (cleanupPromise) {
+        cleanupPromise.then((unlisten) => unlisten()).catch(() => {});
+      }
+      callback();
+    };
+
+    cleanupPromise = listen('media-window-ready', () => {
+      finish(resolve);
+    });
+
+    timeoutId = window.setTimeout(() => {
+      finish(() => reject(new Error('Timed out waiting for media window readiness')));
+    }, timeoutMs);
+  });
+}
+
+function getMediaTypeFromPath(filePath: string | null | undefined): PlayerStore['localMediaType'] {
+  if (!filePath) return undefined;
+  const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+  const videoExtensions = ['mp4', 'webm', 'mkv', 'avi', 'mov'];
+  if (videoExtensions.includes(ext)) {
+    return 'video';
+  }
+  return 'audio';
 }
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
@@ -60,6 +108,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   ws: null,
   restoredFilePath: null,
   currentFilePath: null,
+  currentLyricPath: null,
+  currentLyricSlideIndex: 0,
+  currentLyricTotalSlides: 0,
 
   initWs: () => {
     const socket = new WebSocket('ws://localhost:8080');
@@ -75,6 +126,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   initListeners: () => {
     let lastSavedDuration = 0;
+    let lastSyncBucket = -1;
 
     const unlistenProgress = listen<{ seconds: number; duration: number }>(
       'video-progress',
@@ -96,6 +148,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             }
           }
         }
+
+        const nextBucket = Math.floor(event.payload.seconds / 10);
+        if (get().isPlaying && nextBucket !== lastSyncBucket) {
+          lastSyncBucket = nextBucket;
+          void broadcastPlayerSync(get, 'interval');
+        }
       }
     );
 
@@ -114,12 +172,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             .updateMetadata(metaFilePath, { title, artist })
             .catch(() => {});
         }
+
+        void broadcastPlayerSync(get, 'metadata');
       }
     );
 
     const unlistenStop = listen('stop', () => {
       set({ isPlaying: false, isScreenOpen: false });
       saveSetting('last_time', '0').catch(() => {});
+      void broadcastPlayerSync(get, 'stop');
 
       useQueueStore
         .getState()
@@ -129,10 +190,80 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         });
     });
 
+    const unlistenSetVolume = listen<number>('set-volume', (event) => {
+      const nextVolume = Math.max(0, Math.min(100, Number(event.payload) || 0));
+      set({
+        volume: nextVolume,
+        isMuted: nextVolume === 0,
+      });
+    });
+
+    const unlistenMute = listen('mute', () => {
+      const current = get();
+      set({ isMuted: !current.isMuted });
+    });
+
+    const unlistenPlayPause = listen('play-pause', () => {
+      set((state) => ({ isPlaying: !state.isPlaying }));
+    });
+
+    const unlistenSeek = listen<number>('seek', (event) => {
+      if (get().isDragging) return;
+      set({ localTime: Number(event.payload) || 0 });
+    });
+
+    const unlistenLoop = listen<boolean>('video-loop', (event) => {
+      set({ isLoop: Boolean(event.payload) });
+    });
+
+    const unlistenLoadUrl = listen<{ url: string; time: number }>('load-url', (event) => {
+      const filePath = event.payload.url;
+      const seekTime = Number(event.payload.time) || 0;
+      set({
+        isPlaying: true,
+        currentFilePath: filePath,
+        currentLyricPath: null,
+        currentLyricSlideIndex: 0,
+        currentLyricTotalSlides: 0,
+        localMediaType: getMediaTypeFromPath(filePath),
+        localTime: seekTime,
+        localDuration: seekTime > 0 ? get().localDuration : 0,
+      });
+    });
+
+    const unlistenLoadLyric = listen<{ url: string }>('load-lyric', (event) => {
+      set({
+        currentLyricPath: event.payload.url,
+        currentLyricSlideIndex: 0,
+        currentLyricTotalSlides: 0,
+      });
+    });
+
+    const unlistenLyricSlideChanged = listen<{
+      filePath: string;
+      slideIndex: number;
+      totalSlides: number;
+    }>('lyric-slide-changed', (event) => {
+      set({
+        currentLyricPath: event.payload.filePath,
+        currentLyricSlideIndex: event.payload.slideIndex,
+        currentLyricTotalSlides: event.payload.totalSlides,
+      });
+      void broadcastPlayerSync(get, 'lyric_slide_changed');
+    });
+
     return () => {
       unlistenProgress.then((f) => f());
       unlistenMeta.then((f) => f());
       unlistenStop.then((f) => f());
+      unlistenSetVolume.then((f) => f());
+      unlistenMute.then((f) => f());
+      unlistenPlayPause.then((f) => f());
+      unlistenSeek.then((f) => f());
+      unlistenLoop.then((f) => f());
+      unlistenLoadUrl.then((f) => f());
+      unlistenLoadLyric.then((f) => f());
+      unlistenLyricSlideChanged.then((f) => f());
     };
   },
 
@@ -166,6 +297,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     sendWs({ event: 'play_pause' });
     set({ isPlaying: !isPlaying });
+    void broadcastPlayerSync(get, 'play_pause');
   },
 
   handleStop: async () => {
@@ -173,6 +305,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     sendWs({ event: 'stop' });
     set({ localTime: 0, isPlaying: false });
     saveSetting('last_time', '0').catch(() => {});
+    void broadcastPlayerSync(get, 'stop');
 
     const win = await getMediaWindow();
     if (win) {
@@ -184,21 +317,40 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
   },
 
-  handlePrevious: () => get().sendWs({ event: 'previous' }),
+  handlePrevious: () => {
+    get().sendWs({ event: 'previous' });
+    void broadcastPlayerSync(get, 'previous');
+  },
 
-  handleNext: () => get().sendWs({ event: 'next' }),
+  handleNext: () => {
+    get().sendWs({ event: 'next' });
+    void broadcastPlayerSync(get, 'next');
+  },
 
   handleLoop: () => {
     const next = !get().isLoop;
     set({ isLoop: next });
     get().sendWs({ event: 'set_loop', value: next ? 1 : 0 });
+    void broadcastPlayerSync(get, 'set_loop');
   },
 
   handleVolumeChange: (value) => {
     const v = value[0] ?? 100;
     set({ volume: v });
-    get().sendWs({ event: 'set_volume', value: v });
-    saveSetting('last_volume', String(v)).catch(() => {});
+  },
+
+  handleVolumeCommit: (value) => {
+    const v = value[0] ?? get().volume;
+    set({ volume: v });
+    if (volumeCommitTimeout) {
+      clearTimeout(volumeCommitTimeout);
+    }
+    volumeCommitTimeout = setTimeout(() => {
+      get().sendWs({ event: 'set_volume', value: v });
+      saveSetting('last_volume', String(v)).catch(() => {});
+      void broadcastPlayerSync(get, 'set_volume');
+      volumeCommitTimeout = null;
+    }, SOCKET_COMMIT_DEBOUNCE_MS);
   },
 
   handleMuteToggle: () => {
@@ -206,6 +358,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const next = !isMuted;
     set({ isMuted: next });
     sendWs({ event: 'set_volume', value: next ? 0 : volume });
+    void broadcastPlayerSync(get, 'mute');
   },
 
   handleToggleScreen: async () => {
@@ -236,8 +389,20 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   handleSliderChange: (value) => {
     const newTime = value[0] ?? 0;
-    get().sendWs({ event: 'seek', value: newTime });
     set({ localTime: newTime });
+  },
+
+  handleSliderCommit: (value) => {
+    const newTime = value[0] ?? get().localTime;
+    set({ localTime: newTime, isDragging: false });
+    if (seekCommitTimeout) {
+      clearTimeout(seekCommitTimeout);
+    }
+    seekCommitTimeout = setTimeout(() => {
+      get().sendWs({ event: 'seek', value: newTime });
+      void broadcastPlayerSync(get, 'seek');
+      seekCommitTimeout = null;
+    }, SOCKET_COMMIT_DEBOUNCE_MS);
   },
 
   setIsDragging: (dragging) => set({ isDragging: dragging }),
@@ -250,15 +415,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     let win = await getMediaWindow();
     if (!win) {
       try {
+        const readyPromise = waitForMediaWindowReady();
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-        await new Promise((r) => setTimeout(r, 800));
+        await readyPromise;
         win = await getMediaWindow();
       } catch {
         return;
       }
     }
 
-    // Wait up to 3s for WS to be open before sending
     const deadline = Date.now() + 3000;
     while (get().ws?.readyState !== WebSocket.OPEN) {
       if (Date.now() >= deadline) return;
@@ -271,6 +436,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       localMediaType: isVideo ? 'video' : 'audio',
       restoredFilePath: null,
       currentFilePath: filePath,
+      currentLyricPath: null,
+      currentLyricSlideIndex: 0,
+      currentLyricTotalSlides: 0,
       localTime: seekTime > 0 ? seekTime : 0,
       localDuration: seekTime > 0 ? get().localDuration : 0,
     });
@@ -278,6 +446,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     saveSetting('last_media_path', filePath).catch(() => {});
     saveSetting('last_media_type', isVideo ? 'video' : 'audio').catch(() => {});
     saveSetting('last_time', '0').catch(() => {});
+    void broadcastPlayerSync(get, 'load_url');
 
     if (isVideo && win) {
       await win.show();
@@ -289,8 +458,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     let win = await getMediaWindow();
     if (!win) {
       try {
+        const readyPromise = waitForMediaWindowReady();
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-        await new Promise((r) => setTimeout(r, 800));
+        await readyPromise;
         win = await getMediaWindow();
       } catch {
         return;
@@ -304,6 +474,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     get().sendWs({ event: 'load_lyric', url: filePath });
+    set({
+      currentLyricPath: filePath,
+      currentLyricSlideIndex: 0,
+      currentLyricTotalSlides: 0,
+    });
+    void broadcastPlayerSync(get, 'load_lyric');
 
     if (win) {
       await win.show();
@@ -338,3 +514,44 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     } catch {}
   },
 }));
+
+function nowUnixSeconds() {
+  return Math.floor(Date.now() / 1000);
+}
+
+async function broadcastPlayerSync(
+  get: () => PlayerStore,
+  action?: string
+): Promise<void> {
+  const state = get();
+  await remoteSyncService.broadcast(
+    {
+      event: 'player_sync',
+      media: {
+        url: state.currentFilePath ?? undefined,
+        title: state.localTitle || undefined,
+        artist: state.localArtist || undefined,
+        type: state.localMediaType,
+      },
+      playback: {
+        is_playing: state.isPlaying,
+        position: state.localTime,
+        duration: state.localDuration,
+        sent_at: nowUnixSeconds(),
+      },
+      state: {
+        is_loop: state.isLoop,
+        is_muted: state.isMuted,
+        volume: state.volume,
+      },
+      lyric: {
+        active: Boolean(state.currentLyricPath),
+        url: state.currentLyricPath ?? undefined,
+        slide_index: state.currentLyricPath ? state.currentLyricSlideIndex : undefined,
+        total_slides: state.currentLyricPath ? state.currentLyricTotalSlides || undefined : undefined,
+      },
+      action,
+    },
+    undefined
+  );
+}

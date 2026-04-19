@@ -1,4 +1,4 @@
-import { listen } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { readFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
@@ -95,6 +95,16 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
       })
       .catch(console.error);
   }, [filePath]);
+
+  useEffect(() => {
+    if (!lyricData || !filePath) return;
+
+    emit('lyric-slide-changed', {
+      filePath,
+      slideIndex: currentSlide,
+      totalSlides: lyricData.slides.length,
+    }).catch(() => {});
+  }, [currentSlide, filePath, lyricData]);
 
   const totalSlides = lyricData?.slides.length ?? 0;
   const [textVisible, setTextVisible] = useState(true);
