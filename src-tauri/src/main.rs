@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod devices;
 mod websocket;
 
 use std::collections::HashMap;
@@ -225,13 +226,13 @@ fn get_gpu_name() -> String {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
-        .plugin(tauri_plugin_stronghold::Builder::new(|pass| todo!()).build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .manage(WindowState {
             positions: Mutex::new(HashMap::new()),
         })
+        .manage(devices::default_device_state())
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             println!("Single instance callback:");
             println!("  args: {:?}", args);
@@ -256,6 +257,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            devices::ensure_remote_access_ready(&app.handle()).map_err(|e| e.to_string())?;
             let app_handle = app.handle();
             let app_handle_clone = app_handle.clone();
             async_runtime::spawn(async move {
@@ -280,7 +282,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             create_window,
             save_window_position,
             get_system_fonts,
-            get_system_info
+            get_system_info,
+            devices::get_local_ip,
+            devices::gen_reg_token,
+            devices::get_devices,
+            devices::get_remote_access_settings,
+            devices::update_remote_access_settings,
+            devices::toggle_device,
+            devices::update_device_permissions,
+            devices::remove_device,
+            devices::broadcast_remote_event
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
