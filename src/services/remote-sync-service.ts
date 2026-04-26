@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { streamingService } from './streaming-service';
 
 export interface PlayerSyncPayload {
   event: 'player_sync';
@@ -30,6 +31,10 @@ export interface PlayerSyncPayload {
 
 class RemoteSyncService {
   async broadcast(payload: PlayerSyncPayload, requiredPermission?: string): Promise<void> {
+    const mediaType = payload.media.type;
+    const isProtected = mediaType === 'video';
+    await streamingService.setContentProtected(isProtected);
+
     await invoke('broadcast_remote_event', {
       envelope: payload,
       required_permission: requiredPermission ?? null,

@@ -1,4 +1,5 @@
 import { emit, listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
@@ -133,6 +134,7 @@ function MediaWindowComponent() {
 
     const unlistenLoadUrl = listen('load-url', () => {
       setMode('video');
+      invoke('push_stream_blank').catch(() => {});
     });
 
     return () => {

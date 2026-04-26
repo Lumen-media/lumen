@@ -17,3 +17,5 @@ export { devicesService } from './devices-service';
 export type { FileInfo, MediaType } from './types';
 export { remoteSyncService } from './remote-sync-service';
 export type { PlayerSyncPayload } from './remote-sync-service';
+export type { StreamingConfig, StreamingStatus } from './streaming-service';
+export { streamingService } from './streaming-service';
