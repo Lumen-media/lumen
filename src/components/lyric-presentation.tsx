@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { readFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -98,11 +99,34 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
 
   useEffect(() => {
     if (!lyricData || !filePath) return;
+    const slide = lyricData.slides[currentSlide];
+    const parsedFontSize = Number.parseInt(lyricData.metadata.fontSize, 10);
+    const fontSize = Number.isFinite(parsedFontSize) ? parsedFontSize : 48;
+    const background = slide?.background || lyricData.metadata.globalBackground || undefined;
 
     emit('lyric-slide-changed', {
       filePath,
       slideIndex: currentSlide,
       totalSlides: lyricData.slides.length,
+      lines: slide?.lines ?? [],
+      font: lyricData.metadata.font || undefined,
+      fontSize,
+      alignment: lyricData.metadata.alignment || 'center',
+      background,
+      active: true,
+    }).catch(() => {});
+
+    invoke('push_stream_slide', {
+      update: {
+        lines: slide?.lines ?? [],
+        font: lyricData.metadata.font || null,
+        font_size: fontSize,
+        alignment: lyricData.metadata.alignment || 'center',
+        background: background ?? null,
+        slide_index: currentSlide,
+        total_slides: lyricData.slides.length,
+        active: true,
+      },
     }).catch(() => {});
   }, [currentSlide, filePath, lyricData]);
 

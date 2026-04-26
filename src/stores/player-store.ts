@@ -181,6 +181,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       set({ isPlaying: false, isScreenOpen: false });
       saveSetting('last_time', '0').catch(() => {});
       void broadcastPlayerSync(get, 'stop');
+      invoke('push_stream_blank').catch(() => {});
 
       useQueueStore
         .getState()
@@ -306,6 +307,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set({ localTime: 0, isPlaying: false });
     saveSetting('last_time', '0').catch(() => {});
     void broadcastPlayerSync(get, 'stop');
+    invoke('push_stream_blank').catch(() => {});
 
     const win = await getMediaWindow();
     if (win) {
