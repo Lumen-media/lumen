@@ -6,6 +6,7 @@ export interface DevicePermissions {
   lyrics: boolean;
   bible: boolean;
   media: boolean;
+  streaming: boolean;
 }
 
 export interface Device {
