@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod devices;
+mod streaming;
 mod websocket;
 
 use std::collections::HashMap;
@@ -258,6 +259,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             devices::ensure_remote_access_ready(&app.handle()).map_err(|e| e.to_string())?;
+            let streaming_state = streaming::initialize_streaming_state(&app.handle())?;
+            app.manage(streaming_state);
             let app_handle = app.handle();
             let app_handle_clone = app_handle.clone();
             async_runtime::spawn(async move {
@@ -291,7 +294,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             devices::toggle_device,
             devices::update_device_permissions,
             devices::remove_device,
-            devices::broadcast_remote_event
+            devices::broadcast_remote_event,
+            streaming::manager::get_streaming_config,
+            streaming::manager::update_streaming_config,
+            streaming::manager::get_streaming_status,
+            streaming::manager::set_stream_content_protected,
+            streaming::manager::set_mobile_preview_device,
+            streaming::manager::push_stream_slide,
+            streaming::manager::push_stream_blank
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
