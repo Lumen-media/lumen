@@ -1,7 +1,7 @@
 'use client';
 
 import { t } from 'i18next';
-import { BookOpen, ImagePlus, Loader2, Music, Smartphone, Trash2 } from 'lucide-react';
+import { BookOpen, ImagePlus, Loader2, MonitorPlay, Music, Smartphone, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 
@@ -22,6 +22,7 @@ const PERMISSION_FEATURES: Array<{
   { id: 'lyrics', label: 'Lyrics', icon: <Music className="size-3.5" /> },
   { id: 'bible', label: 'Bible', icon: <BookOpen className="size-3.5" /> },
   { id: 'media', label: 'Media', icon: <ImagePlus className="size-3.5" /> },
+  { id: 'streaming', label: 'Streaming', icon: <MonitorPlay className="size-3.5" /> },
 ];
 
 export function DevicePermissionsSection() {
