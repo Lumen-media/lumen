@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS devices (
     permissions_lyrics INTEGER NOT NULL DEFAULT 1,
     permissions_bible INTEGER NOT NULL DEFAULT 1,
     permissions_media INTEGER NOT NULL DEFAULT 1,
+    permissions_streaming INTEGER NOT NULL DEFAULT 0,
     registered_at INTEGER NOT NULL,
     last_connected_at INTEGER
 )
@@ -39,6 +40,7 @@ pub struct DevicePermissions {
     pub lyrics: bool,
     pub bible: bool,
     pub media: bool,
+    pub streaming: bool,
 }
 
 impl Default for DevicePermissions {
@@ -48,6 +50,7 @@ impl Default for DevicePermissions {
             lyrics: true,
             bible: true,
             media: true,
+            streaming: false,
         }
     }
 }
@@ -738,6 +741,36 @@ fn ensure_devices_table() -> Result<(), String> {
     connection
         .execute(DEVICES_TABLE_SQL, [])
         .map_err(|e| e.to_string())?;
+    ensure_devices_schema(&connection)?;
+    Ok(())
+}
+
+fn ensure_devices_schema(connection: &Connection) -> Result<(), String> {
+    let mut statement = connection
+        .prepare("PRAGMA table_info(devices)")
+        .map_err(|e| e.to_string())?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| e.to_string())?;
+
+    let mut has_permissions_streaming = false;
+    for column in columns {
+        let column = column.map_err(|e| e.to_string())?;
+        if column == "permissions_streaming" {
+            has_permissions_streaming = true;
+            break;
+        }
+    }
+
+    if !has_permissions_streaming {
+        connection
+            .execute(
+                "ALTER TABLE devices ADD COLUMN permissions_streaming INTEGER NOT NULL DEFAULT 0",
+                [],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }
 
@@ -797,6 +830,7 @@ fn load_devices_from_db() -> Result<HashMap<String, Device>, String> {
                 permissions_lyrics,
                 permissions_bible,
                 permissions_media,
+                permissions_streaming,
                 registered_at,
                 last_connected_at
             FROM devices
@@ -819,9 +853,10 @@ fn load_devices_from_db() -> Result<HashMap<String, Device>, String> {
                     lyrics: row.get::<_, i64>(8)? == 1,
                     bible: row.get::<_, i64>(9)? == 1,
                     media: row.get::<_, i64>(10)? == 1,
+                    streaming: row.get::<_, i64>(11)? == 1,
                 },
-                registered_at: row.get::<_, u64>(11)?,
-                last_connected_at: row.get(12)?,
+                registered_at: row.get::<_, u64>(12)?,
+                last_connected_at: row.get(13)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -852,9 +887,10 @@ fn insert_or_replace_device_in_db(device: &Device) -> Result<(), String> {
                 permissions_lyrics,
                 permissions_bible,
                 permissions_media,
+                permissions_streaming,
                 registered_at,
                 last_connected_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             "#,
             params![
                 device.device_id,
@@ -868,6 +904,7 @@ fn insert_or_replace_device_in_db(device: &Device) -> Result<(), String> {
                 i64::from(device.permissions.lyrics),
                 i64::from(device.permissions.bible),
                 i64::from(device.permissions.media),
+                i64::from(device.permissions.streaming),
                 device.registered_at,
                 device.last_connected_at,
             ],
@@ -906,6 +943,11 @@ pub fn map_event_permission(event: &str) -> Option<&'static str> {
         "play_pause" | "stop" | "next" | "previous" | "mute" | "set_volume" | "seek"
         | "set_loop" | "load_url" | "metadata" | "progress" => Some("player"),
         "load_lyric" => Some("lyrics"),
+        "subscribe_stream"
+        | "unsubscribe_stream"
+        | "webrtc_answer"
+        | "webrtc_ice_candidate"
+        | "mobile_offer" => Some("streaming"),
         _ => None,
     }
 }
@@ -916,6 +958,7 @@ pub fn is_permission_allowed(permissions: &DevicePermissions, permission: &str) 
         "lyrics" => permissions.lyrics,
         "bible" => permissions.bible,
         "media" => permissions.media,
+        "streaming" => permissions.streaming,
         _ => false,
     }
 }
