@@ -1,182 +1,218 @@
 'use client';
 
 import { t } from 'i18next';
-import { Cpu, Layers, MonitorPlay } from 'lucide-react';
+import { Cpu, Globe, MonitorPlay, Shield } from 'lucide-react';
+import { useEffect } from 'react';
 
-import { Button } from '../ui/button';
-import { Card, CardContent } from '../ui/card';
+import { useStreamingStore } from '@/stores/streaming-store';
+import { CardContent } from '../ui/card';
+import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
 
 export function AdvancedSection() {
+  const { config, status, init, updateConfig } = useStreamingStore();
+
+  useEffect(() => {
+    init().catch(() => {});
+  }, [init]);
+
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-base font-semibold">{t('Streaming & Performance')}</h3>
         <p className="text-sm text-muted-foreground mt-0.5">
-          {t(
-            'Fine-tune transmission resolutions, granular frame rates, and hardware acceleration for optimal playback.'
-          )}
+          {t('Configure desktop streaming, HTML presentation server and content protection.')}
         </p>
       </div>
 
-      <Card className="gap-3 p-4">
-        <div className="flex items-center gap-2.5">
+      <CardContent variant="muted" className="gap-3 p-4 rounded-xl">
+        <div className="flex items-center gap-2.5 pl-4">
           <MonitorPlay className="size-4 text-primary" />
-          <span className="text-sm font-medium">{t('Global Transmission Quality')}</span>
+          <span className="text-sm font-medium">{t('RTC Output')}</span>
         </div>
-        <div className="flex flex-col gap-2 rounded-lg overflow-hidden">
-          <CardContent variant="muted" className="flex items-center justify-between p-4 rounded-lg">
-            <div>
-              <p className="text-sm font-medium">{t('Base Resolution')}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {t('The master resolution for external displays and remote transmission.')}
-              </p>
-            </div>
-            <Select defaultValue="1080p">
-              <SelectTrigger className="w-36 shrink-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="4k">4K (UHD)</SelectItem>
-                <SelectItem value="1440p">1440p (QHD)</SelectItem>
-                <SelectItem value="1080p">1080p (FHD)</SelectItem>
-                <SelectItem value="720p">720p (HD)</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardContent>
-          <CardContent variant="muted" className="flex items-center justify-between p-4 rounded-lg">
-            <div>
-              <p className="text-sm font-medium">{t('Global Frame Rate Cap')}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {t('Maximum FPS allowed for the application across all outputs.')}
-              </p>
-            </div>
-            <Select defaultValue="60">
-              <SelectTrigger className="w-36 shrink-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="120">120 FPS</SelectItem>
-                <SelectItem value="60">60 FPS</SelectItem>
-                <SelectItem value="30">30 FPS</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </div>
-      </Card>
 
-      <Card className="gap-3 p-4">
-        <div className="flex items-center gap-2.5">
-          <Layers className="size-4 text-primary" />
-          <span className="text-sm font-medium">{t('Content-Specific Frame Rates')}</span>
+        <div className="flex items-center justify-between rounded-lg p-4">
+          <div>
+            <p className="text-sm font-medium">{t('Preview Stream')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('Enable low-cost preview stream for remote devices.')}
+            </p>
+          </div>
+          <Switch
+            checked={config.preview_enabled}
+            onCheckedChange={(checked) => updateConfig({ preview_enabled: checked })}
+          />
         </div>
-        <div className="flex flex-col gap-2">
-          <CardContent variant="muted" className="flex items-center justify-between p-4 rounded-lg">
-            <div>
-              <p className="text-sm font-medium">{t('Video Playback')}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
-                {t(
-                  'Target frame rate when presenting native video files. Recommended: 60 FPS for smooth playback.'
-                )}
-              </p>
-            </div>
-            <Select defaultValue="60">
-              <SelectTrigger className="w-36 shrink-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="120">120 FPS</SelectItem>
-                <SelectItem value="60">60 FPS</SelectItem>
-                <SelectItem value="30">30 FPS</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardContent>
-          <CardContent variant="muted" className="flex items-center justify-between p-4 rounded-lg">
-            <div>
-              <p className="text-sm font-medium">{t('Text & Lyrics Render')}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
-                {t(
-                  'Frame rate for rendering dynamic text and transitions. Lowering this can save system resources.'
-                )}
-              </p>
-            </div>
-            <Select defaultValue="30">
-              <SelectTrigger className="w-36 shrink-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="60">60 FPS</SelectItem>
-                <SelectItem value="30">30 FPS</SelectItem>
-                <SelectItem value="24">24 FPS</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardContent>
-          <CardContent variant="muted" className="flex items-center justify-between p-4 rounded-lg">
-            <div>
-              <p className="text-sm font-medium">{t('Full Media Window Capture')}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 max-w-sm">
-                {t(
-                  'Capture rate when sharing the entire presentation window over network or remote connections.'
-                )}
-              </p>
-            </div>
-            <Select defaultValue="30">
-              <SelectTrigger className="w-36 shrink-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="60">60 FPS</SelectItem>
-                <SelectItem value="30">30 FPS</SelectItem>
-                <SelectItem value="24">24 FPS</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </div>
-      </Card>
 
-      <Card className="gap-3 p-4">
-        <div className="flex items-center gap-2.5">
+        <Separator />
+
+        <div className="flex items-center justify-between rounded-lg p-4">
+          <div>
+            <p className="text-sm font-medium">{t('Main Resolution')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('Resolution used by the main stream.')}
+            </p>
+          </div>
+          <Select
+            value={config.main_resolution}
+            onValueChange={(value) =>
+              updateConfig({
+                main_resolution: value as '720p' | '1080p' | '1440p' | '4K',
+              })
+            }
+          >
+            <SelectTrigger className="w-36 shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="720p">720p HD</SelectItem>
+              <SelectItem value="1080p">1080p FHD</SelectItem>
+              <SelectItem value="1440p">1440p QHD</SelectItem>
+              <SelectItem value="4K">4K UHD</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Separator />
+
+        <div className="flex items-center justify-between rounded-lg p-4">
+          <div>
+            <p className="text-sm font-medium">{t('Main FPS')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('Frame rate for the main stream.')}
+            </p>
+          </div>
+          <Select
+            value={String(config.main_fps)}
+            onValueChange={(value) =>
+              updateConfig({
+                main_fps: Number(value) as 1 | 15 | 24 | 30 | 60,
+              })
+            }
+          >
+            <SelectTrigger className="w-36 shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">1 FPS</SelectItem>
+              <SelectItem value="15">15 FPS</SelectItem>
+              <SelectItem value="24">24 FPS</SelectItem>
+              <SelectItem value="30">30 FPS</SelectItem>
+              <SelectItem value="60">60 FPS</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Separator />
+
+        <div className="flex items-center justify-between rounded-lg p-4">
+          <div>
+            <p className="text-sm font-medium">{t('Hardware Encoding')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('Use GPU acceleration when available.')}
+            </p>
+          </div>
+          <Switch
+            checked={config.hardware_encoding}
+            onCheckedChange={(checked) => updateConfig({ hardware_encoding: checked })}
+          />
+        </div>
+      </CardContent>
+
+      <CardContent variant="muted" className="gap-3 p-4 rounded-xl">
+        <div className="flex items-center gap-2.5 ml-3.5">
+          <Globe className="size-4 text-primary" />
+          <span className="text-sm font-medium">{t('HTML Presentation Server')}</span>
+        </div>
+
+        <CardContent className="flex items-center justify-between rounded-lg p-4">
+          <div>
+            <p className="text-sm font-medium">{t('Enable HTML Server')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('Serve slides to browsers over local network.')}
+            </p>
+          </div>
+          <Switch
+            checked={config.html_server_enabled}
+            onCheckedChange={(checked) => updateConfig({ html_server_enabled: checked })}
+          />
+        </CardContent>
+
+        <Separator />
+
+        <CardContent className="flex items-center justify-between rounded-lg p-4">
+          <div>
+            <p className="text-sm font-medium">{t('Port')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{t('Default: 8090')}</p>
+          </div>
+          <Input
+            type="number"
+            className="w-36"
+            min={1}
+            max={65535}
+            value={config.html_server_port}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              if (Number.isFinite(next) && next > 0 && next <= 65535) {
+                updateConfig({ html_server_port: next });
+              }
+            }}
+          />
+        </CardContent>
+
+        <Separator />
+
+        <CardContent className="rounded-lg p-4 space-y-1">
+          <p className="text-sm font-medium">{t('Current Status')}</p>
+          <p className="text-xs text-muted-foreground">
+            {status.html_active && status.html_url
+              ? t('Active at {{url}}', { url: status.html_url })
+              : t('Server is disabled')}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t('Preview: {{preview}} | Main: {{main}} | Mobile: {{mobile}}', {
+              preview: status.preview_subs,
+              main: status.main_subs,
+              mobile: status.mobile_connected ? 'connected' : 'idle',
+            })}
+          </p>
+        </CardContent>
+      </CardContent>
+
+      <CardContent variant="muted" className="gap-3 p-4 rounded-xl">
+        <div className="flex items-center gap-2.5 ml-3.5">
+          <Shield className="size-4 text-primary" />
+          <span className="text-sm font-medium">{t('Content Protection')}</span>
+        </div>
+
+        <CardContent className="flex items-center justify-between rounded-lg p-4">
+          <div>
+            <p className="text-sm font-medium">{t('Protect DRM video')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('Keep stream black when protected video is being presented.')}
+            </p>
+          </div>
+          <Switch
+            checked={config.content_protection}
+            onCheckedChange={(checked) => updateConfig({ content_protection: checked })}
+          />
+        </CardContent>
+      </CardContent>
+
+      <CardContent variant="muted" className="gap-3 p-4 rounded-xl">
+        <div className="flex items-center gap-2.5 ml-3.5">
           <Cpu className="size-4 text-primary" />
-          <span className="text-sm font-medium">{t('Hardware & Caching')}</span>
+          <span className="text-sm font-medium">{t('Runtime Notes')}</span>
         </div>
-        <div className="flex flex-col gap-2">
-          <CardContent variant="muted" className="flex items-center justify-between p-4 rounded-lg">
-            <div>
-              <p className="text-sm font-medium">{t('Hardware Acceleration')}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {t('Use GPU for rendering complex scenes and video decoding. Highly recommended.')}
-              </p>
-            </div>
-            <Switch defaultChecked />
-          </CardContent>
-          <CardContent variant="muted" className="flex items-center justify-between p-4 rounded-lg">
-            <div>
-              <p className="text-sm font-medium">{t('Aggressive Pre-caching')}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {t(
-                  'Automatically load next slides and media into memory to ensure zero latency during live events.'
-                )}
-              </p>
-            </div>
-            <Switch defaultChecked />
-          </CardContent>
-          <CardContent variant="muted" className="flex items-center justify-between p-4 rounded-lg">
-            <div>
-              <p className="text-sm font-medium">{t('Media Cache Storage')}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {t('Clear temporary files used for thumbnails and remote access buffering.')}
-              </p>
-            </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <span className="text-xs text-muted-foreground">1.2 GB used</span>
-              <Button variant="destructive" size="sm">
-                {t('Clear Cache')}
-              </Button>
-            </div>
-          </CardContent>
-        </div>
-      </Card>
+
+        <CardContent className="rounded-lg p-4">
+          <p className="text-xs text-muted-foreground">
+            {t('Streaming tracks are created on-demand and released when subscribers disconnect.')}
+          </p>
+        </CardContent>
+      </CardContent>
     </div>
   );
 }
