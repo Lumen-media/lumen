@@ -4,10 +4,17 @@ use crate::devices::{
     is_remote_access_enabled, map_event_permission, permission_denied_message, register_device,
     remove_session, touch_session,
 };
+use crate::streaming::{
+    StreamErrorPayload, WebRtcIceCandidatePayload, add_webrtc_ice_candidate, handle_mobile_offer,
+    handle_session_closed, set_webrtc_answer, subscribe_stream, unsubscribe_stream,
+};
 use futures_util::{SinkExt, StreamExt as FStreamExt};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::net::SocketAddr;
+use serde_json::{Value, json};
+use std::{
+    net::SocketAddr,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
@@ -36,6 +43,28 @@ struct RegisterMessage {
 struct AuthMessage {
     device_id: String,
     access_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SubscribeStreamMessage {
+    stream_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WebRtcAnswerMessage {
+    stream_type: String,
+    sdp: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct MobileOfferMessage {
+    sdp: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WebRtcIceCandidateMessage {
+    stream_type: String,
+    candidate: WebRtcIceCandidatePayload,
 }
 
 pub async fn accept_connection(peer: SocketAddr, stream: tokio::net::TcpStream, app: AppHandle) {
@@ -67,22 +96,56 @@ async fn handle_internal_connection(
     println!("New internal WebSocket connection: {}", peer);
 
     let (mut outgoing, mut incoming) = ws_stream.split();
+    let (sender, mut receiver) = mpsc::unbounded_channel::<Message>();
+    let writer = tauri::async_runtime::spawn(async move {
+        while let Some(message) = receiver.recv().await {
+            if outgoing.send(message).await.is_err() {
+                break;
+            }
+        }
+    });
+    let internal_session_id = format!("internal-{}", peer);
 
     while let Some(msg) = incoming.next().await {
         match msg {
             Ok(msg) => {
                 if msg.is_text() {
                     let text = msg.to_text()?;
-                    match serde_json::from_str::<AudioEvent>(text) {
-                        Ok(audio_event) => {
-                            handle_audio_event(&app, &peer.to_string(), &audio_event)?
+                    match serde_json::from_str::<Value>(text) {
+                        Ok(value) => {
+                            if let Some(event_name) = value.get("event").and_then(Value::as_str) {
+                                if handle_streaming_event(
+                                    &app,
+                                    &sender,
+                                    &internal_session_id,
+                                    "internal",
+                                    event_name,
+                                    &value,
+                                )
+                                .await?
+                                {
+                                    continue;
+                                }
+                            }
+
+                            match serde_json::from_value::<AudioEvent>(value) {
+                                Ok(audio_event) => {
+                                    handle_audio_event(&app, &peer.to_string(), &audio_event)?
+                                }
+                                Err(error) => {
+                                    eprintln!(
+                                        "Failed to parse internal message from {}: {}",
+                                        peer, error
+                                    );
+                                }
+                            }
                         }
                         Err(error) => {
                             eprintln!("Failed to parse internal message from {}: {}", peer, error);
                         }
                     }
                 } else if msg.is_ping() {
-                    outgoing.send(Message::Pong(msg.into_data())).await?;
+                    let _ = sender.send(Message::Pong(msg.into_data()));
                 } else if msg.is_close() {
                     break;
                 }
@@ -94,6 +157,8 @@ async fn handle_internal_connection(
         }
     }
 
+    let _ = handle_session_closed(&app, &internal_session_id).await;
+    writer.abort();
     println!("Internal connection with {} closed", peer);
     Ok(())
 }
@@ -242,9 +307,29 @@ async fn handle_external_connection(
 
                 if let Some(required_permission) = map_event_permission(event_name) {
                     if !is_permission_allowed(&session.permissions, required_permission) {
-                        let _ = sender.send(permission_denied_message(event_name)?);
+                        if is_streaming_event(event_name) {
+                            let _ = sender.send(stream_error_message(
+                                stream_type_for_event(event_name, &value),
+                                "no_permission",
+                            )?);
+                        } else {
+                            let _ = sender.send(permission_denied_message(event_name)?);
+                        }
                         continue;
                     }
+                }
+
+                if handle_streaming_event(
+                    &app,
+                    &sender,
+                    &session.session_id,
+                    &session.device_id,
+                    event_name,
+                    &value,
+                )
+                .await?
+                {
+                    continue;
                 }
 
                 match serde_json::from_value::<AudioEvent>(value.clone()) {
@@ -267,6 +352,7 @@ async fn handle_external_connection(
     }
 
     if let Some(active_session_id) = session_id {
+        let _ = handle_session_closed(&app, &active_session_id).await;
         let _ = remove_session(&state, &active_session_id);
     }
 
@@ -373,4 +459,283 @@ fn close_message(code: u16) -> Message {
         code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::from(code),
         reason: "".into(),
     }))
+}
+
+fn is_streaming_event(event_name: &str) -> bool {
+    matches!(
+        event_name,
+        "subscribe_stream"
+            | "unsubscribe_stream"
+            | "webrtc_answer"
+            | "webrtc_ice_candidate"
+            | "mobile_offer"
+    )
+}
+
+fn stream_type_for_event<'a>(event_name: &'a str, value: &'a Value) -> &'a str {
+    if event_name == "mobile_offer" {
+        return "mobile";
+    }
+
+    value
+        .get("stream_type")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown")
+}
+
+fn stream_error_message(stream_type: &str, reason: &str) -> Result<Message, String> {
+    json_message(&StreamErrorPayload {
+        event: "stream_error",
+        stream_type: stream_type.to_string(),
+        reason: reason.to_string(),
+    })
+}
+
+fn now_unix_ms() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default()
+}
+
+fn emit_streaming_debug(
+    app: &AppHandle,
+    session_id: &str,
+    device_id: &str,
+    event: &str,
+    payload: Value,
+) {
+    let _ = app.emit(
+        "streaming_debug_log",
+        json!({
+            "ts_ms": now_unix_ms(),
+            "session_id": session_id,
+            "device_id": device_id,
+            "event": event,
+            "payload": payload,
+        }),
+    );
+}
+
+async fn handle_streaming_event(
+    app: &AppHandle,
+    sender: &mpsc::UnboundedSender<Message>,
+    session_id: &str,
+    device_id: &str,
+    event_name: &str,
+    value: &Value,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    match event_name {
+        "subscribe_stream" => {
+            let payload: SubscribeStreamMessage = serde_json::from_value(value.clone())?;
+            emit_streaming_debug(
+                app,
+                session_id,
+                device_id,
+                "subscribe_stream",
+                json!({
+                    "status": "requested",
+                    "stream_type": payload.stream_type,
+                }),
+            );
+            if let Err(reason) =
+                subscribe_stream(app, session_id, &payload.stream_type, sender.clone()).await
+            {
+                emit_streaming_debug(
+                    app,
+                    session_id,
+                    device_id,
+                    "subscribe_stream",
+                    json!({
+                        "status": "error",
+                        "stream_type": payload.stream_type,
+                        "reason": reason,
+                    }),
+                );
+                let _ = sender.send(stream_error_message(&payload.stream_type, &reason)?);
+            } else {
+                emit_streaming_debug(
+                    app,
+                    session_id,
+                    device_id,
+                    "subscribe_stream",
+                    json!({
+                        "status": "ok",
+                        "stream_type": payload.stream_type,
+                    }),
+                );
+            }
+            Ok(true)
+        }
+        "unsubscribe_stream" => {
+            let payload: SubscribeStreamMessage = serde_json::from_value(value.clone())?;
+            emit_streaming_debug(
+                app,
+                session_id,
+                device_id,
+                "unsubscribe_stream",
+                json!({
+                    "status": "requested",
+                    "stream_type": payload.stream_type,
+                }),
+            );
+            if let Err(reason) = unsubscribe_stream(app, session_id, &payload.stream_type).await {
+                emit_streaming_debug(
+                    app,
+                    session_id,
+                    device_id,
+                    "unsubscribe_stream",
+                    json!({
+                        "status": "error",
+                        "stream_type": payload.stream_type,
+                        "reason": reason,
+                    }),
+                );
+                let _ = sender.send(stream_error_message(&payload.stream_type, &reason)?);
+            } else {
+                emit_streaming_debug(
+                    app,
+                    session_id,
+                    device_id,
+                    "unsubscribe_stream",
+                    json!({
+                        "status": "ok",
+                        "stream_type": payload.stream_type,
+                    }),
+                );
+                let _ = sender.send(json_message(&serde_json::json!({
+                    "event": "stream_stopped",
+                    "stream_type": payload.stream_type,
+                }))?);
+            }
+            Ok(true)
+        }
+        "webrtc_answer" => {
+            let payload: WebRtcAnswerMessage = serde_json::from_value(value.clone())?;
+            emit_streaming_debug(
+                app,
+                session_id,
+                device_id,
+                "webrtc_answer",
+                json!({
+                    "status": "requested",
+                    "stream_type": payload.stream_type,
+                    "sdp_len": payload.sdp.len(),
+                }),
+            );
+            if let Err(reason) =
+                set_webrtc_answer(app, session_id, &payload.stream_type, &payload.sdp).await
+            {
+                emit_streaming_debug(
+                    app,
+                    session_id,
+                    device_id,
+                    "webrtc_answer",
+                    json!({
+                        "status": "error",
+                        "stream_type": payload.stream_type,
+                        "reason": reason,
+                    }),
+                );
+                let _ = sender.send(stream_error_message(&payload.stream_type, &reason)?);
+            } else {
+                emit_streaming_debug(
+                    app,
+                    session_id,
+                    device_id,
+                    "webrtc_answer",
+                    json!({
+                        "status": "ok",
+                        "stream_type": payload.stream_type,
+                    }),
+                );
+            }
+            Ok(true)
+        }
+        "webrtc_ice_candidate" => {
+            let payload: WebRtcIceCandidateMessage = serde_json::from_value(value.clone())?;
+            emit_streaming_debug(
+                app,
+                session_id,
+                device_id,
+                "webrtc_ice_candidate",
+                json!({
+                    "status": "requested",
+                    "stream_type": payload.stream_type,
+                }),
+            );
+            if let Err(reason) =
+                add_webrtc_ice_candidate(app, session_id, &payload.stream_type, payload.candidate)
+                    .await
+            {
+                emit_streaming_debug(
+                    app,
+                    session_id,
+                    device_id,
+                    "webrtc_ice_candidate",
+                    json!({
+                        "status": "error",
+                        "stream_type": payload.stream_type,
+                        "reason": reason,
+                    }),
+                );
+                let _ = sender.send(stream_error_message(&payload.stream_type, &reason)?);
+            } else {
+                emit_streaming_debug(
+                    app,
+                    session_id,
+                    device_id,
+                    "webrtc_ice_candidate",
+                    json!({
+                        "status": "ok",
+                        "stream_type": payload.stream_type,
+                    }),
+                );
+            }
+            Ok(true)
+        }
+        "mobile_offer" => {
+            let payload: MobileOfferMessage = serde_json::from_value(value.clone())?;
+            emit_streaming_debug(
+                app,
+                session_id,
+                device_id,
+                "mobile_offer",
+                json!({
+                    "status": "requested",
+                    "stream_type": "mobile",
+                    "sdp_len": payload.sdp.len(),
+                }),
+            );
+            if let Err(reason) =
+                handle_mobile_offer(app, session_id, device_id, &payload.sdp, sender.clone()).await
+            {
+                emit_streaming_debug(
+                    app,
+                    session_id,
+                    device_id,
+                    "mobile_offer",
+                    json!({
+                        "status": "error",
+                        "stream_type": "mobile",
+                        "reason": reason,
+                    }),
+                );
+                let _ = sender.send(stream_error_message("mobile", &reason)?);
+            } else {
+                emit_streaming_debug(
+                    app,
+                    session_id,
+                    device_id,
+                    "mobile_offer",
+                    json!({
+                        "status": "ok",
+                        "stream_type": "mobile",
+                    }),
+                );
+            }
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
 }

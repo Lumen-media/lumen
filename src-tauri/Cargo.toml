@@ -41,6 +41,10 @@ tauri-plugin-store = "2"
 font-loader = "0.11"
 tauri-plugin-os = "2"
 sysinfo = "0.33"
+webrtc = "0.11"
+axum = { version = "0.7", features = ["ws"] }
+openh264 = "0.9"
+screenshots = "0.8.10"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
