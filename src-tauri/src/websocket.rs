@@ -59,6 +59,7 @@ struct WebRtcAnswerMessage {
 #[derive(Debug, Deserialize)]
 struct MobileOfferMessage {
     sdp: String,
+    video_orientation: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -705,10 +706,19 @@ async fn handle_streaming_event(
                     "status": "requested",
                     "stream_type": "mobile",
                     "sdp_len": payload.sdp.len(),
+                    "video_orientation": payload.video_orientation,
                 }),
             );
             if let Err(reason) =
-                handle_mobile_offer(app, session_id, device_id, &payload.sdp, sender.clone()).await
+                handle_mobile_offer(
+                    app,
+                    session_id,
+                    device_id,
+                    &payload.sdp,
+                    payload.video_orientation.as_deref(),
+                    sender.clone(),
+                )
+                .await
             {
                 emit_streaming_debug(
                     app,

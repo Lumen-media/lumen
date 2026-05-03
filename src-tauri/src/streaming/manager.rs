@@ -28,6 +28,7 @@ struct MobilePeer {
     pub device_id: String,
     pub has_video: bool,
     pub has_audio: bool,
+    pub video_orientation: Option<String>,
 }
 
 pub struct StreamManager {
@@ -89,7 +90,7 @@ impl StreamManager {
         session_id: &str,
         video_received: bool,
         audio_received: bool,
-    ) -> Option<(bool, bool)> {
+    ) -> Option<(bool, bool, Option<String>)> {
         if let Some(entry) = self.mobile_peers.get_mut(session_id) {
             if video_received {
                 entry.has_video = true;
@@ -97,7 +98,11 @@ impl StreamManager {
             if audio_received {
                 entry.has_audio = true;
             }
-            return Some((entry.has_video, entry.has_audio));
+            return Some((
+                entry.has_video,
+                entry.has_audio,
+                entry.video_orientation.clone(),
+            ));
         }
         None
     }
@@ -107,6 +112,7 @@ impl StreamManager {
         session_id: String,
         device_id: String,
         peer: Arc<RTCPeerConnection>,
+        video_orientation: Option<String>,
     ) -> Option<Arc<RTCPeerConnection>> {
         let previous = self.mobile_peers.insert(
             session_id,
@@ -115,6 +121,7 @@ impl StreamManager {
                 device_id,
                 has_video: false,
                 has_audio: false,
+                video_orientation,
             },
         );
         previous.map(|entry| entry.peer)
