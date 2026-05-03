@@ -11,6 +11,7 @@ interface MobileStreamState {
   device_id: string;
   has_video: boolean;
   has_audio: boolean;
+  video_orientation?: 'portrait' | 'landscape' | null;
 }
 
 interface StreamingStore {
@@ -45,6 +46,7 @@ const DEFAULT_STATUS: StreamingStatus = {
 let unlistenStatus: UnlistenFn | null = null;
 let unlistenMobileStarted: UnlistenFn | null = null;
 let unlistenMobileEnded: UnlistenFn | null = null;
+let unlistenMobileOrientationChanged: UnlistenFn | null = null;
 
 export const useStreamingStore = create<StreamingStore>((set, get) => ({
   initialized: false,
@@ -67,6 +69,7 @@ export const useStreamingStore = create<StreamingStore>((set, get) => ({
     unlistenStatus?.();
     unlistenMobileStarted?.();
     unlistenMobileEnded?.();
+    unlistenMobileOrientationChanged?.();
 
     unlistenStatus = await listen<StreamingStatus>('streaming_status_changed', ({ payload }) => {
       set({ status: payload });
@@ -77,6 +80,7 @@ export const useStreamingStore = create<StreamingStore>((set, get) => ({
         device_id: payload.device_id,
         has_video: Boolean(payload.has_video),
         has_audio: Boolean(payload.has_audio),
+        video_orientation: payload.video_orientation ?? null,
       };
       set((state) => ({
         mobileStreams: {
@@ -94,6 +98,28 @@ export const useStreamingStore = create<StreamingStore>((set, get) => ({
         const next = { ...state.mobileStreams };
         delete next[payload.device_id];
         return { mobileStreams: next };
+      });
+    });
+
+    unlistenMobileOrientationChanged = await listen<{
+      device_id: string;
+      video_orientation?: 'portrait' | 'landscape' | null;
+    }>('mobile_stream_orientation_changed', ({ payload }) => {
+      set((state) => {
+        const current = state.mobileStreams[payload.device_id];
+        if (!current) {
+          return state;
+        }
+
+        return {
+          mobileStreams: {
+            ...state.mobileStreams,
+            [payload.device_id]: {
+              ...current,
+              video_orientation: payload.video_orientation ?? null,
+            },
+          },
+        };
       });
     });
   },

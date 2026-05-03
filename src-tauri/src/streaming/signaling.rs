@@ -392,6 +392,7 @@ pub async fn handle_mobile_offer(
     session_id: &str,
     device_id: &str,
     sdp: &str,
+    video_orientation: Option<&str>,
     sender: UnboundedSender<Message>,
 ) -> Result<(), String> {
     let state = app.state::<StreamingState>();
@@ -535,13 +536,14 @@ pub async fn handle_mobile_offer(
                     )
                 };
 
-                if let Some((has_video, has_audio)) = track_state {
+                if let Some((has_video, has_audio, video_orientation)) = track_state {
                     let _ = app.emit(
                         "mobile_stream_started",
                         json!({
                             "device_id": device_id,
                             "has_video": has_video,
                             "has_audio": has_audio,
+                            "video_orientation": video_orientation,
                         }),
                     );
                 }
@@ -572,10 +574,25 @@ pub async fn handle_mobile_offer(
     let previous_mobile_peer = {
         let mut manager = manager_arc.lock().await;
         let old =
-            manager.insert_mobile_peer(session_id.to_string(), device_id.to_string(), peer.clone());
+            manager.insert_mobile_peer(
+                session_id.to_string(),
+                device_id.to_string(),
+                peer.clone(),
+                video_orientation.map(|value| value.to_string()),
+            );
         manager.emit_status();
         old
     };
+
+    if let Some(video_orientation) = video_orientation {
+        let _ = app.emit(
+            "mobile_stream_orientation_changed",
+            json!({
+                "device_id": device_id,
+                "video_orientation": video_orientation,
+            }),
+        );
+    }
 
     if let Some(previous_mobile_peer) = previous_mobile_peer {
         let _ = previous_mobile_peer.close().await;
