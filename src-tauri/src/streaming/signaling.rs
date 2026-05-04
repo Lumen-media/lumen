@@ -21,6 +21,7 @@ use webrtc::{
     track::track_local::{TrackLocal, TrackLocalWriter},
 };
 
+use crate::devices::DeviceState;
 use super::manager::{StreamingState, cleanup_session};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -537,10 +538,16 @@ pub async fn handle_mobile_offer(
                 };
 
                 if let Some((has_video, has_audio, video_orientation)) = track_state {
+                    let device_name = {
+                        let device_state = app.state::<DeviceState>();
+                        let devices = device_state.devices.lock().unwrap();
+                        devices.get(&device_id).map(|d| d.device_name.clone()).unwrap_or_else(|| device_id.clone())
+                    };
                     let _ = app.emit(
                         "mobile_stream_started",
                         json!({
                             "device_id": device_id,
+                            "device_name": device_name,
                             "has_video": has_video,
                             "has_audio": has_audio,
                             "video_orientation": video_orientation,

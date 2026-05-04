@@ -292,7 +292,9 @@ function RouteComponent() {
     };
   }, [streamOverlayActive]);
 
-  const previewLabel = selectedDevice ? selectedDevice.device_id : 'Stage Display A';
+  const previewLabel = selectedDevice
+    ? selectedDevice.device_name
+    : 'Stage Display A';
   const previewSurfaceClass =
     videoOrientation === 'portrait' ? 'mx-auto aspect-[9/16] h-full max-w-full' : 'h-full w-full';
 
@@ -422,7 +424,7 @@ function RouteComponent() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-3">
                             <p className="truncate text-xl font-semibold text-foreground">
-                              {device.device_id}
+                              {device.device_name}
                             </p>
                             <Badge
                               className={cn(
