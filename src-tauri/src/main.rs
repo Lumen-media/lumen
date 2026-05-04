@@ -225,6 +225,17 @@ fn get_gpu_name() -> String {
     "Unknown".to_string()
 }
 
+#[derive(serde::Serialize, Clone)]
+struct StreamOverlayPayload {
+    active: bool,
+}
+
+#[tauri::command]
+async fn set_stream_overlay(app: tauri::AppHandle, active: bool) -> Result<(), String> {
+    app.emit("stream-overlay-toggle", StreamOverlayPayload { active })
+        .map_err(|e| e.to_string())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
@@ -301,7 +312,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             streaming::manager::set_stream_content_protected,
             streaming::manager::set_mobile_preview_device,
             streaming::manager::push_stream_slide,
-            streaming::manager::push_stream_blank
+            streaming::manager::push_stream_blank,
+            set_stream_overlay
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
