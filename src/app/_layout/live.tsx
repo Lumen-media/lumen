@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { invoke } from '@tauri-apps/api/core';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
   CircleDot,
   Monitor,
@@ -15,7 +16,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useStreamingStore } from '@/stores/streaming-store';
@@ -42,6 +49,7 @@ function RouteComponent() {
   const [audioTrackActive, setAudioTrackActive] = useState(false);
   const [previewConnected, setPreviewConnected] = useState(false);
   const [videoOrientation, setVideoOrientation] = useState<VideoOrientation | null>(null);
+  const [streamOverlayActive, setStreamOverlayActive] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -71,6 +79,15 @@ function RouteComponent() {
   useEffect(() => {
     invoke('set_mobile_preview_device', { deviceId: selectedDeviceId ?? null }).catch(() => {});
   }, [selectedDeviceId]);
+
+  useEffect(() => {
+    if (!streamOverlayActive) return;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    if (audioRef.current) audioRef.current.srcObject = null;
+    setVideoTrackActive(false);
+    setAudioTrackActive(false);
+    setPreviewConnected(false);
+  }, [streamOverlayActive]);
 
   const selectedDevice = selectedDeviceId ? mobileStreams[selectedDeviceId] : null;
 
@@ -107,6 +124,8 @@ function RouteComponent() {
   }, []);
 
   useEffect(() => {
+    if (streamOverlayActive) return;
+
     const pc = new RTCPeerConnection();
     const ws = new WebSocket('ws://localhost:8080');
     let closed = false;
@@ -271,11 +290,32 @@ function RouteComponent() {
       setAudioTrackActive(false);
       setVideoOrientation(null);
     };
-  }, []);
+  }, [streamOverlayActive]);
 
   const previewLabel = selectedDevice ? selectedDevice.device_id : 'Stage Display A';
   const previewSurfaceClass =
     videoOrientation === 'portrait' ? 'mx-auto aspect-[9/16] h-full max-w-full' : 'h-full w-full';
+
+  const toggleStreamOverlay = async () => {
+    const next = !streamOverlayActive;
+
+    let win = await WebviewWindow.getByLabel('media-window');
+    if (!win) {
+      await invoke('create_window', { label: 'media-window', title: 'Media Player' }).catch(
+        () => {}
+      );
+      await new Promise((r) => setTimeout(r, 1500));
+      win = await WebviewWindow.getByLabel('media-window');
+    }
+
+    if (win) {
+      const visible = await win.isVisible().catch(() => false);
+      if (!visible) await win.show().catch(() => {});
+    }
+
+    await invoke('set_stream_overlay', { active: next }).catch(() => {});
+    setStreamOverlayActive(next);
+  };
 
   const togglePreview = async () => {
     await updateConfig({ preview_enabled: !config.preview_enabled });
@@ -293,10 +333,10 @@ function RouteComponent() {
 
         <div className="flex flex-wrap gap-3">
           <Button
-            variant="secondary"
+            variant={streamOverlayActive ? 'default' : 'secondary'}
             className="h-auto rounded-xl px-4 py-3"
             onClick={() => {
-              void togglePreview();
+              void toggleStreamOverlay();
             }}
           >
             <Monitor className="size-5" />
@@ -338,80 +378,80 @@ function RouteComponent() {
 
           <ScrollArea className="mt-6 flex-1">
             <div className="space-y-4 pr-4">
-            {devices.length === 0 ? (
-              <Empty className="rounded-[1.5rem] border border-white/10 bg-white/5">
-                <EmptyDescription>No active mobile device</EmptyDescription>
-              </Empty>
-            ) : (
-              devices.map((device) => {
-                const active = selectedDeviceId === device.device_id;
-                const badgeLabel =
-                  device.has_video && device.has_audio
-                    ? 'Live'
-                    : device.has_video
-                      ? 'Preview'
-                      : 'Audio';
-                const signalLabel =
-                  device.has_video && device.has_audio
-                    ? 'Strong'
-                    : device.has_video
-                      ? 'Stable'
-                      : 'On';
+              {devices.length === 0 ? (
+                <Empty className="rounded-[1.5rem] border border-white/10 bg-white/5">
+                  <EmptyDescription>No active mobile device</EmptyDescription>
+                </Empty>
+              ) : (
+                devices.map((device) => {
+                  const active = selectedDeviceId === device.device_id;
+                  const badgeLabel =
+                    device.has_video && device.has_audio
+                      ? 'Live'
+                      : device.has_video
+                        ? 'Preview'
+                        : 'Audio';
+                  const signalLabel =
+                    device.has_video && device.has_audio
+                      ? 'Strong'
+                      : device.has_video
+                        ? 'Stable'
+                        : 'On';
 
-                return (
-                  <button
-                    key={device.device_id}
-                    type="button"
-                    onClick={() => setSelectedDeviceId(device.device_id)}
-                    className={cn(
-                      'w-full rounded-[1.5rem] border px-4 py-5 text-left transition-colors',
-                      active
-                        ? 'border-primary bg-primary/10 ring-1 ring-primary/20'
-                        : 'border-white/8 bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.05]'
-                    )}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="flex size-18 shrink-0 items-center justify-center rounded-[1.25rem] bg-white/6">
-                        {device.has_audio && !device.has_video ? (
-                          <Volume2 className="size-7 text-foreground/85" />
-                        ) : (
-                          <Smartphone className="size-7 text-foreground/85" />
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-3">
-                          <p className="truncate text-xl font-semibold text-foreground">
-                            {device.device_id}
-                          </p>
-                          <Badge
-                            className={cn(
-                              'rounded-full px-3 py-1 text-sm',
-                              badgeLabel === 'Live'
-                                ? 'bg-primary/15 text-primary'
-                                : badgeLabel === 'Audio'
-                                  ? 'bg-emerald-500/15 text-emerald-300'
-                                  : 'bg-white/8 text-slate-200'
-                            )}
-                          >
-                            {badgeLabel}
-                          </Badge>
+                  return (
+                    <button
+                      key={device.device_id}
+                      type="button"
+                      onClick={() => setSelectedDeviceId(device.device_id)}
+                      className={cn(
+                        'w-full rounded-[1.5rem] border px-4 py-5 text-left transition-colors',
+                        active
+                          ? 'border-primary bg-primary/10 ring-1 ring-primary/20'
+                          : 'border-white/8 bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.05]'
+                      )}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="flex size-18 shrink-0 items-center justify-center rounded-[1.25rem] bg-white/6">
+                          {device.has_audio && !device.has_video ? (
+                            <Volume2 className="size-7 text-foreground/85" />
+                          ) : (
+                            <Smartphone className="size-7 text-foreground/85" />
+                          )}
                         </div>
-                        <p className="mt-2 truncate text-sm text-muted-foreground">
-                          {device.has_video ? 'Video source' : 'Audio monitor'} •{' '}
-                          {device.has_audio ? 'Audio enabled' : 'Preview only'}
-                        </p>
-                      </div>
 
-                      <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
-                        <Wifi className="size-4" />
-                        <span>{signalLabel}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-3">
+                            <p className="truncate text-xl font-semibold text-foreground">
+                              {device.device_id}
+                            </p>
+                            <Badge
+                              className={cn(
+                                'rounded-full px-3 py-1 text-sm',
+                                badgeLabel === 'Live'
+                                  ? 'bg-primary/15 text-primary'
+                                  : badgeLabel === 'Audio'
+                                    ? 'bg-emerald-500/15 text-emerald-300'
+                                    : 'bg-white/8 text-slate-200'
+                              )}
+                            >
+                              {badgeLabel}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 truncate text-sm text-muted-foreground">
+                            {device.has_video ? 'Video source' : 'Audio monitor'} •{' '}
+                            {device.has_audio ? 'Audio enabled' : 'Preview only'}
+                          </p>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                          <Wifi className="size-4" />
+                          <span>{signalLabel}</span>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
+                    </button>
+                  );
+                })
+              )}
             </div>
           </ScrollArea>
         </Card>
@@ -451,16 +491,16 @@ function RouteComponent() {
                 <Empty className="absolute inset-0 rounded-none bg-slate-950/72 px-6 gap-3">
                   <EmptyMedia>
                     {selectedDevice ? (
-                      <CircleDot className="size-12 text-primary" />
+                      <CircleDot className="size-8 text-primary" />
                     ) : (
-                      <Smartphone className="size-12 text-primary" />
+                      <Smartphone className="size-8 text-primary" />
                     )}
                   </EmptyMedia>
                   <EmptyHeader>
-                    <EmptyTitle className="text-3xl font-semibold text-foreground">
+                    <EmptyTitle className="text-xl font-semibold text-foreground">
                       {selectedDevice ? 'Preview ready' : 'No device selected'}
                     </EmptyTitle>
-                    <EmptyDescription className="text-base">
+                    <EmptyDescription className="text-sm">
                       {selectedDevice
                         ? 'Waiting for live frames from the selected source'
                         : 'Choose one of the connected devices on the left'}
