@@ -9,6 +9,7 @@ import {
 
 interface MobileStreamState {
   device_id: string;
+  device_name: string;
   has_video: boolean;
   has_audio: boolean;
   video_orientation?: 'portrait' | 'landscape' | null;
@@ -78,6 +79,7 @@ export const useStreamingStore = create<StreamingStore>((set, get) => ({
     unlistenMobileStarted = await listen<MobileStreamState>('mobile_stream_started', ({ payload }) => {
       const nextPayload: MobileStreamState = {
         device_id: payload.device_id,
+        device_name: (payload.device_name as string) || payload.device_id,
         has_video: Boolean(payload.has_video),
         has_audio: Boolean(payload.has_audio),
         video_orientation: payload.video_orientation ?? null,
