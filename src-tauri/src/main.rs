@@ -7,6 +7,7 @@ mod websocket;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, async_runtime};
+use tauri_plugin_window_state::StateFlags;
 use tokio::net::TcpListener;
 
 struct WindowState {
@@ -260,7 +261,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(StateFlags::all() & !StateFlags::DECORATIONS)
+                .build(),
+        )
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
