@@ -1,6 +1,6 @@
 [package]
 name = "lumen"
-version = "0.2.0"
+version = "0.4.0"
 description = "Desktop presentation software for live events — control lyrics, media, and raffles from a single interface"
 authors = ["gabrielSantos1101"]
 edition = "2024"
