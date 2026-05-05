@@ -38,13 +38,17 @@ function StreamOverlay() {
         videoStream.getVideoTracks().forEach((t) => videoStream.removeTrack(t));
         videoStream.addTrack(event.track);
         attachVideo();
-        if (event.track.muted) event.track.onunmute = attachVideo;
+        if (event.track.muted) event.track.onunmute = () => attachVideo();
       }
     };
 
     pc.onicecandidate = (event) => {
       if (!event.candidate) return;
-      send({ event: 'webrtc_ice_candidate', stream_type: signalingMode, candidate: event.candidate });
+      send({
+        event: 'webrtc_ice_candidate',
+        stream_type: signalingMode,
+        candidate: event.candidate,
+      });
     };
 
     ws.onopen = () => {
@@ -103,7 +107,9 @@ function StreamOverlay() {
       autoPlay
       playsInline
       className="absolute inset-0 h-full w-full object-contain bg-black [transform:translateZ(0)]"
-    />
+    >
+      <track kind="captions" />
+    </video>
   );
 }
 
