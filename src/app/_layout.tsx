@@ -4,6 +4,7 @@ import { AsidePanel } from '@/components/aside-panel';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { MediaPanel } from '@/components/media-panel';
 import { MiniPlayer } from '@/components/miniplayer';
+import { TitleBar } from '@/components/title-bar';
 import { Card } from '@/components/ui/card';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 
@@ -13,7 +14,9 @@ export const Route = createFileRoute('/_layout')({
 
 function LayoutComponent() {
   return (
-    <main className="h-dvh flex flex-col gap-3 p-2.5">
+    <main className="h-dvh flex flex-col">
+      <TitleBar />
+      <div className="flex flex-col flex-1 gap-3 p-2.5 overflow-hidden">
       <AppHeader />
 
       <ResizablePanelGroup
@@ -42,6 +45,7 @@ function LayoutComponent() {
           <AsidePanel />
         </ResizablePanel>
       </ResizablePanelGroup>
+      </div>
     </main>
   );
 }
