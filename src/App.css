@@ -112,6 +112,10 @@
 }
 
 @layer base {
+  [data-tauri-drag-region] {
+    app-region: drag;
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
