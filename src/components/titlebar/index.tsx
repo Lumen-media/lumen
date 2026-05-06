@@ -112,7 +112,7 @@ export function TitleBar() {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: custom titlebar needs pointer handling for native window drag
     <header
-      className="relative z-[60] h-9 shrink-0 select-none bg-background/95 backdrop-blur-sm"
+      className="relative z-[60] h-7 shrink-0 select-none bg-background/95 backdrop-blur-sm"
       data-tauri-drag-region
       onMouseDown={handleTitlebarMouseDown}
     >
@@ -273,9 +273,7 @@ export function TitleBar() {
             <span className="truncate text-left text-muted-foreground">
               {t('Type a command or search...')}
             </span>
-            <span className="ml-auto shrink-0">
-              <Kbd>⌘ K</Kbd>
-            </span>
+            <Kbd className="text-xs h-auto">⌘ K</Kbd>
           </button>
         </div>
 
