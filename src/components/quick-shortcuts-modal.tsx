@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useCommandStore } from "@/stores/command-store";
 import {
 	Command,
 	CommandEmpty,
@@ -10,25 +11,22 @@ import {
 import { Dialog, DialogContent } from "./ui/dialog";
 
 export function QuickShortcutsModal() {
-	const [isOpen, setIsOpen] = useState(false);
+	const { isOpen, toggle, close } = useCommandStore();
 
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.ctrlKey && event.key === "k") {
 				event.preventDefault();
-				setIsOpen((prev) => !prev);
+				toggle();
 			}
 		};
 
 		document.addEventListener("keydown", handleKeyDown);
-
-		return () => {
-			document.removeEventListener("keydown", handleKeyDown);
-		};
-	}, []);
+		return () => document.removeEventListener("keydown", handleKeyDown);
+	}, [toggle]);
 
 	return (
-		<Dialog open={isOpen} onOpenChange={setIsOpen}>
+		<Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
 			<DialogContent className="p-0 overflow-hidden">
 				<Command>
 					<CommandInput placeholder="Type a command or search..." />
