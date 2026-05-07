@@ -1,7 +1,7 @@
 import { PhysicalPosition } from '@tauri-apps/api/window';
-import { Search } from 'lucide-react';
+import { MoreHorizontal, Search } from 'lucide-react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEventListener } from 'usehooks-ts';
 import { useCommandStore } from '@/stores/command-store';
@@ -13,11 +13,29 @@ import {
   MenubarMenu,
   MenubarSeparator,
   MenubarShortcut,
+  MenubarSub,
+  MenubarSubContent,
+  MenubarSubTrigger,
   MenubarTrigger,
 } from '../ui/menubar';
+import type { MenuDef, MenuItemDef } from './menu-registry';
+import { useMenuOverflow } from './use-menu-overflow';
 import { useOsType } from './use-os-type';
 import { useWindowState } from './use-window-state';
 import { TitlebarWindowControls } from './window-controls';
+
+function MenuItems({ items, t }: { items: MenuItemDef[]; t: (key: string) => string }) {
+  return items.map((item) =>
+    item.type === 'separator' ? (
+      <MenubarSeparator key={crypto.randomUUID()} />
+    ) : (
+      <MenubarItem key={item.label} onClick={item.onClick}>
+        {t(item.label)}
+        {item.shortcut && <MenubarShortcut>{item.shortcut}</MenubarShortcut>}
+      </MenubarItem>
+    )
+  );
+}
 
 export function TitleBar() {
   const { t } = useTranslation();
@@ -33,6 +51,96 @@ export function TitleBar() {
     titlebarWidth: number;
   } | null>(null);
   const restoreDragInFlightRef = useRef(false);
+
+  const menus = useMemo(
+    (): MenuDef[] => [
+      {
+        id: 'file',
+        label: 'File',
+        items: [
+          { type: 'action', label: 'New Presentation', shortcut: 'Ctrl+N' },
+          { type: 'action', label: 'Open', shortcut: 'Ctrl+O' },
+          { type: 'separator' },
+          { type: 'action', label: 'Save', shortcut: 'Ctrl+S' },
+          { type: 'action', label: 'Save As', shortcut: 'Ctrl+Shift+S' },
+          { type: 'separator' },
+          { type: 'action', label: 'Export as PDF' },
+          { type: 'action', label: 'Export as Images' },
+          { type: 'separator' },
+          {
+            type: 'action',
+            label: 'Exit',
+            onClick: () => void windowState.appWindow.close(),
+          },
+        ],
+      },
+      {
+        id: 'edit',
+        label: 'Edit',
+        items: [
+          { type: 'action', label: 'Undo', shortcut: 'Ctrl+Z' },
+          { type: 'action', label: 'Redo', shortcut: 'Ctrl+Shift+Z' },
+          { type: 'separator' },
+          { type: 'action', label: 'Cut', shortcut: 'Ctrl+X' },
+          { type: 'action', label: 'Copy', shortcut: 'Ctrl+C' },
+          { type: 'action', label: 'Paste', shortcut: 'Ctrl+V' },
+          { type: 'separator' },
+          { type: 'action', label: 'Select All', shortcut: 'Ctrl+A' },
+        ],
+      },
+      {
+        id: 'view',
+        label: 'View',
+        items: [
+          { type: 'action', label: 'Toggle Media Panel' },
+          { type: 'action', label: 'Toggle Properties Panel' },
+          { type: 'separator' },
+          { type: 'action', label: 'Full Screen', shortcut: 'F11' },
+          { type: 'separator' },
+          { type: 'action', label: 'Zoom In', shortcut: 'Ctrl++' },
+          { type: 'action', label: 'Zoom Out', shortcut: 'Ctrl+-' },
+          { type: 'action', label: 'Reset Zoom', shortcut: 'Ctrl+0' },
+        ],
+      },
+      {
+        id: 'presentation',
+        label: 'Presentation',
+        items: [
+          { type: 'action', label: 'Start', shortcut: 'F5' },
+          { type: 'action', label: 'Stop', shortcut: 'Esc' },
+          { type: 'separator' },
+          { type: 'action', label: 'Next Slide', shortcut: '→' },
+          { type: 'action', label: 'Previous Slide', shortcut: '←' },
+          { type: 'separator' },
+          { type: 'action', label: 'Loop' },
+          { type: 'action', label: 'Shuffle' },
+        ],
+      },
+      {
+        id: 'live',
+        label: 'Live',
+        items: [
+          { type: 'action', label: 'Start Streaming' },
+          { type: 'action', label: 'Stop Streaming' },
+          { type: 'separator' },
+          { type: 'action', label: 'Configure Stream...' },
+        ],
+      },
+      {
+        id: 'help',
+        label: 'Help',
+        items: [
+          { type: 'action', label: 'Documentation' },
+          { type: 'action', label: 'Keyboard Shortcuts', shortcut: 'Ctrl+Shift+K' },
+          { type: 'separator' },
+          { type: 'action', label: 'About Lumen' },
+        ],
+      },
+    ],
+    [windowState.appWindow]
+  );
+
+  const { containerRef, measureRef, visibleMenus, overflowMenus } = useMenuOverflow(menus);
 
   const clearDragIntent = () => {
     dragIntentRef.current = null;
@@ -112,14 +220,31 @@ export function TitleBar() {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: custom titlebar needs pointer handling for native window drag
     <header
-      className="relative z-[60] h-7 shrink-0 select-none bg-background/95 backdrop-blur-sm"
+      className="relative h-7 shrink-0 select-none bg-background/95"
       data-tauri-drag-region
       onMouseDown={handleTitlebarMouseDown}
     >
-      <div className="relative grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center">
-        <div className="flex min-w-0 items-center gap-2 pl-2">
+      <div className="grid h-full grid-cols-[1fr_auto_1fr] items-center">
+        <div
+          ref={containerRef}
+          className="relative flex min-w-0 items-center gap-2 overflow-hidden pl-2"
+        >
+          <div
+            ref={measureRef}
+            className="invisible pointer-events-none absolute top-0 left-0 flex whitespace-nowrap"
+            aria-hidden
+          >
+            {menus.map((menu) => (
+              <span key={menu.id} className="px-3 text-xs">
+                {t(menu.label)}
+              </span>
+            ))}
+          </div>
+
           {showMacControls ? (
-            <TitlebarWindowControls osType={osType} windowState={windowState} />
+            <div className="relative z-[60]">
+              <TitlebarWindowControls osType={osType} windowState={windowState} />
+            </div>
           ) : null}
 
           <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground">
@@ -130,154 +255,56 @@ export function TitleBar() {
             data-no-window-drag="true"
             className="h-full gap-0 rounded-none border-0 bg-transparent p-0"
           >
-            <MenubarMenu>
-              <MenubarTrigger className="h-full rounded-sm px-3 text-xs">
-                {t('File')}
-              </MenubarTrigger>
-              <MenubarContent>
-                <MenubarItem>
-                  {t('New Presentation')} <MenubarShortcut>Ctrl+N</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem>
-                  {t('Open')} <MenubarShortcut>Ctrl+O</MenubarShortcut>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem>
-                  {t('Save')} <MenubarShortcut>Ctrl+S</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem>
-                  {t('Save As')} <MenubarShortcut>Ctrl+Shift+S</MenubarShortcut>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem>{t('Export as PDF')}</MenubarItem>
-                <MenubarItem>{t('Export as Images')}</MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem onClick={() => void windowState.appWindow.close()}>
-                  {t('Exit')}
-                </MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
+            {visibleMenus.map((menu) => (
+              <MenubarMenu key={menu.id}>
+                <MenubarTrigger className="h-full rounded-sm px-3 text-xs">
+                  {t(menu.label)}
+                </MenubarTrigger>
+                <MenubarContent>
+                  <MenuItems items={menu.items} t={t} />
+                </MenubarContent>
+              </MenubarMenu>
+            ))}
 
-            <MenubarMenu>
-              <MenubarTrigger className="h-full rounded-sm px-3 text-xs">
-                {t('Edit')}
-              </MenubarTrigger>
-              <MenubarContent>
-                <MenubarItem>
-                  {t('Undo')} <MenubarShortcut>Ctrl+Z</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem>
-                  {t('Redo')} <MenubarShortcut>Ctrl+Shift+Z</MenubarShortcut>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem>
-                  {t('Cut')} <MenubarShortcut>Ctrl+X</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem>
-                  {t('Copy')} <MenubarShortcut>Ctrl+C</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem>
-                  {t('Paste')} <MenubarShortcut>Ctrl+V</MenubarShortcut>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem>
-                  {t('Select All')} <MenubarShortcut>Ctrl+A</MenubarShortcut>
-                </MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
-
-            <MenubarMenu>
-              <MenubarTrigger className="h-full rounded-sm px-3 text-xs">
-                {t('View')}
-              </MenubarTrigger>
-              <MenubarContent>
-                <MenubarItem>{t('Toggle Media Panel')}</MenubarItem>
-                <MenubarItem>{t('Toggle Properties Panel')}</MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem>
-                  {t('Full Screen')} <MenubarShortcut>F11</MenubarShortcut>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem>
-                  {t('Zoom In')} <MenubarShortcut>Ctrl++</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem>
-                  {t('Zoom Out')} <MenubarShortcut>Ctrl+-</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem>
-                  {t('Reset Zoom')} <MenubarShortcut>Ctrl+0</MenubarShortcut>
-                </MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
-
-            <MenubarMenu>
-              <MenubarTrigger className="h-full rounded-sm px-3 text-xs">
-                {t('Presentation')}
-              </MenubarTrigger>
-              <MenubarContent>
-                <MenubarItem>
-                  {t('Start')} <MenubarShortcut>F5</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem>
-                  {t('Stop')} <MenubarShortcut>Esc</MenubarShortcut>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem>
-                  {t('Next Slide')} <MenubarShortcut>→</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem>
-                  {t('Previous Slide')} <MenubarShortcut>←</MenubarShortcut>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem>{t('Loop')}</MenubarItem>
-                <MenubarItem>{t('Shuffle')}</MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
-
-            <MenubarMenu>
-              <MenubarTrigger className="h-full rounded-sm px-3 text-xs">
-                {t('Live')}
-              </MenubarTrigger>
-              <MenubarContent>
-                <MenubarItem>{t('Start Streaming')}</MenubarItem>
-                <MenubarItem>{t('Stop Streaming')}</MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem>{t('Configure Stream...')}</MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
-
-            <MenubarMenu>
-              <MenubarTrigger className="h-full rounded-sm px-3 text-xs">
-                {t('Help')}
-              </MenubarTrigger>
-              <MenubarContent>
-                <MenubarItem>{t('Documentation')}</MenubarItem>
-                <MenubarItem>
-                  {t('Keyboard Shortcuts')} <MenubarShortcut>Ctrl+Shift+K</MenubarShortcut>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem>{t('About Lumen')}</MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
+            {overflowMenus.length > 0 && (
+              <MenubarMenu>
+                <MenubarTrigger className="h-full rounded-sm px-2 text-xs">
+                  <MoreHorizontal className="size-3.5" />
+                </MenubarTrigger>
+                <MenubarContent>
+                  {overflowMenus.map((menu) => (
+                    <MenubarSub key={menu.id}>
+                      <MenubarSubTrigger>{t(menu.label)}</MenubarSubTrigger>
+                      <MenubarSubContent>
+                        <MenuItems items={menu.items} t={t} />
+                      </MenubarSubContent>
+                    </MenubarSub>
+                  ))}
+                </MenubarContent>
+              </MenubarMenu>
+            )}
           </Menubar>
         </div>
 
-        <div className="absolute left-1/2 top-1 flex min-w-0 -translate-x-1/2 justify-center px-3">
+        <div className="flex min-w-0 items-center justify-center px-2">
           <button
             data-no-window-drag="true"
             type="button"
             onClick={openCommand}
-            className="flex py-1 w-full max-w-md items-center gap-2 rounded-lg border border-border/70 bg-muted/45 px-3 text-xs transition-colors hover:bg-primary/10"
+            className="flex w-full max-w-md items-center gap-2 rounded-lg border border-border/70 bg-muted/45 px-3 py-1 text-xs transition-colors hover:bg-primary/10"
           >
-            <Search className="size-3.5 text-muted-foreground" />
+            <Search className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="truncate text-left text-muted-foreground">
               {t('Type a command or search...')}
             </span>
-            <Kbd className="text-xs h-auto">⌘ K</Kbd>
+            <Kbd className="h-auto text-xs">⌘ K</Kbd>
           </button>
         </div>
 
-        <div data-no-window-drag="true" className="flex h-full min-w-0 items-center justify-end">
+        <div
+          data-no-window-drag="true"
+          className="relative flex h-full z-[60] min-w-0 items-center justify-end"
+        >
           {!showMacControls ? (
             <TitlebarWindowControls osType={osType} windowState={windowState} />
           ) : null}
