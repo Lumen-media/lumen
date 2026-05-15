@@ -1,7 +1,6 @@
 import { PhysicalPosition } from '@tauri-apps/api/window';
 import { MoreHorizontal, Search } from 'lucide-react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
-import { useMemo, useRef } from 'react';
+import { type MouseEvent as ReactMouseEvent, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEventListener } from 'usehooks-ts';
 import { useCommandStore } from '@/stores/command-store';
@@ -18,7 +17,8 @@ import {
   MenubarSubTrigger,
   MenubarTrigger,
 } from '../ui/menubar';
-import type { MenuDef, MenuItemDef } from './menu-registry';
+import { registerDefaultMenus } from './default-menus';
+import { type MenuItemDef, useMenus } from './menu-registry';
 import { useMenuOverflow } from './use-menu-overflow';
 import { useOsType } from './use-os-type';
 import { useWindowState } from './use-window-state';
@@ -52,93 +52,11 @@ export function TitleBar() {
   } | null>(null);
   const restoreDragInFlightRef = useRef(false);
 
-  const menus = useMemo(
-    (): MenuDef[] => [
-      {
-        id: 'file',
-        label: 'File',
-        items: [
-          { type: 'action', label: 'New Presentation', shortcut: 'Ctrl+N' },
-          { type: 'action', label: 'Open', shortcut: 'Ctrl+O' },
-          { type: 'separator' },
-          { type: 'action', label: 'Save', shortcut: 'Ctrl+S' },
-          { type: 'action', label: 'Save As', shortcut: 'Ctrl+Shift+S' },
-          { type: 'separator' },
-          { type: 'action', label: 'Export as PDF' },
-          { type: 'action', label: 'Export as Images' },
-          { type: 'separator' },
-          {
-            type: 'action',
-            label: 'Exit',
-            onClick: () => void windowState.appWindow.close(),
-          },
-        ],
-      },
-      {
-        id: 'edit',
-        label: 'Edit',
-        items: [
-          { type: 'action', label: 'Undo', shortcut: 'Ctrl+Z' },
-          { type: 'action', label: 'Redo', shortcut: 'Ctrl+Shift+Z' },
-          { type: 'separator' },
-          { type: 'action', label: 'Cut', shortcut: 'Ctrl+X' },
-          { type: 'action', label: 'Copy', shortcut: 'Ctrl+C' },
-          { type: 'action', label: 'Paste', shortcut: 'Ctrl+V' },
-          { type: 'separator' },
-          { type: 'action', label: 'Select All', shortcut: 'Ctrl+A' },
-        ],
-      },
-      {
-        id: 'view',
-        label: 'View',
-        items: [
-          { type: 'action', label: 'Toggle Media Panel' },
-          { type: 'action', label: 'Toggle Properties Panel' },
-          { type: 'separator' },
-          { type: 'action', label: 'Full Screen', shortcut: 'F11' },
-          { type: 'separator' },
-          { type: 'action', label: 'Zoom In', shortcut: 'Ctrl++' },
-          { type: 'action', label: 'Zoom Out', shortcut: 'Ctrl+-' },
-          { type: 'action', label: 'Reset Zoom', shortcut: 'Ctrl+0' },
-        ],
-      },
-      {
-        id: 'presentation',
-        label: 'Presentation',
-        items: [
-          { type: 'action', label: 'Start', shortcut: 'F5' },
-          { type: 'action', label: 'Stop', shortcut: 'Esc' },
-          { type: 'separator' },
-          { type: 'action', label: 'Next Slide', shortcut: '→' },
-          { type: 'action', label: 'Previous Slide', shortcut: '←' },
-          { type: 'separator' },
-          { type: 'action', label: 'Loop' },
-          { type: 'action', label: 'Shuffle' },
-        ],
-      },
-      {
-        id: 'live',
-        label: 'Live',
-        items: [
-          { type: 'action', label: 'Start Streaming' },
-          { type: 'action', label: 'Stop Streaming' },
-          { type: 'separator' },
-          { type: 'action', label: 'Configure Stream...' },
-        ],
-      },
-      {
-        id: 'help',
-        label: 'Help',
-        items: [
-          { type: 'action', label: 'Documentation' },
-          { type: 'action', label: 'Keyboard Shortcuts', shortcut: 'Ctrl+Shift+K' },
-          { type: 'separator' },
-          { type: 'action', label: 'About Lumen' },
-        ],
-      },
-    ],
-    [windowState.appWindow]
-  );
+  useEffect(() => {
+    registerDefaultMenus()
+  }, [])
+
+  const menus = useMenus();
 
   const { containerRef, measureRef, visibleMenus, overflowMenus } = useMenuOverflow(menus);
 
