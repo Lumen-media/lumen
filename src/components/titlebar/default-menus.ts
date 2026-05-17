@@ -1,4 +1,5 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useSettingsStore } from '@/stores/settings-store';
 import type { MenuDef } from './menu-registry';
 import { useMenuRegistry } from './menu-registry';
 
@@ -10,11 +11,8 @@ const DEFAULT_MENUS: MenuDef[] = [
       { type: 'action', label: 'New Presentation', shortcut: 'Ctrl+N' },
       { type: 'action', label: 'Open', shortcut: 'Ctrl+O' },
       { type: 'separator' },
-      { type: 'action', label: 'Save', shortcut: 'Ctrl+S' },
-      { type: 'action', label: 'Save As', shortcut: 'Ctrl+Shift+S' },
-      { type: 'separator' },
-      { type: 'action', label: 'Export as PDF' },
-      { type: 'action', label: 'Export as Images' },
+      // { type: 'action', label: 'Save', shortcut: 'Ctrl+S' },
+      // { type: 'action', label: 'Save As', shortcut: 'Ctrl+Shift+S' },
       { type: 'separator' },
       {
         type: 'action',
@@ -72,7 +70,11 @@ const DEFAULT_MENUS: MenuDef[] = [
       { type: 'action', label: 'Start Streaming' },
       { type: 'action', label: 'Stop Streaming' },
       { type: 'separator' },
-      { type: 'action', label: 'Configure Stream...' },
+      {
+        type: 'action',
+        label: 'Configure Stream...',
+        onClick: () => useSettingsStore.getState().open('advanced'),
+      },
     ],
   },
   {
@@ -82,12 +84,21 @@ const DEFAULT_MENUS: MenuDef[] = [
       { type: 'action', label: 'Documentation' },
       { type: 'action', label: 'Keyboard Shortcuts', shortcut: 'Ctrl+Shift+K' },
       { type: 'separator' },
-      { type: 'action', label: 'About Lumen' },
+      {
+        type: 'action',
+        label: 'About Lumen',
+        onClick: () => useSettingsStore.getState().open('about'),
+      },
     ],
   },
-]
+  {
+    id: 'modules',
+    label: 'Modules',
+    items: [{ type: 'action', label: 'New Module' }],
+  },
+];
 
 export function registerDefaultMenus() {
-  const { registerMenu } = useMenuRegistry.getState()
-  DEFAULT_MENUS.forEach((menu, index) => registerMenu(menu, index * 10))
+  const { registerMenu } = useMenuRegistry.getState();
+  DEFAULT_MENUS.forEach((menu, index) => registerMenu(menu, index * 10));
 }
