@@ -18,6 +18,7 @@ import { useState } from 'react';
 import { useAppVersion } from '@/hooks/use-app-version';
 import { cn } from '@/lib/utils';
 import { useProfileStore } from '@/stores/profile-store';
+import { type SettingsSection, useSettingsStore } from '@/stores/settings-store';
 import { AboutSection } from './settings/about-section';
 import { AdvancedSection } from './settings/advanced-section';
 import { DevicePermissionsSection } from './settings/device-permissions-section';
@@ -29,9 +30,7 @@ import { Dialog, DialogClose, DialogContent, DialogTrigger } from './ui/dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 
-type NavSection = 'theme' | 'remote_general' | 'remote_permissions' | 'advanced' | 'about';
-
-const SECTION_TITLES: Record<NavSection, { label: string; title: string; description?: string }> = {
+const SECTION_TITLES: Record<SettingsSection, { label: string; title: string; description?: string }> = {
   theme: { label: 'Application settings', title: 'Configure themes, devices and transmission' },
   remote_general: { label: 'Remote Access', title: 'General Access' },
   remote_permissions: { label: 'Remote Access', title: 'Device Permissions' },
@@ -47,15 +46,15 @@ const SECTION_TITLES: Record<NavSection, { label: string; title: string; descrip
 export const SettingsDialog = () => {
   const version = useAppVersion();
   const { profiles, activeProfileId, resetProfile } = useProfileStore();
+  const { isOpen, activeSection, open, close } = useSettingsStore();
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
-  const [activeSection, setActiveSection] = useState<NavSection>('theme');
   const [remoteOpen, setRemoteOpen] = useState(false);
 
   const isRemoteSection =
     activeSection === 'remote_general' || activeSection === 'remote_permissions';
 
-  const handleNavClick = (section: NavSection) => {
-    setActiveSection(section);
+  const handleNavClick = (section: SettingsSection) => {
+    open(section);
     if (section === 'remote_general' || section === 'remote_permissions') {
       setRemoteOpen(true);
     } else {
@@ -64,7 +63,7 @@ export const SettingsDialog = () => {
   };
 
   return (
-    <Dialog>
+    <Dialog open={isOpen} onOpenChange={(nextOpen) => (nextOpen ? open() : close())}>
       <DialogTrigger render={<button />}>
         <Settings className="size-4 text-muted-foreground" />
       </DialogTrigger>
@@ -112,7 +111,7 @@ export const SettingsDialog = () => {
                 onClick={() => {
                   const next = !remoteOpen;
                   setRemoteOpen(next);
-                  if (next && !isRemoteSection) setActiveSection('remote_general');
+                  if (next && !isRemoteSection) open('remote_general');
                 }}
                 className={cn(
                   'w-full justify-start gap-2.5',

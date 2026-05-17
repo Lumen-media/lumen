@@ -11,7 +11,7 @@ const NAV_TABS = [
   { label: 'View', to: '/' },
   { label: 'Presentation', to: '/presentation' },
   { label: 'Live', to: '/live' },
-  { label: 'Settings', to: '/settings' },
+  // { label: 'Settings', to: '/settings' },
 ] as const;
 
 type TabTo = (typeof NAV_TABS)[number]['to'];

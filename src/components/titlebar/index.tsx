@@ -53,8 +53,8 @@ export function TitleBar() {
   const restoreDragInFlightRef = useRef(false);
 
   useEffect(() => {
-    registerDefaultMenus()
-  }, [])
+    registerDefaultMenus();
+  }, []);
 
   const menus = useMenus();
 
