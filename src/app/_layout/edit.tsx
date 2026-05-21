@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { readFile } from '@tauri-apps/plugin-fs';
 import { Pencil } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +9,7 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import type { LyricData, LyricSlide } from '@/services/lyric-service';
+import { thumbnailService } from '@/services/thumbnail-service';
 import { useLyricEditStore } from '@/stores/lyric-edit-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
 
@@ -179,16 +179,11 @@ function useBackgroundSrc(path?: string) {
       setSrc(path);
       return;
     }
-    let url: string;
-    readFile(path)
-      .then((bytes) => {
-        url = URL.createObjectURL(new Blob([bytes]));
-        setSrc(url);
-      })
+    let cancelled = false;
+    thumbnailService.getThumbnail(path)
+      .then((url) => { if (!cancelled) setSrc(url); })
       .catch(() => setSrc(undefined));
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
+    return () => { cancelled = true; };
   }, [path]);
 
   return src;
