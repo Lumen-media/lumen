@@ -2,6 +2,7 @@
 
 mod devices;
 mod streaming;
+mod thumbnail;
 mod websocket;
 
 use std::collections::HashMap;
@@ -318,7 +319,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             streaming::manager::set_mobile_preview_device,
             streaming::manager::push_stream_slide,
             streaming::manager::push_stream_blank,
-            set_stream_overlay
+            set_stream_overlay,
+            thumbnail::get_thumbnail
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
