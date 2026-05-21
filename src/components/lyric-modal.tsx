@@ -1,5 +1,4 @@
 import { useForm } from '@tanstack/react-form';
-import { readFile } from '@tauri-apps/plugin-fs';
 import { t } from 'i18next';
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, ImagePlus, Palette } from 'lucide-react';
 import type React from 'react';
@@ -8,6 +7,7 @@ import { toast } from 'sonner';
 import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
 import { type LyricData, lyricService } from '@/services/lyric-service';
+import { thumbnailService } from '@/services/thumbnail-service';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { LyricBackgroundModal, type LyricBackgroundModalRef } from './lyric-background-modal';
@@ -99,7 +99,7 @@ function SlidePreview({
     if (text.scrollHeight > AVAILABLE_H) {
       text.style.fontSize = `${Math.max(lo - 1, 1)}px`;
     }
-  });
+  }, [slide.lines, fontSizeNum, containerWidth]);
 
   const effectiveBg = background || globalBackground || profileBackground;
   const [bgSrc, setBgSrc] = useState<string | undefined>();
@@ -113,16 +113,11 @@ function SlidePreview({
       setBgSrc(effectiveBg);
       return;
     }
-    let url: string;
-    readFile(effectiveBg)
-      .then((bytes) => {
-        url = URL.createObjectURL(new Blob([bytes]));
-        setBgSrc(url);
-      })
+    let cancelled = false;
+    thumbnailService.getThumbnail(effectiveBg, 800)
+      .then((url) => { if (!cancelled) setBgSrc(url); })
       .catch(() => setBgSrc(undefined));
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
+    return () => { cancelled = true; };
   }, [effectiveBg]);
 
   return (
