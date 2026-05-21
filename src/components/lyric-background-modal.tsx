@@ -1,6 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { join } from '@tauri-apps/api/path';
-import { exists, mkdir, readDir, readFile, remove, stat, writeFile } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, readDir, remove, stat, writeFile } from '@tauri-apps/plugin-fs';
 import { t } from 'i18next';
 import {
   CheckIcon,
@@ -25,6 +25,7 @@ import { useDebounceValue } from 'usehooks-ts';
 import { cn } from '@/lib/utils';
 import { getThemesPath } from '@/services/app-paths';
 import { mediaDbService } from '@/services/media-db-service';
+import { thumbnailService } from '@/services/thumbnail-service';
 import type { FileInfo } from '@/services/types';
 import { ImageLoader } from './image-loader';
 import { Button } from './ui/button';
@@ -145,86 +146,21 @@ interface MediaThumbnailProps {
   onDelete?: () => void;
 }
 
-const MIME: Record<string, string> = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.svg': 'image/svg+xml',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.mov': 'video/quicktime',
-  '.avi': 'video/x-msvideo',
-  '.mkv': 'video/x-matroska',
-};
-
-const THUMB_WIDTH = 400;
-const MAX_CONCURRENT_THUMBS = 3;
-let activeThumbs = 0;
-const thumbQueue: Array<() => void> = [];
-
-function acquireThumbSlot(): Promise<() => void> {
-  return new Promise((resolve) => {
-    const tryRun = () => {
-      if (activeThumbs < MAX_CONCURRENT_THUMBS) {
-        activeThumbs++;
-        resolve(() => {
-          activeThumbs--;
-          thumbQueue.shift()?.();
-        });
-      } else {
-        thumbQueue.push(tryRun);
-      }
-    };
-    tryRun();
-  });
-}
 
 function MediaThumbnail({ file, selected, onClick, onDelete }: MediaThumbnailProps) {
-  const ext = file.extension.toLowerCase();
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
 
   useEffect(() => {
-    let thumbUrl: string | null = null;
     let cancelled = false;
 
-    acquireThumbSlot().then(async (release) => {
-      if (cancelled) {
-        release();
-        return;
-      }
-      try {
-        const bytes = await readFile(file.path);
-        if (cancelled) return;
-        const mime = MIME[ext] ?? 'application/octet-stream';
-        const blob = new Blob([bytes], { type: mime });
-        const bmp = await createImageBitmap(blob, {
-          resizeWidth: THUMB_WIDTH,
-          resizeQuality: 'low',
-        });
-        if (cancelled) {
-          bmp.close();
-          return;
-        }
-        const canvas = new OffscreenCanvas(bmp.width, bmp.height);
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(bmp, 0, 0);
-        bmp.close();
-        const thumbBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.2 });
-        thumbUrl = URL.createObjectURL(thumbBlob);
-        if (!cancelled) setDisplaySrc(thumbUrl);
-      } catch {
-      } finally {
-        release();
-      }
-    });
+    thumbnailService.getThumbnail(file.path).then((url) => {
+      if (!cancelled) setDisplaySrc(url);
+    }).catch(() => {});
 
     return () => {
       cancelled = true;
-      if (thumbUrl) URL.revokeObjectURL(thumbUrl);
     };
-  }, [file.path, ext]);
+  }, [file.path]);
 
   return (
     <div

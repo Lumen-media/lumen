@@ -5,7 +5,7 @@ import { LucidePause, LucidePlay, LucideVolume2, LucideVolumeOff } from 'lucide-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
 import { cn } from '@/lib/utils';
-import { extractVideoThumbnail } from '@/services/get-video-tumb';
+import { thumbnailService } from '@/services/thumbnail-service';
 import { Slider } from './slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 
@@ -208,7 +208,7 @@ export const Videoplayer = ({
       currentFilePath.current = filePath;
       pendingSeekTime.current = seekTime > 0 ? seekTime : null;
       if (mime.startsWith('video/')) {
-        pendingThumbnail.current = await extractVideoThumbnail(blobUrl);
+        pendingThumbnail.current = await thumbnailService.getThumbnail(filePath).catch(() => null);
       } else {
         pendingThumbnail.current = null;
       }
