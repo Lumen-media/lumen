@@ -19,3 +19,4 @@ export { remoteSyncService } from './remote-sync-service';
 export type { PlayerSyncPayload } from './remote-sync-service';
 export type { StreamingConfig, StreamingStatus } from './streaming-service';
 export { streamingService } from './streaming-service';
+export { thumbnailService } from './thumbnail-service';
