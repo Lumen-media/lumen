@@ -1,4 +1,5 @@
 mod image_thumb;
+mod os_thumb;
 mod video_thumb;
 
 use std::path::Path;
@@ -30,6 +31,20 @@ pub async fn get_thumbnail(app: AppHandle, path: String, size: Option<u32>) -> R
         return Ok(dest.to_string_lossy().to_string());
     }
 
+    // Try OS thumbnail cache first (blocking — COM/fs I/O)
+    let saved = {
+        let src_buf = src.to_path_buf();
+        let dest_buf = dest.clone();
+        tokio::task::spawn_blocking(move || os_thumb::try_get(&src_buf, &dest_buf, size))
+            .await
+            .unwrap_or(false)
+    };
+
+    if saved {
+        return Ok(dest.to_string_lossy().to_string());
+    }
+
+    // OS had nothing — generate ourselves
     let ext = src
         .extension()
         .and_then(|e| e.to_str())

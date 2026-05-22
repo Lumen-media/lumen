@@ -29,10 +29,13 @@ pub fn generate(src: &Path, dest: &Path, size: u32) -> Result<(), String> {
 
     let mut format = probed.format;
 
+    // Audio tracks have sample_rate; video tracks don't — use that to distinguish
     let track = format
         .tracks()
         .iter()
-        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+        .find(|t| {
+            t.codec_params.codec != CODEC_TYPE_NULL && t.codec_params.sample_rate.is_none()
+        })
         .ok_or_else(|| "no video track found".to_string())?;
 
     let track_id = track.id;
@@ -52,7 +55,13 @@ pub fn generate(src: &Path, dest: &Path, size: u32) -> Result<(), String> {
         let _ = decoder.decode(&sps_pps);
     }
 
+    let mut attempts = 0;
     loop {
+        if attempts > 300 {
+            return Err("no decodable video frame found after 300 packets".into());
+        }
+        attempts += 1;
+
         let packet = match format.next_packet() {
             Ok(p) => p,
             Err(_) => return Err("no decodable video frame found".into()),

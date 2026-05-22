@@ -12,6 +12,7 @@ import {
   Trash2,
   Video,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +23,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import type { FileInfo, MediaType } from '@/services';
+import { thumbnailService } from '@/services/thumbnail-service';
 import { useDeleteFileStore } from '@/stores/delete-file-store';
 
 interface FileListItemProps {
@@ -33,6 +35,40 @@ interface FileListItemProps {
   onPlayNext?: (file: FileInfo) => void;
   onAddToQueue?: (file: FileInfo) => void;
   isFocused?: boolean;
+}
+
+const THUMBNAIL_TYPES = new Set<MediaType>(['video', 'image']);
+
+function FileThumbnail({ file, mediaType }: { file: FileInfo; mediaType: MediaType }) {
+  const Icon = getMediaIcon(mediaType);
+  const [thumbSrc, setThumbSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!THUMBNAIL_TYPES.has(mediaType)) return;
+    let cancelled = false;
+    thumbnailService
+      .getThumbnail(file.path)
+      .then((url) => { if (!cancelled) setThumbSrc(url); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [file.path, mediaType]);
+
+  if (!THUMBNAIL_TYPES.has(mediaType) || failed) {
+    return <Icon className="size-5 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />;
+  }
+
+  return (
+    <div className="w-14 aspect-video rounded overflow-hidden bg-muted shrink-0">
+      {thumbSrc ? (
+        <img src={thumbSrc} alt="" className="w-full h-full object-cover" aria-hidden="true" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <Icon className="size-3 text-muted-foreground" aria-hidden="true" />
+        </div>
+      )}
+    </div>
+  );
 }
 
 const getMediaIcon = (mediaType: MediaType) => {
@@ -82,7 +118,6 @@ export function FileListItem({
   onAddToQueue,
   isFocused,
 }: FileListItemProps) {
-  const Icon = getMediaIcon(mediaType);
   const { openDeleteDialog } = useDeleteFileStore();
 
   const handleClick = () => {
@@ -126,9 +161,7 @@ export function FileListItem({
           aria-label={fileDescription}
         >
           <div className="flex items-start gap-3 w-full min-w-0">
-            <div className="shrink-0 mt-0.5">
-              <Icon className="size-5 text-muted-foreground" aria-hidden="true" />
-            </div>
+            <FileThumbnail file={file} mediaType={mediaType} />
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate">{file.name}</p>
               <div
