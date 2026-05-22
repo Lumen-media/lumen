@@ -239,6 +239,11 @@ async fn set_stream_overlay(app: tauri::AppHandle, active: bool) -> Result<(), S
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(2)
+        .build_global()
+        .ok();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_store::Builder::new().build())
