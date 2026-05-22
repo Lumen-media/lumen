@@ -56,6 +56,7 @@ A desktop application focused on simplicity, visual sophistication, and operatio
 - Search field to filter files
 - Context menu with file actions (play, edit, delete, etc.)
 - Metadata reading (title, artist, duration)
+- Thumbnail previews for images and videos, generated once and cached on disk via a Rust backend (OS-native thumbnails on Windows and Linux; pure-Rust fallback via `image` + `symphonia` + `openh264`)
 
 ### Playback Queue
 - Add, remove, and reorder items in the queue
@@ -146,6 +147,7 @@ Each block separated by a double blank line becomes an individual slide in the p
 | Styling | Tailwind CSS 4 |
 | Text Editor | TipTap 3 |
 | Video Player | React Player |
+| Thumbnail Cache | Rust (`image`, `symphonia`, `openh264`, BLAKE3) |
 | Database | SQLite (via Tauri plugin) |
 | Real-Time Comms | WebSocket (Rust/Tokio) |
 | Internationalization | i18next |
@@ -158,7 +160,7 @@ Each block separated by a double blank line becomes an individual slide in the p
 
 - [ ] Full presentation mode with slide control
 - [ ] Live broadcast mode
-- [ ] Custom visual themes
+- [x] Custom visual themes
 - [ ] Per-song notes
 - [ ] Raffle system modal
 - [ ] Presentation manager (event section navigation)
