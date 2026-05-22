@@ -59,7 +59,7 @@ function FileThumbnail({ file, mediaType }: { file: FileInfo; mediaType: MediaTy
   }
 
   return (
-    <div className="w-14 aspect-video rounded overflow-hidden bg-muted shrink-0">
+    <div className="h-10 aspect-video rounded overflow-hidden bg-muted shrink-0">
       {thumbSrc ? (
         <img src={thumbSrc} alt="" className="w-full h-full object-cover" aria-hidden="true" />
       ) : (
