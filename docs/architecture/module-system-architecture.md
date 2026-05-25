@@ -460,7 +460,7 @@ Disable / uninstall path:
 
 ### Dev mode
 
-`pnpm lumen module dev <path>` invokes the Rust install command with a `devMode: true` flag. The shell points the protocol handler at the source folder (no copy to app_data) and starts a file watcher. On change, the Injector unloads and reloads the module — same path as production unload/load, no special-casing.
+`pnpm lumen-module dev <path>` invokes the Rust install command with a `devMode: true` flag. The shell points the protocol handler at the source folder (no copy to app_data) and starts a file watcher. On change, the Injector unloads and reloads the module — same path as production unload/load, no special-casing.
 
 ---
 
@@ -558,7 +558,7 @@ raffle-1.0.0.lumenpack          (zip)
 Three sources, one terminal command. They all converge on `module_runtime::install_module` in Rust, which validates, extracts, and registers the module on disk.
 
 ```
-1. Dev mode               pnpm lumen module dev ./path
+1. Dev mode               pnpm lumen-module dev ./path
                           └─► install_module({ LocalPath, devMode: true })
 
 2. Sideload (manual)      "Install from file…" picker in app settings
@@ -597,8 +597,8 @@ The store does **not** host modules. It hosts an **index** — a single JSON fil
              │ (raw.githubusercontent.com)                │ GitHub Releases API
              ▼                                            ▼
         ┌──────────────────────────────────────────────────────────────┐
-        │                          Lumen app                            │
-        │  Store UI lists entries from modules.json. Install button     │
+        │                          Lumen app                           │
+        │  Store UI lists entries from modules.json. Install button    │
         │  fetches the .lumenpack from the matching GitHub Release.    │
         └──────────────────────────────────────────────────────────────┘
 ```
@@ -607,7 +607,7 @@ The store does **not** host modules. It hosts an **index** — a single JSON fil
 
 **Author publishing flow**
 
-1. Build and pack locally: `pnpm lumen module build && pnpm lumen module pack`.
+1. Build and pack locally: `pnpm lumen-module build && pnpm lumen-module pack`.
 2. Create a GitHub Release on their own repo, tag `vX.Y.Z`, attach the `.lumenpack` as a release asset.
 3. Open a pull request against `Lumen-media/community-modules` adding an entry to `modules.json` (id, name, description, author, repo, tags, icon URL).
 4. Lumen team reviews — checks id collision against existing entries, manifest validity, basic code review — and merges.
@@ -625,9 +625,90 @@ The store does **not** host modules. It hosts an **index** — a single JSON fil
 
 The app periodically (and on demand) queries the latest GitHub release for each installed module from the store. If a newer `version` exists than what is installed, the module is surfaced as "Update available" in the Installed list. The user approves; the install flow re-runs against the new release. Installed-but-removed-from-index modules keep running but stop receiving updates and surface a "no longer in store" notice.
 
+**Rate limit handling.** GitHub's unauthenticated REST API caps at 60 requests per hour per IP. A user with many installed modules can exhaust this on a single check. Mitigations:
+
+- Cache release metadata locally with a default TTL of one hour.
+- Run the periodic check in the background on a slow cadence (e.g. once per six hours), spaced across modules rather than burst.
+- Allow the user to provide an optional GitHub personal access token in settings — raises the limit to 5000 per hour, but is never required.
+- The on-demand "Check for updates" button always bypasses cache for the modules the user explicitly inspects.
+
 ### Signing and verification (future)
 
 V1 trusts the moderation review of `modules.json` as the integrity gate. There is no signature verification or content hashing yet. The future third-party-store tier — discussed alongside `isolation: 'worker'` in Future work — is the natural place to introduce signed manifests, sha256 of release assets recorded in the index, and reproducible build checks. None of those exist now.
+
+---
+
+## User data & backups
+
+Every byte of user-generated state — including modules — lives in the per-user app data directory. The install directory is read-only after the app is installed; nothing the user creates should ever land there.
+
+### Filesystem layout
+
+```
+{app_data}/lumen/                         ← per-user, writable, no admin/sudo
+├── lumen.sqlite                          ← shell-owned: queue, settings, library DB,
+│                                          window state, enabled-modules list
+├── lyrics/                               ← user-created lyrics
+├── library/                              ← user-added media references
+├── cache/
+│   ├── thumbs/                           ← thumbnail cache (regeneratable)
+│   └── unsplash/                         ← downloaded backgrounds (regeneratable)
+├── modules/
+│   ├── {module-id-1}/
+│   │   ├── manifest.json
+│   │   ├── main.js
+│   │   ├── styles.css
+│   │   ├── assets/
+│   │   ├── data.json                     ← if module uses host.data.json
+│   │   └── data.sqlite                   ← if module calls host.data.sqlite()
+│   └── {module-id-N}/...
+└── installed-modules.json                ← {id, version, source} for restore
+```
+
+Resolved paths per OS:
+
+| OS       | `{app_data}/lumen/`                                       |
+|----------|-----------------------------------------------------------|
+| Windows  | `%APPDATA%\Lumen\` (`C:\Users\<u>\AppData\Roaming\Lumen\`)|
+| macOS    | `~/Library/Application Support/Lumen/`                    |
+| Linux    | `~/.config/lumen/`                                        |
+
+The install directory contains the Lumen binary plus bundled (first-party) modules under `resources/modules/`. Those bundled modules are copied to `{app_data}/lumen/modules/` on first run; the runtime then reads them from `{app_data}` like any other module. Deleting a bundled module from `{app_data}` triggers a re-copy on next boot — that is the "factory reset" path for a built-in.
+
+### Modules must not write outside their directory
+
+Every module is expected to confine writes to `{app_data}/lumen/modules/{id}/`. The host APIs (`host.data.json`, `host.data.sqlite`, `host.fs`) enforce this by scoping the module's filesystem and database handles. A well-behaved module's full state is contained in its directory; uninstall = `rm -rf {app_data}/lumen/modules/{id}/` with no orphans.
+
+### Backup & restore
+
+A built-in **Backup** page in Settings produces a single `.lumenbackup` file — a zip of `{app_data}/lumen/` with selectable subsets:
+
+| Subset                              | What it contains                                                |
+|-------------------------------------|-----------------------------------------------------------------|
+| App data (default on)               | `lumen.sqlite`, lyrics, library references, `installed-modules.json` |
+| Installed modules (default on)      | Each `{module-id}/` directory in full                           |
+| Module data (default on)            | Each module's `data.json` / `data.sqlite`                       |
+| Media cache (default off)           | `cache/` (regeneratable; usually skipped to keep backups small) |
+
+Restore extracts the archive over `{app_data}/lumen/`. The app restarts to pick up the new state. The user chooses where the file lands — Documents, Dropbox, USB, email to self.
+
+### Store-installed module restore
+
+`installed-modules.json` is a small JSON of `{ id, version, source }` for every currently installed module:
+
+```json
+[
+  { "id": "com.gabriel.raffle",  "version": "1.2.0", "source": "store" },
+  { "id": "com.alice.countdown", "version": "0.5.0", "source": "store" },
+  { "id": "com.local.foo",       "version": "0.1.0", "source": "sideload" }
+]
+```
+
+On a fresh install (no backup), the user can import this file alone and the app offers to reinstall every `source: "store"` entry from the community store. Sideloaded modules need the original `.lumenpack` or a backup.
+
+### Reinstall preserves modules
+
+Uninstalling the Lumen app does **not** touch `{app_data}/lumen/`. Reinstalling picks the existing user data back up automatically. Only an explicit "Remove user data" step in the uninstaller (off by default) wipes the directory.
 
 ---
 
@@ -637,7 +718,7 @@ The module authoring stack is two pieces: a **CLI** for managing the project, an
 
 > The SDK and CLI live in a separate repository (`Lumen-media/module-sdk`) and are published independently to npm. This section describes the **contract** the SDK exposes; details on the SDK's own architecture, package layout, versioning discipline, and release flow are in [module-sdk-architecture.md](./module-sdk-architecture.md).
 
-### CLI — `pnpm lumen module …`
+### CLI — `lumen-module …`
 
 | Command              | Purpose                                                                                            |
 |----------------------|----------------------------------------------------------------------------------------------------|
@@ -667,10 +748,10 @@ The module authoring stack is two pieces: a **CLI** for managing the project, an
 ### Scaffold and dev loop
 
 ```bash
-pnpm lumen module init my-module
+pnpm lumen-module init my-module
 cd my-module
 pnpm install
-pnpm lumen module dev .       # Lumen launches with this module loaded; saves trigger reload
+pnpm lumen-module dev .       # Lumen launches with this module loaded; saves trigger reload
 ```
 
 The starter template ships with a panel + command + state example so the author has a working module to modify on first run.
@@ -694,7 +775,7 @@ my-module/                                       my-module-1.0.0.lumenpack  (zip
 └── README.md
 ```
 
-`pnpm lumen module pack` is the bridge between the two.
+`pnpm lumen-module pack` is the bridge between the two.
 
 ---
 
