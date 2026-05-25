@@ -6,8 +6,10 @@ The Module SDK is the **public contract** for building Lumen modules. It is the 
 
 The SDK lives in a **separate repository** from the Lumen app — `Lumen-media/module-sdk` — and ships as **four independently versioned npm packages** under the `@lumen/` scope. This gives community developers a stable, evolvable contract decoupled from the Lumen app's internal codebase, and gives the Lumen team a single place to coordinate breaking changes.
 
+The separation is deliberate: a community contributor opening a PR against the SDK should not need to clone the Lumen app, run Tauri, or learn the host's internals. The SDK builds and tests with `pnpm` and `tsc` alone. The trade-off — a host-API addition becomes a coordinated two-repo change instead of a single commit — is paid in exchange for that lower contribution barrier.
+
 ```
-                      ┌─────────────────────────────────┐
+                      ┌──────────────────────────────────┐
                       │   Lumen-media/module-sdk         │
                       │   (npm: @lumen/* packages)       │
                       │                                  │
@@ -21,12 +23,12 @@ The SDK lives in a **separate repository** from the Lumen app — `Lumen-media/m
                   import types  │               │  import runtime + build
                                 ▼               ▼
         ┌─────────────────────────────┐   ┌─────────────────────────────┐
-        │  Lumen app                  │   │  Community module author     │
-        │  (Lumen-media/lumen)        │   │  (anyone, anywhere)          │
-        │                             │   │                              │
-        │  implements LumenHost       │   │  extends LumenPlugin          │
-        │  in TypeScript              │   │  uses host APIs by type      │
-        │  runs the Injector          │   │  ships .lumenpack            │
+        │  Lumen app                  │   │  Community module author    │
+        │  (Lumen-media/lumen)        │   │  (anyone, anywhere)         │
+        │                             │   │                             │
+        │  implements LumenHost       │   │  extends LumenPlugin        │
+        │  in TypeScript              │   │  uses host APIs by type     │
+        │  runs the Injector          │   │  ships .lumenpack           │
         └─────────────────────────────┘   └─────────────────────────────┘
 ```
 
@@ -63,9 +65,9 @@ Lumen-media/module-sdk/
 │   ├── module-cli/              → @lumen/module-cli
 │   └── create-module/           → @lumen/create-module
 ├── examples/
-│   ├── minimal/                 — smallest valid module
-│   ├── with-presenter/          — uses media-window contribution
-│   └── with-sqlite/             — uses host.data.sqlite()
+│   ├── minimal/                 — one panel, one command, host.data.json (the "hello world")
+│   ├── with-presenter/          — registers in both windows, uses host.bus + host.presentation.project
+│   └── with-sqlite/             — host.data.sqlite migrations + a list panel reading from the DB
 ├── docs/                        — README, guides, API reference
 ├── .changeset/                  — pending version bumps
 ├── pnpm-workspace.yaml
@@ -74,6 +76,8 @@ Lumen-media/module-sdk/
 ```
 
 Each package under `packages/` has its own `package.json`, `tsconfig.json`, build script, and CHANGELOG.md. Releases are independent — a CLI bugfix does not bump the SDK runtime.
+
+Intra-monorepo dependencies use pnpm's `workspace:*` protocol (e.g. `@lumen/module-cli` declares `"@lumen/module-build": "workspace:*"`). When Changesets publishes, the workspace ranges are rewritten to concrete semver ranges in the published `package.json`, so downstream consumers see normal semver dependencies.
 
 ---
 
@@ -88,9 +92,10 @@ The most-installed package. Pure TypeScript, no platform deps, tree-shakeable.
 - `LumenHost` and every host service interface as types: `PanelSpec`, `CommandSpec`, `QueueHostAPI`, `LyricsHostAPI`, etc.
 - `Disposable` type and helpers.
 - React hooks that bridge `host.*` services into React reactivity: `useHost`, `useBus`, `useTheme`, `useSetting`, `useQueue`, `useSlideState`.
-- Subpath export `@lumen/module-sdk/testing` with `createMockHost()` and friends, for module authors to unit-test their plugin.
+- `manifest.schema.json` — the canonical JSON Schema for module manifests. Re-exported as both a JSON file and a TypeScript type so that `@lumen/module-build` (build-time validation) and the Lumen app's Rust `module_runtime` (install-time validation) consume the same definition.
+- Subpath export `@lumen/module-sdk/testing` with `createMockHost()` and friends, for module authors to unit-test their plugin. Exposed via the package's `exports` field so editors and bundlers resolve subpath types correctly.
 
-**Dependencies** — `react` and `react-dom` as peer dependencies. No runtime deps.
+**Dependencies** — `react` and `react-dom` as peer dependencies. No runtime deps. For v1 every module is assumed to have at least one UI surface, so the peer-dep is unconditional; a `@lumen/module-sdk/core` split for headless modules is parked under future work.
 
 **Audience** — every module author installs this.
 
@@ -101,9 +106,9 @@ Heavyweight; used only at build time.
 **Exports**
 - Default export: `lumenModule({ manifest })` — a Vite plugin that:
   - Bundles `src/main.ts` into one ESM `main.js`.
-  - Externalizes `react`, `react-dom`, `@lumen/ui`, `@lumen/module-sdk`.
+  - Externalizes `react`, `react-dom`, `@lumen/ui`, `@lumen/module-sdk` (see Runtime resolution below).
   - Copies `manifest.json`, `styles.css`, `assets/` to `dist/`.
-  - Validates the manifest against the JSON Schema at build time.
+  - Validates the manifest against the JSON Schema (from `@lumen/module-sdk`) at build time.
   - Warns on CSS selectors that are not namespaced under `.lumen-mod-{id}`.
   - Preserves source maps; integrates with hot reload via the dev CLI.
 
@@ -111,19 +116,38 @@ Heavyweight; used only at build time.
 
 **Audience** — module authors who use the recommended Vite-based build. Authors with custom build setups can bypass this and implement the same outputs by hand.
 
+**Runtime resolution of externalized packages.** A module's `main.js` references `react`, `react-dom`, `@lumen/ui`, and `@lumen/module-sdk` as bare imports but does not bundle them. At runtime, the Lumen app injects a browser **import map** into the renderer pointing each name to the shell's own copy:
+
+```html
+<script type="importmap">
+{
+  "imports": {
+    "react":              "/__lumen/react.js",
+    "react-dom":          "/__lumen/react-dom.js",
+    "@lumen/ui":          "/__lumen/ui.js",
+    "@lumen/module-sdk":  "/__lumen/module-sdk.js"
+  }
+}
+</script>
+```
+
+This guarantees every module shares the host's exact React version (no duplicate React causing hook-mismatch errors) and the host's design-system implementation. The `/__lumen/*` paths are served by Rust over the same custom protocol as module assets, scoped to the host's bundled copies. Modules cannot override these imports.
+
 ### `@lumen/module-cli` — the `lumen-module` binary
 
 The developer-facing entry point. Installed once per project as a dev dependency.
 
-**Exports** — a `bin` entry exposing `lumen-module` with subcommands:
+**Exports** — a `bin` entry exposing `lumen-module` (so `pnpm exec lumen-module …` and `npx lumen-module …` both work):
 
-| Subcommand              | Action                                                                  |
-|-------------------------|-------------------------------------------------------------------------|
-| `dev [path]`            | Watch a module folder; tell the running Lumen instance to load it; reload on changes |
-| `build`                 | Run the Vite build with `@lumen/module-build` configured                |
-| `pack`                  | Run `build`, then zip `dist/` into `{id}-{version}.lumenpack`           |
-| `validate [path]`       | Schema-check the manifest, lint CSS namespacing, verify host API usage  |
-| `publish` (future)      | Open a PR against `Lumen-media/community-modules` with the index entry pre-filled |
+| Subcommand              | Action                                                                  | Needs running app? |
+|-------------------------|-------------------------------------------------------------------------|--------------------|
+| `dev [path]`            | Watch a module folder; tell the running Lumen instance to load it; reload on changes | yes (Developer mode on) |
+| `build`                 | Run the Vite build with `@lumen/module-build` configured                | no                 |
+| `pack`                  | Run `build`, then zip `dist/` into `{id}-{version}.lumenpack`           | no                 |
+| `validate [path]`       | Schema-check the manifest, lint CSS namespacing, verify host API usage  | no                 |
+| `publish` (future)      | Open a PR against `Lumen-media/community-modules` with the index entry pre-filled | no       |
+
+The build / pack / validate subcommands are standalone — an author who prefers their own editor and manual reload loop never needs to run `dev` or have the Lumen app open.
 
 **Dependencies** — `@lumen/module-build`, file watcher (`chokidar`), HTTP client.
 
@@ -144,11 +168,11 @@ Used once per project via `pnpm create @lumen/module <name>`.
 
 ### Summary table
 
-| Package                  | Size class | Installed by author | When         |
-|--------------------------|------------|---------------------|--------------|
-| `@lumen/module-sdk`      | small      | always              | runtime + types |
-| `@lumen/module-build`    | medium     | usually             | build time   |
-| `@lumen/module-cli`      | medium     | usually             | dev tooling  |
+| Package                  | Size class | Installed by author | When             |
+|--------------------------|------------|---------------------|------------------|
+| `@lumen/module-sdk`      | small      | always              | runtime + types  |
+| `@lumen/module-build`    | medium     | usually             | build time       |
+| `@lumen/module-cli`      | medium     | usually             | dev tooling      |
 | `@lumen/create-module`   | tiny       | one-shot            | scaffolding only |
 
 ---
@@ -159,21 +183,21 @@ The SDK is the **only** place where the `LumenHost` interface and every host ser
 
 ```
                   @lumen/module-sdk
-                  ┌───────────────────────────────────┐
-                  │  export interface LumenHost { ... }│
+                  ┌─────────────────────────────────────┐
+                  │  export interface LumenHost { ... } │
                   │  export interface QueueHostAPI {...}│
-                  │  export class LumenPlugin {...}    │
-                  └─────────┬─────────────────┬───────┘
+                  │  export class LumenPlugin {...}     │
+                  └─────────┬─────────────────┬─────────┘
                             │                 │
             import type     │                 │     import runtime
                             ▼                 ▼
-              ┌──────────────────────┐   ┌──────────────────────┐
-              │  Lumen app           │   │  Author's module     │
-              │                      │   │                      │
-              │  class HostImpl      │   │  export default      │
-              │    implements        │   │    class extends     │
+              ┌──────────────────────┐   ┌───────────────────────┐
+              │  Lumen app           │   │  Author's module      │
+              │                      │   │                       │
+              │  class HostImpl      │   │  export default       │
+              │    implements        │   │    class extends      │
               │    LumenHost { ... } │   │    LumenPlugin { ... }│
-              └──────────────────────┘   └──────────────────────┘
+              └──────────────────────┘   └───────────────────────┘
 ```
 
 Consequences:
@@ -222,7 +246,7 @@ The chosen mechanism is a **local HTTP server** exposed by the Lumen app in dev 
 │  module-cli (Node)         │                  │  Lumen app (Tauri)         │
 │                            │                  │                            │
 │  pnpm lumen-module dev .   │                  │  binds 127.0.0.1:5179      │
-│         │                  │                  │  (dev-mode only)            │
+│         │                  │                  │  (dev-mode only)           │
 │         ▼                  │  POST /modules   │                            │
 │  HTTP client ──────────────┼────────────────► │  module_runtime::install   │
 │  watch ./src/**            │   { path,        │    with devMode flag       │
@@ -240,10 +264,12 @@ The chosen mechanism is a **local HTTP server** exposed by the Lumen app in dev 
 | `POST /modules`               | Install a module by local path with `devMode: true`             |
 | `POST /modules/{id}/reload`   | Unload and reload the module (file-changed signal)              |
 | `POST /modules/{id}/disable`  | Disable without uninstalling                                    |
-| `DELETE /modules/{id}`        | Uninstall                                                        |
+| `DELETE /modules/{id}`        | Uninstall                                                       |
 | `GET /modules`                | List installed modules with state                               |
 
-**Security posture for dev mode.** The server only binds `127.0.0.1` and only runs when the Lumen app is launched with the dev flag (env var or CLI flag). Production builds never bind the port. There is no auth — the assumption is that anyone with access to the loopback interface on the dev machine is the developer. For shared dev machines, a token can be added later.
+**Security posture for dev mode.** The server only binds `127.0.0.1`. In production builds (the official installed Lumen app) the port is **not** bound by default — the user opts in by toggling **Settings → Developer → Enable developer mode**, after which the endpoint starts accepting connections. Source builds of Lumen (running `pnpm tauri dev`) bind automatically. This means community plugin authors do not need the Lumen source tree to develop — installing the official app and toggling the setting is enough. There is no auth on the loopback endpoint; the trust model is "the developer who toggled the setting is the only one expected to be on this loopback." For shared dev machines, a token can be added later.
+
+**Hot reload semantics.** A reload is an unload + re-import of the module. The plugin instance is destroyed and reconstructed. Anything held in plugin instance state — `useState`, refs, intervals not registered via the host, in-memory caches — is lost. State the module wants preserved across reloads must be written to `host.data.json` before unload (and re-read in `onload`) or routed through `host.bus`. This matches production unload/load semantics; dev mode is intentionally the same path.
 
 ---
 
@@ -347,8 +373,7 @@ Later, when the SDK reaches `1.0.0`:
 ## Open questions
 
 - **Should `@lumen/module-cli` and `@lumen/module-build` merge?** They are tightly coupled — the CLI essentially shells out to the build. Two packages give independent versioning but cost duplication. Revisit after the first six months of real-world use.
-- **Do we ship a React-less variant?** Some modules might be pure logic + bus subscribers, no UI. The SDK runtime currently peer-deps `react`. If non-UI modules become common, split `@lumen/module-sdk/core` (no React) from `@lumen/module-sdk/react`.
-- **Vendoring vs peer-deps.** `@lumen/ui` is currently externalized at build time, resolved from the host. This means modules cannot use `@lumen/ui` components in their own unit tests without a mock. Worth shipping a `@lumen/module-sdk/testing/ui` mock layer to support testing.
+- **`@lumen/ui` in module unit tests.** The SDK's `testing` subpath provides a mock `LumenHost`, but mocking `@lumen/ui` components for tests that mount module React is not handled yet. Ship a `@lumen/module-sdk/testing/ui` mock layer (lightweight render-only stubs) when the first module hits the wall in its tests.
 
 ---
 
