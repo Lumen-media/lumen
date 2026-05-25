@@ -1,5 +1,6 @@
+import path from 'node:path';
 import { build } from 'esbuild';
-import type { Plugin } from 'vite';
+import type { Plugin, ViteDevServer } from 'vite';
 
 const HOST_DEPS: Record<string, string> = {
   'react.js': 'react',
@@ -33,6 +34,12 @@ async function bundleDep(entrypoint: string): Promise<string> {
   return code;
 }
 
+function viteDepUrl(server: ViteDevServer, specifier: string): string {
+  const relCacheDir = path.relative(server.config.root, server.config.cacheDir).replace(/\\/g, '/');
+  const flatId = specifier.replace(/\//g, '_');
+  return `/${relCacheDir}/deps/${flatId}.js`;
+}
+
 export function lumenHostModules(): Plugin {
   return {
     name: 'lumen-host-modules',
@@ -62,13 +69,8 @@ export function lumenHostModules(): Plugin {
           return;
         }
 
-        try {
-          const code = await bundleDep(dep);
-          res.end(code);
-        } catch (err) {
-          res.statusCode = 500;
-          res.end(String(err));
-        }
+        const url = viteDepUrl(server, dep);
+        res.end(`export*from'${url}';export{default}from'${url}';`);
       });
     },
 

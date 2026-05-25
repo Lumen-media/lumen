@@ -25,6 +25,12 @@ export default defineConfig({
     __BUILD_DATE__: JSON.stringify(buildDate),
   },
 
+  build: {
+    rollupOptions: {
+      external: ['react', 'react-dom', 'react-dom/client'],
+    },
+  },
+
   clearScreen: false,
 
   resolve: {
