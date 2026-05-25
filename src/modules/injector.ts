@@ -6,6 +6,8 @@ import type { Disposable, LumenPlugin, ModuleManifest } from './types';
 const CRASH_THRESHOLD = 5;
 const CRASH_WINDOW_MS = 10_000;
 
+let globalHandlersInstalled = false;
+
 interface LoadedModule {
   plugin: LumenPlugin;
   disposables: Disposable[];
@@ -20,7 +22,37 @@ export function setOpenCommandPalette(fn: (prefilter?: string) => void) {
   openCommandPaletteFn = fn;
 }
 
+function attributeToModule(error: Error | null | undefined): string | null {
+  const stack = error?.stack ?? '';
+  const match = stack.match(/lumen-module:\/\/([^/\s]+)/);
+  return match?.[1] ?? null;
+}
+
+function installGlobalErrorHandlers() {
+  window.addEventListener('error', (event) => {
+    const id = attributeToModule(event.error instanceof Error ? event.error : null);
+    if (id) {
+      recordError(id);
+      event.preventDefault();
+    }
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const err = event.reason instanceof Error ? event.reason : null;
+    const id = attributeToModule(err);
+    if (id) {
+      recordError(id);
+      event.preventDefault();
+    }
+  });
+}
+
 export async function bootModules() {
+  if (!globalHandlersInstalled) {
+    installGlobalErrorHandlers();
+    globalHandlersInstalled = true;
+  }
+
   let manifests: Array<{ manifest: ModuleManifest; source: string }> = [];
 
   try {
