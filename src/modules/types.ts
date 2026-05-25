@@ -1,0 +1,300 @@
+import type React from 'react';
+
+export interface Disposable {
+  dispose(): void;
+}
+
+export type SlotName =
+  | 'sidebar.right.tabs'
+  | 'dialog'
+  | 'presenter.content'
+  | 'toolbar'
+  | 'statusbar';
+
+export interface PanelProps {
+  close?: () => void;
+  [key: string]: unknown;
+}
+
+export interface PanelSpec {
+  id: string;
+  slot: SlotName;
+  title?: string;
+  icon?: string;
+  component: React.ComponentType<PanelProps>;
+  when?: () => boolean;
+}
+
+export interface CommandSpec {
+  id: string;
+  title: string;
+  keybinding?: string;
+  run: (args?: unknown) => unknown;
+}
+
+export interface PanelsAPI {
+  add(spec: PanelSpec): Disposable;
+}
+
+export interface CommandsAPI {
+  add(spec: CommandSpec): Disposable;
+  invoke(id: string, args?: unknown): unknown;
+}
+
+export interface UIAPI {
+  notify(opts: { title?: string; message: string; level?: 'info' | 'warn' | 'error' }): void;
+  confirm(opts: { title: string; message: string; danger?: boolean }): Promise<boolean>;
+  prompt(opts: { title: string; placeholder?: string; initial?: string }): Promise<string | null>;
+  openCommandPalette(prefilter?: string): void;
+}
+
+export interface BusAPI {
+  emit<T = unknown>(topic: string, payload?: T): void;
+  on<T = unknown>(topic: string, handler: (payload: T) => void): Disposable;
+}
+
+export type EventsAPI = BusAPI;
+
+export interface DataJsonAPI {
+  load(): Promise<unknown>;
+  save(value: unknown): Promise<void>;
+  get<T = unknown>(key: string, fallback?: T): Promise<T>;
+  set<T>(key: string, value: T): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
+export interface Migration {
+  version: number;
+  up: string;
+}
+
+export interface SqliteHandle {
+  exec(sql: string, params?: unknown[]): Promise<void>;
+  query<T = unknown>(sql: string, params?: unknown[]): Promise<T[]>;
+  migrate(versions: Migration[]): Promise<void>;
+}
+
+export interface DataAPI {
+  json: DataJsonAPI;
+  sqlite(): Promise<SqliteHandle>;
+}
+
+export interface SettingSpec<T = unknown> {
+  key: string;
+  label: string;
+  description?: string;
+  type: 'boolean' | 'string' | 'number' | 'select';
+  default: T;
+  options?: Array<{ value: T; label: string }>;
+}
+
+export interface SettingsAPI {
+  register<T>(spec: SettingSpec<T>): Disposable;
+  get<T>(key: string): T | undefined;
+  set<T>(key: string, value: T): void;
+  onChange<T>(key: string, handler: (value: T) => void): Disposable;
+}
+
+export interface LyricsRef {
+  id: string;
+  title: string;
+  artist?: string;
+}
+
+export interface SlideRef {
+  index: number;
+  text: string;
+}
+
+export interface Lyrics {
+  id: string;
+  title: string;
+  artist?: string;
+  slides: SlideRef[];
+}
+
+export interface LyricsQuery {
+  search?: string;
+}
+
+export interface LyricsHostAPI {
+  list(query?: LyricsQuery): Promise<LyricsRef[]>;
+  get(id: string): Promise<Lyrics | null>;
+  currentSlide(): SlideRef | null;
+  advance(): void;
+  back(): void;
+}
+
+export interface QueueItem {
+  id: string;
+  title: string;
+  path: string;
+  type: 'audio' | 'video' | 'image';
+  played: boolean;
+}
+
+export interface QueueHostAPI {
+  items(): QueueItem[];
+  currentIndex(): number;
+  add(item: QueueItem, position?: number): void;
+  remove(id: string): void;
+  reorder(fromIndex: number, toIndex: number): void;
+  shuffle(): void;
+  markPlayed(id: string): void;
+}
+
+export type MediaType = 'audio' | 'video' | 'image';
+
+export interface MediaRef {
+  id: string;
+  path: string;
+  name: string;
+  type: MediaType;
+}
+
+export interface MediaItem extends MediaRef {
+  duration?: number;
+  size: number;
+  modifiedAt: string;
+}
+
+export interface MediaMetadata {
+  title?: string;
+  artist?: string;
+  album?: string;
+  duration?: number;
+  width?: number;
+  height?: number;
+}
+
+export interface LibraryHostAPI {
+  list(type?: MediaType, query?: string): Promise<MediaRef[]>;
+  get(id: string): Promise<MediaItem | null>;
+  metadata(path: string): Promise<MediaMetadata>;
+  thumbnail(path: string, size?: number): Promise<string>;
+}
+
+export interface TrackRef {
+  id: string;
+  path: string;
+  title?: string;
+  artist?: string;
+}
+
+export interface PlayerHostAPI {
+  current(): TrackRef | null;
+  state(): 'playing' | 'paused' | 'idle';
+  play(track?: TrackRef): void;
+  pause(): void;
+  seek(seconds: number): void;
+  volume(value?: number): number;
+  next(): void;
+  prev(): void;
+}
+
+export interface PresentationHostAPI {
+  state(): 'idle' | 'live';
+  project(viewId: string, props?: unknown): void;
+  clear(): void;
+  isWindowOpen(): boolean;
+}
+
+export interface ThemeRef {
+  id: string;
+  name: string;
+  colorMode: 'dark' | 'light';
+  accentId: string;
+}
+
+export interface ThemesHostAPI {
+  current(): ThemeRef;
+  list(): ThemeRef[];
+  apply(id: string): void;
+}
+
+export interface FsAPI {
+  read(path: string): Promise<Uint8Array>;
+  write(path: string, data: Uint8Array): Promise<void>;
+  exists(path: string): Promise<boolean>;
+  list(path: string): Promise<string[]>;
+  remove(path: string): Promise<void>;
+}
+
+export interface NetAPI {
+  get<T = unknown>(url: string, opts?: RequestInit): Promise<T>;
+  post<T = unknown>(url: string, body: unknown, opts?: RequestInit): Promise<T>;
+}
+
+export interface I18nAPI {
+  t(key: string, params?: Record<string, string>): string;
+  locale(): string;
+}
+
+export interface LoggerAPI {
+  debug(...args: unknown[]): void;
+  info(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+}
+
+export interface LumenHost {
+  meta: { id: string; version: string };
+  window: 'main' | 'presenter';
+  app: { version: string; locale: string };
+
+  panels: PanelsAPI;
+  commands: CommandsAPI;
+  ui: UIAPI;
+
+  bus: BusAPI;
+  events: EventsAPI;
+
+  data: DataAPI;
+  settings: SettingsAPI;
+
+  lyrics: LyricsHostAPI;
+  queue: QueueHostAPI;
+  library: LibraryHostAPI;
+  player: PlayerHostAPI;
+  presentation: PresentationHostAPI;
+  themes: ThemesHostAPI;
+
+  fs: FsAPI;
+  net: NetAPI;
+  i18n: I18nAPI;
+  log: LoggerAPI;
+}
+
+export abstract class LumenPlugin {
+  manifest!: ModuleManifest;
+
+  abstract onload(host: LumenHost): Promise<void>;
+
+  async onunload(): Promise<void> {}
+}
+
+export interface ModuleManifest {
+  id: string;
+  name: string;
+  version: string;
+  api: string;
+  minLumenVersion?: string;
+  description?: string;
+  author?: { name: string; url?: string };
+  entry: string;
+  icon?: string;
+  homepage?: string;
+  repository?: string;
+  license?: string;
+}
+
+export type ModuleStatus = 'loading' | 'active' | 'faulted' | 'disabled';
+
+export interface ModuleRecord {
+  manifest: ModuleManifest;
+  status: ModuleStatus;
+  error?: string;
+  errorAt?: string;
+  errorCount: number;
+  source: 'bundled' | 'store' | 'sideload' | 'dev';
+}
