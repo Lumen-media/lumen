@@ -1,24 +1,15 @@
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, UriSchemeContext, UriSchemeResponder};
+use tauri::{Manager, UriSchemeContext};
 
-use crate::module_runtime::registry::Registry;
-
-pub fn register_lumen_module_protocol(
-    app: &AppHandle,
-    modules_dir: PathBuf,
-    registry: Arc<Mutex<Registry>>,
-) {
-    let _ = (app, modules_dir, registry);
-}
+use crate::module_runtime::ModuleRuntime;
 
 pub fn handle_module_request(
-    _ctx: UriSchemeContext<tauri::Wry>,
+    ctx: UriSchemeContext<'_, tauri::Wry>,
     request: tauri::http::Request<Vec<u8>>,
-    responder: UriSchemeResponder,
-    modules_dir: PathBuf,
-    registry: Arc<Mutex<Registry>>,
-) {
+) -> tauri::http::Response<Vec<u8>> {
+    let runtime = ctx.app_handle().state::<ModuleRuntime>();
+    let modules_dir = runtime.modules_dir.clone();
+    let registry = runtime.registry.clone();
+
     let uri = request.uri().to_string();
 
     let path_part = uri
@@ -28,13 +19,10 @@ pub fn handle_module_request(
 
     let parts: Vec<&str> = path_part.splitn(2, '/').collect();
     if parts.len() < 2 {
-        responder.respond(
-            tauri::http::Response::builder()
-                .status(400)
-                .body(b"Bad Request: expected lumen-module://{id}/{file}".to_vec())
-                .unwrap(),
-        );
-        return;
+        return tauri::http::Response::builder()
+            .status(400)
+            .body(b"Bad Request: expected lumen-module://{id}/{file}".to_vec())
+            .unwrap();
     }
 
     let module_id = parts[0];
@@ -48,13 +36,10 @@ pub fn handle_module_request(
         .unwrap_or(false);
 
     if !enabled {
-        responder.respond(
-            tauri::http::Response::builder()
-                .status(403)
-                .body(b"Forbidden: module is not enabled".to_vec())
-                .unwrap(),
-        );
-        return;
+        return tauri::http::Response::builder()
+            .status(403)
+            .body(b"Forbidden: module is not enabled".to_vec())
+            .unwrap();
     }
 
     let full_path = modules_dir.join(module_id).join(file_path);
@@ -67,23 +52,17 @@ pub fn handle_module_request(
                     .and_then(|e| e.to_str())
                     .unwrap_or(""),
             );
-            responder.respond(
-                tauri::http::Response::builder()
-                    .status(200)
-                    .header("Content-Type", content_type)
-                    .header("Access-Control-Allow-Origin", "*")
-                    .body(bytes)
-                    .unwrap(),
-            );
+            tauri::http::Response::builder()
+                .status(200)
+                .header("Content-Type", content_type)
+                .header("Access-Control-Allow-Origin", "*")
+                .body(bytes)
+                .unwrap()
         }
-        Err(e) => {
-            responder.respond(
-                tauri::http::Response::builder()
-                    .status(404)
-                    .body(format!("Not Found: {e}").into_bytes())
-                    .unwrap(),
-            );
-        }
+        Err(e) => tauri::http::Response::builder()
+            .status(404)
+            .body(format!("Not Found: {e}").into_bytes())
+            .unwrap(),
     }
 }
 

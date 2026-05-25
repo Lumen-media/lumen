@@ -1,6 +1,7 @@
 mod module_runtime;
 
 use tauri::Manager;
+use module_runtime::protocol::handle_module_request;
 use module_runtime::{
     ModuleRuntime,
     dev_server::start_dev_server,
@@ -13,6 +14,7 @@ use module_runtime::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .register_uri_scheme_protocol("lumen-module", handle_module_request)
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_notification::init())
