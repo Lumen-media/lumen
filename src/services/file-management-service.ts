@@ -55,6 +55,7 @@ const EXTENSION_MAP: Record<MediaType, string[]> = {
   image: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'],
   text: ['.txt', '.md', '.doc', '.docx', '.pdf'],
   lyrics: ['.txt', '.lrc', '.srt', '.md'],
+  themes: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.mp4', '.webm'],
   files: []
 };
 

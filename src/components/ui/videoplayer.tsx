@@ -133,7 +133,7 @@ export const Videoplayer = ({
       setWs(null);
     };
 
-    socket.onerror = (error) => {
+    socket.onerror = () => {
       setWs(null);
     };
 
