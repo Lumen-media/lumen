@@ -32,17 +32,19 @@ export const Combobox = ({
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
-			<PopoverTrigger asChild>
-				<Button
-					variant="outline"
-					role="combobox"
-					aria-expanded={open}
-					className={cn("w-full justify-between", className)}
-				>
-					{options.find((option) => option.value === value)?.label ??
-						"Select option..."}
-					<ChevronsUpDown className="opacity-50" />
-				</Button>
+			<PopoverTrigger
+				render={
+					<Button
+						variant="outline"
+						role="combobox"
+						aria-expanded={open}
+						className={cn("w-full justify-between", className)}
+					/>
+				}
+			>
+				{options.find((option) => option.value === value)?.label ??
+					"Select option..."}
+				<ChevronsUpDown className="opacity-50" />
 			</PopoverTrigger>
 			<PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
 				<Command>
