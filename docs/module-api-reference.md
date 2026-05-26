@@ -414,24 +414,71 @@ Exposed on the host but still only wired via bus — read methods return empty/d
 
 ---
 
-## Titlebar menus ⚠️
+## `host.menus` ✅
 
-The titlebar menu system exists and works internally, but the API for modules to register menus is **not yet exposed on `LumenHost`**. It is planned.
-
-When available, the API will look something like:
+Registers menus and menu items in the application titlebar.
 
 ```ts
-// (not yet available on host)
-host.ui.registerMenu({
+// Register a full menu
+host.menus.register({
   id: 'my-module',
   label: 'My Module',
+  priority: 50,          // optional — controls position relative to other menus
   items: [
-    { type: 'action', label: 'Open panel', onClick: () => {} },
+    { type: 'action', id: 'my-module.open', label: 'Open panel', onClick: () => {} },
     { type: 'separator' },
-    { type: 'action', label: 'Settings', onClick: () => {} },
+    { type: 'action', id: 'my-module.settings', label: 'Settings', shortcut: 'Ctrl+,', onClick: () => {} },
   ],
 });
 ```
+
+```ts
+// Add an item to an existing menu (e.g. the built-in Modules menu)
+host.menus.addItem(
+  'modules',
+  { type: 'action', id: 'my-module.reload', label: 'Reload My Module', onClick: () => {} },
+  10,     // optional priority within the menu
+);
+```
+
+Both methods return a `Disposable` — the menu or item is automatically removed on module unload.
+
+### `MenuSpec`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | ✓ | Unique menu identifier |
+| `label` | `string` | ✓ | Menu label shown in the titlebar |
+| `items` | `MenuItemDef[]` | | Initial items (can be empty) |
+| `priority` | `number` | | Order relative to other menus (lower = earlier) |
+
+### `MenuItemAction`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | `'action'` | ✓ | Item type |
+| `id` | `string` | ✓ | Unique item id (needed for `addItem` / unregistration) |
+| `label` | `string` | ✓ | Displayed text |
+| `shortcut` | `string` | | Keyboard shortcut hint shown in the menu |
+| `onClick` | `() => void` | | Click handler |
+
+### `MenuItemSeparator`
+
+```ts
+{ type: 'separator' }
+```
+
+### Built-in menu ids
+
+| `menuId` | Menu |
+|---|---|
+| `'file'` | File |
+| `'edit'` | Edit |
+| `'view'` | View |
+| `'presentation'` | Presentation |
+| `'live'` | Live |
+| `'modules'` | Modules |
+| `'help'` | Help |
 
 ---
 
