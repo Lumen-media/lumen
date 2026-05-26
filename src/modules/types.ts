@@ -48,6 +48,33 @@ export interface UIAPI {
   openCommandPalette(prefilter?: string): void;
 }
 
+export interface MenuItemSeparator {
+  type: 'separator';
+  id?: string;
+}
+
+export interface MenuItemAction {
+  type: 'action';
+  id: string;
+  label: string;
+  shortcut?: string;
+  onClick?: () => void;
+}
+
+export type MenuItemDef = MenuItemSeparator | MenuItemAction;
+
+export interface MenuSpec {
+  id: string;
+  label: string;
+  items?: MenuItemDef[];
+  priority?: number;
+}
+
+export interface MenusAPI {
+  register(spec: MenuSpec): Disposable;
+  addItem(menuId: string, item: MenuItemAction, priority?: number): Disposable;
+}
+
 export interface BusAPI {
   emit<T = unknown>(topic: string, payload?: T): void;
   on<T = unknown>(topic: string, handler: (payload: T) => void): Disposable;
@@ -244,6 +271,7 @@ export interface LumenHost {
 
   panels: PanelsAPI;
   commands: CommandsAPI;
+  menus: MenusAPI;
   ui: UIAPI;
 
   bus: BusAPI;
