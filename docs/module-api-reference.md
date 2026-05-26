@@ -462,6 +462,33 @@ Both methods return a `Disposable` — the menu or item is automatically removed
 | `shortcut` | `string` | | Keyboard shortcut hint shown in the menu |
 | `onClick` | `() => void` | | Click handler |
 
+### `MenuItemSubmenu`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | `'submenu'` | ✓ | Item type |
+| `id` | `string` | | Optional identifier |
+| `label` | `string` | ✓ | Displayed text (becomes the submenu trigger) |
+| `items` | `MenuItemDef[]` | ✓ | Nested items — supports actions, separators, and further submenus |
+
+```ts
+host.menus.register({
+  id: 'my-module',
+  label: 'My Module',
+  items: [
+    { type: 'action', id: 'my-module.open', label: 'Open Panel', onClick: () => {} },
+    {
+      type: 'submenu',
+      label: 'Export',
+      items: [
+        { type: 'action', id: 'my-module.export.csv', label: 'As CSV', onClick: () => {} },
+        { type: 'action', id: 'my-module.export.json', label: 'As JSON', onClick: () => {} },
+      ],
+    },
+  ],
+});
+```
+
 ### `MenuItemSeparator`
 
 ```ts

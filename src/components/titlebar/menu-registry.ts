@@ -11,7 +11,14 @@ export type MenuItemAction = {
   onClick?: () => void
 }
 
-export type MenuItemDef = MenuItemSeparator | MenuItemAction
+export type MenuItemSubmenu = {
+  type: 'submenu'
+  id?: string
+  label: string
+  items: MenuItemDef[]
+}
+
+export type MenuItemDef = MenuItemSeparator | MenuItemAction | MenuItemSubmenu
 
 export type MenuDef = {
   id: string
