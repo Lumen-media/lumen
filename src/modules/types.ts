@@ -25,11 +25,21 @@ export interface PanelSpec {
   when?: () => boolean;
 }
 
+export interface CommanderAppProps {
+  onClose: () => void;
+  onBack: () => void;
+}
+
 export interface CommandSpec {
   id: string;
   title: string;
+  subtitle?: string;
+  icon?: React.ComponentType<{ className?: string }>;
   keybinding?: string;
-  run: (args?: unknown) => unknown;
+  keywords?: string[];
+  type?: 'action' | 'app';
+  run?: (args?: unknown) => unknown;
+  component?: React.ComponentType<CommanderAppProps>;
 }
 
 export interface PanelsAPI {
