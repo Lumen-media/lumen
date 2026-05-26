@@ -110,23 +110,53 @@ host.panels.add({
 
 ---
 
-## `host.commands` ⚠️
+## `host.commands` ✅
 
-Registers commands that appear in the command palette (Ctrl+K).
+Registers entries in the command palette (Ctrl+K / ⌘K). Two types are supported: `'action'` executes a function immediately; `'app'` opens a sub-UI inside the palette itself.
+
+### Action command
 
 ```ts
 host.commands.add({
   id: 'my-module.search',
-  title: 'Search file',
-  keybinding: 'Ctrl+Shift+F',
+  title: 'Search files',
+  subtitle: 'Find files in the library',      // optional — shown below title
+  keybinding: 'Ctrl+Shift+F',                 // optional — displayed as hint
+  keywords: ['find', 'browse'],               // optional — improve search hits
+  type: 'action',                             // default when omitted
   run: (args) => {
-    // command logic
+    // executes when the user selects the command
   },
 });
 ```
 
+### App command
+
+Selecting an app command navigates into a sub-view inside the palette where a React component renders freely.
+
 ```ts
-// Invoke a command programmatically
+import { type CommanderAppProps } from '@lumen/module-sdk';
+
+function SearchApp({ onBack, onClose }: CommanderAppProps) {
+  return (
+    <div className="p-4">
+      {/* full UI here */}
+      <button onClick={onBack}>Back</button>
+    </div>
+  );
+}
+
+host.commands.add({
+  id: 'my-module.browser',
+  title: 'File Browser',
+  subtitle: 'Browse library files',
+  type: 'app',
+  component: SearchApp,
+});
+```
+
+```ts
+// Invoke any command programmatically
 host.commands.invoke('my-module.search', { query: 'test' });
 ```
 
@@ -134,12 +164,22 @@ host.commands.invoke('my-module.search', { query: 'test' });
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `id` | `string` | ✓ | Unique identifier |
+| `id` | `string` | ✓ | Unique identifier (`module-id.name` recommended) |
 | `title` | `string` | ✓ | Text displayed in palette |
-| `keybinding` | `string` | | Declared keyboard shortcut |
-| `run` | `(args?: unknown) => unknown` | ✓ | Command callback |
+| `subtitle` | `string` | | Secondary line below title |
+| `icon` | `React.ComponentType<{ className?: string }>` | | Lucide or custom icon |
+| `keybinding` | `string` | | Keyboard shortcut hint (display only) |
+| `keywords` | `string[]` | | Extra terms that match this command |
+| `type` | `'action' \| 'app'` | | Defaults to `'action'` |
+| `run` | `(args?: unknown) => unknown` | ✓ for `'action'` | Executed on select |
+| `component` | `React.ComponentType<CommanderAppProps>` | ✓ for `'app'` | Sub-UI rendered in palette |
 
-> ⚠️ Registration works, but the command palette still shows hardcoded items — module commands are not displayed in the UI yet. `invoke()` works normally.
+### `CommanderAppProps`
+
+| Prop | Type | Description |
+|---|---|---|
+| `onClose` | `() => void` | Closes the palette entirely |
+| `onBack` | `() => void` | Returns to the palette root list |
 
 ---
 
