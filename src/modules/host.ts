@@ -1,6 +1,7 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { createBusAPI, createEventsAPI } from './apis/bus';
 import { createCommandsAPI } from './apis/commands';
+import { createMenusAPI } from './apis/menus';
 import { createDataAPI } from './apis/data';
 import {
   createLibraryHostAPI,
@@ -33,6 +34,7 @@ export async function createHost(
 
     panels: createPanelsAPI(id),
     commands: createCommandsAPI(),
+    menus: createMenusAPI(),
     ui: createUIAPI(openCommandPalette),
 
     bus: createBusAPI(),

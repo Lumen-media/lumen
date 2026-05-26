@@ -244,6 +244,18 @@ function wrapHostForTracking(
       },
     },
 
+    menus: {
+      register(spec: Parameters<typeof host.menus.register>[0]) {
+        return track(host.menus.register(spec));
+      },
+      addItem(menuId: string, item: Parameters<typeof host.menus.addItem>[1], priority?: number) {
+        const wrappedItem = item.onClick
+          ? { ...item, onClick: wrapCallback(id, item.onClick) }
+          : item;
+        return track(host.menus.addItem(menuId, wrappedItem, priority));
+      },
+    },
+
     bus: {
       emit: host.bus.emit.bind(host.bus),
       on<T = unknown>(topic: string, handler: (payload: T) => void) {
