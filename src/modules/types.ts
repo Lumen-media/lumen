@@ -61,7 +61,14 @@ export interface MenuItemAction {
   onClick?: () => void;
 }
 
-export type MenuItemDef = MenuItemSeparator | MenuItemAction;
+export interface MenuItemSubmenu {
+  type: 'submenu';
+  id?: string;
+  label: string;
+  items: MenuItemDef[];
+}
+
+export type MenuItemDef = MenuItemSeparator | MenuItemAction | MenuItemSubmenu;
 
 export interface MenuSpec {
   id: string;
