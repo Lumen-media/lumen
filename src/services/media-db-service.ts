@@ -45,6 +45,10 @@ class MediaDbService {
     }
 
     const db = await Database.load(await getDbPath());
+    await db.execute(`DROP TRIGGER IF EXISTS mf_ai`);
+    await db.execute(`DROP TRIGGER IF EXISTS mf_au`);
+    await db.execute(`DROP TRIGGER IF EXISTS mf_ad`);
+    await db.execute(`DROP TABLE IF EXISTS media_search`);
     await db.execute(`
       CREATE TABLE IF NOT EXISTS media_files (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,46 +70,6 @@ class MediaDbService {
     const cols = await db.select<{ name: string }[]>('PRAGMA table_info(media_files)');
     if (!cols.some((c) => c.name === 'content')) {
       await db.execute(`ALTER TABLE media_files ADD COLUMN content TEXT`);
-    }
-
-    await db.execute(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS media_search USING fts5(
-        name,
-        artist,
-        content,
-        content='media_files',
-        content_rowid='id',
-        tokenize='unicode61 remove_diacritics 2'
-      )
-    `);
-
-    await db.execute(`
-      CREATE TRIGGER IF NOT EXISTS media_files_ai AFTER INSERT ON media_files BEGIN
-        INSERT INTO media_search (rowid, name, artist, content)
-        VALUES (new.id, new.name, COALESCE(new.artist, ''), COALESCE(new.content, ''));
-      END
-    `);
-    await db.execute(`
-      CREATE TRIGGER IF NOT EXISTS media_files_ad AFTER DELETE ON media_files BEGIN
-        INSERT INTO media_search (media_search, rowid, name, artist, content)
-        VALUES ('delete', old.id, old.name, COALESCE(old.artist, ''), COALESCE(old.content, ''));
-      END
-    `);
-    await db.execute(`
-      CREATE TRIGGER IF NOT EXISTS media_files_au AFTER UPDATE ON media_files BEGIN
-        INSERT INTO media_search (media_search, rowid, name, artist, content)
-        VALUES ('delete', old.id, old.name, COALESCE(old.artist, ''), COALESCE(old.content, ''));
-        INSERT INTO media_search (rowid, name, artist, content)
-        VALUES (new.id, new.name, COALESCE(new.artist, ''), COALESCE(new.content, ''));
-      END
-    `);
-
-    const ftsCount = await db.select<{ n: number }[]>('SELECT COUNT(*) AS n FROM media_search');
-    if ((ftsCount[0]?.n ?? 0) === 0) {
-      await db.execute(`
-        INSERT INTO media_search (rowid, name, artist, content)
-        SELECT id, name, COALESCE(artist, ''), COALESCE(content, '') FROM media_files
-      `);
     }
 
     await db.execute(`
@@ -182,7 +146,7 @@ class MediaDbService {
   async searchFiles(mediaType: MediaType, query: string): Promise<FileInfo[]> {
     const db = await this.ready();
     const rows = await db.select<DbRow[]>(
-      `SELECT * FROM media_files WHERE media_type = $1 AND name LIKE $2 ESCAPE '\\'
+      `SELECT * FROM media_files WHERE media_type = $1 AND name LIKE $2 ESCAPE '#'
        ORDER BY name COLLATE NOCASE`,
       [mediaType, `%${escapeLike(query)}%`]
     );
@@ -228,32 +192,54 @@ class MediaDbService {
   ): Promise<SearchHit[]> {
     const db = await this.ready();
     const limit = opts.limit ?? 50;
-    const term = sanitizeFtsTerm(query);
-    if (!term) return [];
+    const trimmed = query.trim();
+    if (!trimmed) return [];
 
-    const columns = opts.fullContent ? 'name OR artist OR content' : 'name OR artist';
-    const matchExpr = `{${columns}} : ${term}`;
+    const terms = trimmed.split(/\s+/).filter(Boolean);
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    let paramIdx = 1;
 
-    const params: unknown[] = [matchExpr];
+    for (const term of terms) {
+      const like = `%${escapeLike(term)}%`;
+      if (opts.fullContent) {
+        conditions.push(
+          `(name LIKE $${paramIdx} ESCAPE '#' OR COALESCE(artist, '') LIKE $${paramIdx + 1} ESCAPE '#' OR COALESCE(content, '') LIKE $${paramIdx + 2} ESCAPE '#')`
+        );
+        params.push(like, like, like);
+        paramIdx += 3;
+      } else {
+        conditions.push(
+          `(name LIKE $${paramIdx} ESCAPE '#' OR COALESCE(artist, '') LIKE $${paramIdx + 1} ESCAPE '#')`
+        );
+        params.push(like, like);
+        paramIdx += 2;
+      }
+    }
+
     let typeFilter = '';
     if (opts.mediaType) {
-      typeFilter = ' AND mf.media_type = $2';
+      typeFilter = ` AND media_type = $${paramIdx}`;
       params.push(opts.mediaType);
+      paramIdx++;
     }
     params.push(limit);
-    const limitIdx = params.length;
 
-    const rows = await db.select<SearchHit[]>(
-      `SELECT mf.id, mf.name, mf.path, mf.media_type, mf.artist, mf.duration, mf.modified_at,
-              bm25(media_search) AS rank
-         FROM media_search
-         JOIN media_files mf ON mf.id = media_search.rowid
-        WHERE media_search MATCH $1${typeFilter}
-        ORDER BY rank
-        LIMIT $${limitIdx}`,
+    const rows = await db.select<DbRow[]>(
+      `SELECT * FROM media_files WHERE ${conditions.join(' AND ')}${typeFilter}
+       ORDER BY name COLLATE NOCASE LIMIT $${paramIdx}`,
       params
     );
-    return rows;
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      path: r.path,
+      media_type: r.media_type as MediaType,
+      artist: r.artist,
+      duration: r.duration,
+      modified_at: r.modified_at,
+      rank: 0,
+    }));
   }
 
   async listByType(mediaType: MediaType, limit = 50): Promise<SearchHit[]> {
@@ -372,18 +358,8 @@ function rowToFileInfo(row: DbRow): FileInfo {
 }
 
 function escapeLike(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+  return s.replace(/#/g, '##').replace(/%/g, '#%').replace(/_/g, '#_');
 }
 
-function sanitizeFtsTerm(raw: string): string {
-  const tokens = raw
-    .normalize('NFKD')
-    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
-    .split(/\s+/)
-    .map((t) => t.trim())
-    .filter(Boolean);
-  if (tokens.length === 0) return '';
-  return tokens.map((t) => `"${t.replace(/"/g, '""')}"*`).join(' AND ');
-}
 
 export const mediaDbService = new MediaDbService();

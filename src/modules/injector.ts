@@ -236,10 +236,9 @@ function wrapHostForTracking(
     commands: {
       ...host.commands,
       add(spec: Parameters<typeof host.commands.add>[0]) {
-        const wrappedSpec = {
-          ...spec,
-          run: wrapCallback(id, spec.run),
-        };
+        const wrappedSpec = spec.run
+          ? { ...spec, run: wrapCallback(id, spec.run) }
+          : spec;
         return track(host.commands.add(wrappedSpec));
       },
     },
