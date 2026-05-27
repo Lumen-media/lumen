@@ -100,6 +100,17 @@ function parseSlides(body: string): LyricSlide[] {
   }, []);
 }
 
+export function buildLyricSearchContent(data: LyricData): string {
+  const parts: string[] = [];
+  if (data.metadata.notes) parts.push(data.metadata.notes);
+  for (const slide of data.slides) {
+    for (const line of slide.lines) {
+      if (line.trim()) parts.push(line);
+    }
+  }
+  return parts.join('\n');
+}
+
 export function parseLyricFile(content: string): LyricData {
   const { metadata, body } = parseFrontmatter(content);
   const slides = parseSlides(body);
@@ -164,6 +175,7 @@ class LyricService {
 
     const meta = await stat(filePath);
     const name = filePath.split(/[\\/]/).pop() || fileName;
+    const indexedContent = buildLyricSearchContent(data);
     await mediaDbService.insertFile(
       {
         name,
@@ -173,7 +185,8 @@ class LyricService {
         extension: 'md',
         artist: data.metadata.author || undefined,
       },
-      'lyrics'
+      'lyrics',
+      indexedContent
     );
 
     return filePath;
