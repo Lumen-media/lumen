@@ -181,6 +181,79 @@ host.commands.invoke('my-module.search', { query: 'test' });
 | `onClose` | `() => void` | Closes the palette entirely |
 | `onBack` | `() => void` | Returns to the palette root list |
 
+### Prefix search
+
+Registers a keyword prefix that intercepts typed queries in the palette. When the user types `bible foo`, the query `foo` is routed to your handler instead of running the normal search.
+
+```ts
+host.commands.addPrefix({
+  prefix: 'bible',
+  title: 'Bible',
+  placeholder: 'Type a reference (1Jo 2:1) or phrase...',
+  handle(query) {
+    if (!query) return [];
+
+    // verse reference: "1jo 2:1", "john 3"
+    if (/^\w+\s+\d+(:\d+)?/.test(query)) {
+      return [
+        {
+          id: `verse:${query}`,
+          title: `Go to ${query}`,
+          subtitle: 'Open in Bible viewer',
+          run() { host.bus.emit('bible:navigate', { ref: query }); },
+        },
+      ];
+    }
+
+    // full-text search (async)
+    return searchBibleAsync(query).then((verses) =>
+      verses.map((v) => ({
+        id: `verse:${v.ref}`,
+        title: v.text,
+        subtitle: v.ref,
+        badge: 'VERSE',
+        run() { host.bus.emit('bible:navigate', { ref: v.ref }); },
+      }))
+    );
+  },
+});
+```
+
+While a module prefix is active the filter tabs are hidden and results appear under a single group labeled with the prefix `title`. The input placeholder switches to the value you provide in `placeholder`.
+
+### `PrefixSpec`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `prefix` | `string` | ✓ | Trigger word, e.g. `'bible'` |
+| `title` | `string` | ✓ | Group heading shown in results |
+| `icon` | `React.ComponentType` | | Optional icon |
+| `placeholder` | `string` | | Input placeholder while prefix is active |
+| `handle` | `(query: string) => PrefixResult[] \| Promise<PrefixResult[]>` | ✓ | Called with the text after the prefix |
+
+### `PrefixResult`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | ✓ | Unique within this handler call |
+| `title` | `string` | ✓ | Primary text |
+| `subtitle` | `string` | | Secondary line |
+| `badge` | `string` | | Override the badge label (defaults to prefix `title`) |
+| `run` | `() => void` | | Called on Enter — closes palette |
+| `component` | `React.ComponentType<CommanderAppProps>` | | Opens as an app screen inside the palette |
+
+### Built-in scope prefixes
+
+These are built into the commander — no module registration required. Typing the prefix word followed by a space auto-filters the results to the corresponding scope.
+
+| Prefix | Scope |
+|---|---|
+| `lyric <query>`, `lyrics <query>`, `song <query>` | Lyrics only |
+| `media <query>`, `audio <query>`, `video <query>`, `image <query>` | Media files |
+| `cmd <query>`, `command <query>`, `commands <query>` | Commands & Shortcuts |
+
+Example: `lyric amazing grace` is equivalent to switching to the **Lyrics** tab and typing `amazing grace`.
+
 ---
 
 ## `host.ui` ✅

@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowUpDown,
   CornerDownLeft,
+  Headphones,
   Image as ImageIcon,
   LayoutGrid,
   Music,
@@ -54,7 +55,7 @@ const SOURCE_THEME: Record<SearchSource, SourceTheme> = {
     badge: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
   },
   audio: {
-    icon: Music,
+    icon: Headphones,
     iconBox: 'bg-primary/10 text-primary border-primary/25',
     badge: 'bg-primary/15 text-primary border-primary/30',
   },
@@ -493,7 +494,13 @@ function RootView() {
   const groups = useMemo(() => {
     if (results.activePrefix) {
       return results.commands.length
-        ? [{ key: 'commands' as SearchScope, heading: results.activePrefix.title, results: results.commands }]
+        ? [
+            {
+              key: 'commands' as SearchScope,
+              heading: results.activePrefix.title,
+              results: results.commands,
+            },
+          ]
         : [];
     }
     const g: Array<{ key: SearchScope; heading: string; results: SearchResult[] }> = [];
