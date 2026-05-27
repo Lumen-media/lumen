@@ -35,6 +35,7 @@ import {
   type SearchSource,
 } from '@/services/search-service';
 import { type ActiveApp, useCommandStore } from '@/stores/command-store';
+import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
 import { Kbd } from './ui/kbd';
 import { ScrollArea } from './ui/scroll-area';
@@ -322,8 +323,9 @@ function PaletteHeader({
       </label>
 
       {!app && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => setFullContent(!fullContent)}
           className={cn(
             'flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors',
@@ -335,7 +337,7 @@ function PaletteHeader({
         >
           <Search className="size-3.5" />
           <span>{t('Global Search')}</span>
-        </button>
+        </Button>
       )}
     </div>
   );
