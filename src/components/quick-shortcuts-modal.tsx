@@ -49,28 +49,28 @@ const SOURCE_THEME: Record<SearchSource, SourceTheme> = {
   },
   audio: {
     icon: Music,
-    iconBox: 'bg-purple-500/10 text-purple-300 border-purple-500/25',
-    badge: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+    iconBox: 'bg-primary/10 text-primary border-primary/25',
+    badge: 'bg-primary/15 text-primary border-primary/30',
   },
   video: {
     icon: Video,
-    iconBox: 'bg-purple-500/10 text-purple-300 border-purple-500/25',
-    badge: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+    iconBox: 'bg-primary/10 text-primary border-primary/25',
+    badge: 'bg-primary/15 text-primary border-primary/30',
   },
   image: {
     icon: ImageIcon,
-    iconBox: 'bg-purple-500/10 text-purple-300 border-purple-500/25',
-    badge: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+    iconBox: 'bg-primary/10 text-primary border-primary/25',
+    badge: 'bg-primary/15 text-primary border-primary/30',
   },
   command: {
     icon: Terminal,
-    iconBox: 'bg-primary/10 text-primary border-primary/25',
-    badge: 'bg-primary/15 text-primary border-primary/30',
+    iconBox: 'bg-purple-500/10 text-purple-300 border-purple-500/25',
+    badge: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
   },
   app: {
     icon: Sparkles,
-    iconBox: 'bg-primary/10 text-primary border-primary/25',
-    badge: 'bg-primary/15 text-primary border-primary/30',
+    iconBox: 'bg-purple-500/10 text-purple-300 border-purple-500/25',
+    badge: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
   },
 };
 
@@ -172,7 +172,7 @@ function ResultRow({
   result: SearchResult;
   tokens: string[];
   selected: boolean;
-  onSelect: (r: SearchResult) => void;
+  onSelect: (r: SearchResult, queued: boolean) => void;
 }) {
   const { t } = useTranslation();
   const theme = SOURCE_THEME[result.source];
@@ -183,7 +183,7 @@ function ResultRow({
       type="button"
       role="option"
       aria-selected={selected}
-      onClick={() => onSelect(result)}
+      onClick={(e) => onSelect(result, e.shiftKey)}
       className={cn(
         'group/row flex w-full items-center gap-3 rounded-lg border px-2.5 py-2.5 text-left transition-colors',
         selected
@@ -389,8 +389,14 @@ function CommanderFooter({
         </span>
         <span className="flex items-center gap-1.5">
           <Kbd>↵</Kbd>
-          {showBack ? t('Select') : t('Open')}
+          {showBack ? t('Select') : t('Play')}
         </span>
+        {!showBack && (
+          <span className="flex items-center gap-1.5">
+            <Kbd>⇧↵</Kbd>
+            {t('Queue')}
+          </span>
+        )}
         {!showBack && (
           <span className="flex items-center gap-1.5">
             <Kbd>Tab</Kbd>
@@ -482,7 +488,7 @@ function RootView() {
     overscan: 8,
   });
 
-  function handleSelect(r: SearchResult) {
+  function handleSelect(r: SearchResult, queued = false) {
     if (r.source === 'app' && r.commandSpec?.component) {
       pushApp({
         commandId: r.commandSpec.id,
@@ -499,7 +505,7 @@ function RootView() {
     if (r.path) {
       window.dispatchEvent(
         new CustomEvent('lumen:commander-open', {
-          detail: { source: r.source, id: r.id, path: r.path },
+          detail: { source: r.source, id: r.id, path: r.path, action: queued ? 'queue' : 'play' },
         })
       );
       close();
@@ -532,7 +538,7 @@ function RootView() {
     if (event.key === 'Enter') {
       event.preventDefault();
       const row = flatRows[itemIndices[selectedIdx] ?? -1];
-      if (row?.kind === 'item') handleSelect(row.result);
+      if (row?.kind === 'item') handleSelect(row.result, event.shiftKey);
     }
   }
 
@@ -594,7 +600,7 @@ function RootView() {
                       result={row.result}
                       tokens={tokens}
                       selected={itemIndices[selectedIdx] === vItem.index}
-                      onSelect={handleSelect}
+                      onSelect={(r, queued) => handleSelect(r, queued)}
                     />
                   )}
                 </div>
