@@ -1,6 +1,11 @@
+import { lyricService } from '@/services/lyric-service';
+import { mediaDbService } from '@/services/media-db-service';
 import type {
   LibraryHostAPI,
   LyricsHostAPI,
+  MediaItem,
+  MediaRef,
+  MediaType as PublicMediaType,
   PlayerHostAPI,
   PresentationHostAPI,
   QueueHostAPI,
@@ -8,13 +13,38 @@ import type {
 } from '../types';
 import { globalBus } from './bus';
 
+function stripExt(name: string): string {
+  return name.replace(/\.[^/.]+$/, '');
+}
+
 export function createLyricsHostAPI(): LyricsHostAPI {
   return {
-    async list(_query) {
-      return [];
+    async list(query) {
+      const term = query?.search?.trim();
+      const hits = term
+        ? await mediaDbService.search(term, { mediaType: 'lyrics', fullContent: true, limit: 100 })
+        : await mediaDbService.listByType('lyrics', 200);
+      return hits.map((h) => ({
+        id: String(h.id),
+        title: stripExt(h.name),
+        artist: h.artist ?? undefined,
+      }));
     },
-    async get(_id) {
-      return null;
+    async get(id) {
+      const numId = Number(id);
+      if (!Number.isFinite(numId)) return null;
+      const hit = await mediaDbService.getById(numId);
+      if (!hit || hit.media_type !== 'lyrics') return null;
+      const data = await lyricService.load(hit.path);
+      return {
+        id,
+        title: data.metadata.name || stripExt(hit.name),
+        artist: data.metadata.author || hit.artist || undefined,
+        slides: data.slides.map((slide, index) => ({
+          index,
+          text: slide.lines.join('\n'),
+        })),
+      };
     },
     currentSlide() {
       return null;
@@ -56,11 +86,34 @@ export function createQueueHostAPI(): QueueHostAPI {
 
 export function createLibraryHostAPI(): LibraryHostAPI {
   return {
-    async list(_type, _query) {
-      return [];
+    async list(type, query) {
+      const term = query?.trim();
+      const hits = term
+        ? await mediaDbService.search(term, { mediaType: type, fullContent: false, limit: 100 })
+        : type
+          ? await mediaDbService.listByType(type, 200)
+          : [];
+      return hits.map<MediaRef>((h) => ({
+        id: String(h.id),
+        path: h.path,
+        name: h.name,
+        type: h.media_type as PublicMediaType,
+      }));
     },
-    async get(_id) {
-      return null;
+    async get(id) {
+      const numId = Number(id);
+      if (!Number.isFinite(numId)) return null;
+      const hit = await mediaDbService.getById(numId);
+      if (!hit) return null;
+      return {
+        id,
+        path: hit.path,
+        name: hit.name,
+        type: hit.media_type as PublicMediaType,
+        duration: hit.duration ?? undefined,
+        size: 0,
+        modifiedAt: new Date(hit.modified_at).toISOString(),
+      } satisfies MediaItem;
     },
     async metadata(_path) {
       return {};
