@@ -1,6 +1,9 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
+  ArrowBigUp,
   ArrowLeft,
+  ArrowUpDown,
+  CornerDownLeft,
   Image as ImageIcon,
   LayoutGrid,
   Music,
@@ -35,6 +38,7 @@ import { type ActiveApp, useCommandStore } from '@/stores/command-store';
 import { Dialog, DialogContent } from './ui/dialog';
 import { Kbd } from './ui/kbd';
 import { ScrollArea } from './ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface SourceTheme {
   icon: ComponentType<{ className?: string }>;
@@ -351,55 +355,61 @@ function CommanderFooter({
   const { t } = useTranslation();
   const hasQuery = !!query?.trim();
 
+  const hint = (kbd: React.ReactNode, tooltip: string) => (
+    <Tooltip>
+      <TooltipTrigger>
+        <span className="flex cursor-default items-center gap-0.5">
+          <Kbd className="flex items-center gap-0.5">{kbd}</Kbd>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+
   return (
-    <div className="flex shrink-0 items-center justify-between border-t border-border/40 bg-muted/20 px-3 py-2 text-[10px] font-medium tracking-wider text-muted-foreground/80 uppercase">
+    <div className="flex shrink-0 items-center justify-between border-t border-border/40 px-3 py-1.5 text-[10px] text-muted-foreground/60">
       <div className="flex items-center gap-2">
         {results && !showBack && (
           <>
             <span
               className={cn(
-                'inline-block size-1.5 rounded-full',
+                'inline-block size-1.5 shrink-0 rounded-full',
                 fullContent
-                  ? 'bg-primary shadow-[0_0_8px_var(--color-primary)]'
-                  : 'bg-muted-foreground/40'
+                  ? 'bg-primary shadow-[0_0_6px_var(--color-primary)]'
+                  : 'bg-muted-foreground/30'
               )}
             />
-            <span>{fullContent ? t('Global Search') : t('Title Search')}</span>
-            <span className="text-muted-foreground/40">•</span>
-            <span className="normal-case tracking-normal">
+            <span className="font-medium">
+              {fullContent ? t('Global Search') : t('Title Search')}
+            </span>
+            <span className="text-muted-foreground/30">·</span>
+            <span>
               {hasQuery
-                ? t('{{count}} results matching query', { count: results.total })
+                ? t('{{count}} results', { count: results.total })
                 : t('{{count}} items', { count: results.total })}
             </span>
           </>
         )}
       </div>
-      <div className="flex items-center gap-3">
-        <span className="flex items-center gap-1.5">
-          <Kbd>↑↓</Kbd>
-          {t('Navigate')}
-        </span>
-        <span className="flex items-center gap-1.5">
-          <Kbd>↵</Kbd>
-          {showBack ? t('Select') : t('Play')}
-        </span>
-        {!showBack && (
-          <span className="flex items-center gap-1.5">
-            <Kbd>⇧↵</Kbd>
-            {t('Queue')}
-          </span>
-        )}
-        {!showBack && (
-          <span className="flex items-center gap-1.5">
-            <Kbd>Tab</Kbd>
-            {t('Filter')}
-          </span>
-        )}
-        <span className="flex items-center gap-1.5">
-          <Kbd>Esc</Kbd>
-          {showBack ? t('Back') : t('Close')}
-        </span>
-      </div>
+      <TooltipProvider delay={400}>
+        <div className="flex items-center gap-2.5">
+          {hint(<ArrowUpDown />, t('Arrow Up/Down'))}
+          {hint(<CornerDownLeft />, showBack ? t('Enter') : t('Enter'))}
+          {!showBack &&
+            hint(
+              <>
+                <ArrowBigUp />
+                <CornerDownLeft />
+              </>,
+              t('Shift + Enter')
+            )}
+          {!showBack && hint(<span className="text-[10px]">Tab</span>, t('Tab'))}
+          {hint(
+            showBack ? <ArrowLeft /> : <span className="text-[10px]">Esc</span>,
+            showBack ? t('Back') : t('Esc')
+          )}
+        </div>
+      </TooltipProvider>
     </div>
   );
 }
