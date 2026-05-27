@@ -278,6 +278,7 @@ function PaletteHeader({
   inputValue,
   setInputValue,
   inputId,
+  placeholder,
 }: {
   app?: ActiveApp;
   fullContent: boolean;
@@ -285,6 +286,7 @@ function PaletteHeader({
   inputValue: string;
   setInputValue: (v: string) => void;
   inputId: string;
+  placeholder?: string;
 }) {
   const { t } = useTranslation();
   const { popApp } = useCommandStore();
@@ -317,7 +319,7 @@ function PaletteHeader({
           id={inputId}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          placeholder={app ? app.title : t('Type a command or search...')}
+          placeholder={app ? app.title : (placeholder ?? t('Type a command or search...'))}
           className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
       </label>
@@ -357,11 +359,12 @@ function CommanderFooter({
   const { t } = useTranslation();
   const hasQuery = !!query?.trim();
 
-  const hint = (kbd: React.ReactNode, tooltip: string) => (
+  const hint = (kbd: React.ReactNode, label: string, tooltip: string) => (
     <Tooltip>
       <TooltipTrigger>
-        <span className="flex cursor-default items-center gap-0.5">
+        <span className="flex cursor-default items-center gap-1">
           <Kbd className="flex items-center gap-0.5">{kbd}</Kbd>
+          <span>{label}</span>
         </span>
       </TooltipTrigger>
       <TooltipContent side="top">{tooltip}</TooltipContent>
@@ -395,20 +398,22 @@ function CommanderFooter({
       </div>
       <TooltipProvider delay={400}>
         <div className="flex items-center gap-2.5">
-          {hint(<ArrowUpDown />, t('Arrow Up/Down'))}
-          {hint(<CornerDownLeft />, showBack ? t('Enter') : t('Enter'))}
+          {hint(<ArrowUpDown />, t('Navigate'), t('Arrow Up / Down'))}
+          {hint(<CornerDownLeft />, showBack ? t('Select') : t('Play'), t('Enter'))}
           {!showBack &&
             hint(
               <>
                 <ArrowBigUp />
                 <CornerDownLeft />
               </>,
+              t('Queue'),
               t('Shift + Enter')
             )}
-          {!showBack && hint(<span className="text-[10px]">Tab</span>, t('Tab'))}
+          {!showBack && hint(<span className="text-[10px]">Tab</span>, t('Filter'), t('Tab'))}
           {hint(
             showBack ? <ArrowLeft /> : <span className="text-[10px]">Esc</span>,
-            showBack ? t('Back') : t('Esc')
+            showBack ? t('Back') : t('Close'),
+            showBack ? t('←') : t('Esc')
           )}
         </div>
       </TooltipProvider>
@@ -418,9 +423,32 @@ function CommanderFooter({
 
 type VirtualRow = { kind: 'heading'; label: string } | { kind: 'item'; result: SearchResult };
 
+const BUILTIN_SCOPE_PREFIXES: Record<string, SearchScope> = {
+  lyric: 'lyrics',
+  lyrics: 'lyrics',
+  song: 'lyrics',
+  media: 'media',
+  audio: 'media',
+  video: 'media',
+  image: 'media',
+  cmd: 'commands',
+  command: 'commands',
+  commands: 'commands',
+};
+
+function parseBuiltinPrefix(query: string): { scope: SearchScope; rest: string } | null {
+  const lower = query.toLowerCase();
+  for (const [alias, targetScope] of Object.entries(BUILTIN_SCOPE_PREFIXES)) {
+    if (lower.startsWith(`${alias} `)) {
+      return { scope: targetScope, rest: query.slice(alias.length + 1) };
+    }
+  }
+  return null;
+}
+
 function RootView() {
   const { t } = useTranslation();
-  const { commands, prefilter, close, pushApp } = useCommandStore();
+  const { commands, prefixes, prefilter, close, pushApp } = useCommandStore();
   const [query, setQuery] = useState(prefilter);
   const [scope, setScope] = useState<SearchScope>('all');
   const [fullContent, setFullContent] = useState(false);
@@ -436,36 +464,47 @@ function RootView() {
   const runIdRef = useRef(0);
 
   const [debouncedQuery] = useDebounceValue(query, 120);
+
+  const builtinPrefix = useMemo(() => parseBuiltinPrefix(debouncedQuery), [debouncedQuery]);
+  const effectiveScope = builtinPrefix?.scope ?? scope;
+  const effectiveQuery = builtinPrefix?.rest ?? debouncedQuery;
+
   const tokens = useMemo(
     () =>
-      debouncedQuery.trim() ? normalize(debouncedQuery.trim()).split(/\s+/).filter(Boolean) : [],
-    [debouncedQuery]
+      effectiveQuery.trim() ? normalize(effectiveQuery.trim()).split(/\s+/).filter(Boolean) : [],
+    [effectiveQuery]
   );
 
   useEffect(() => {
     const runId = ++runIdRef.current;
     setSelectedIdx(0);
     runSearch({
-      query: debouncedQuery,
-      scope,
+      query: effectiveQuery,
+      scope: effectiveScope,
       fullContent,
       commands,
-      limitPerGroup: debouncedQuery.trim() ? 500 : 10,
+      prefixes,
+      limitPerGroup: effectiveQuery.trim() ? 500 : 10,
     }).then((res) => {
       if (runIdRef.current === runId) setResults(res);
     });
-  }, [debouncedQuery, scope, fullContent, commands]);
+  }, [effectiveQuery, effectiveScope, fullContent, commands, prefixes]);
 
   const groups = useMemo(() => {
+    if (results.activePrefix) {
+      return results.commands.length
+        ? [{ key: 'commands' as SearchScope, heading: results.activePrefix.title, results: results.commands }]
+        : [];
+    }
     const g: Array<{ key: SearchScope; heading: string; results: SearchResult[] }> = [];
-    if ((scope === 'all' || scope === 'lyrics') && results.lyrics.length)
+    if ((effectiveScope === 'all' || effectiveScope === 'lyrics') && results.lyrics.length)
       g.push({ key: 'lyrics', heading: t('Lyrics / Songs'), results: results.lyrics });
-    if ((scope === 'all' || scope === 'commands') && results.commands.length)
+    if ((effectiveScope === 'all' || effectiveScope === 'commands') && results.commands.length)
       g.push({ key: 'commands', heading: t('Commands & Shortcuts'), results: results.commands });
-    if ((scope === 'all' || scope === 'media') && results.media.length)
+    if ((effectiveScope === 'all' || effectiveScope === 'media') && results.media.length)
       g.push({ key: 'media', heading: t('Media Assets'), results: results.media });
     return g;
-  }, [results, scope, t]);
+  }, [results, effectiveScope, t]);
 
   const flatRows = useMemo<VirtualRow[]>(() => {
     const rows: VirtualRow[] = [];
@@ -559,9 +598,12 @@ function RootView() {
         inputValue={query}
         setInputValue={setQuery}
         inputId={inputId}
+        placeholder={results.activePrefix?.placeholder}
       />
 
-      <FilterTabs scope={scope} setScope={setScope} results={results} />
+      {!results.activePrefix && (
+        <FilterTabs scope={effectiveScope} setScope={setScope} results={results} />
+      )}
 
       <ScrollArea
         ref={scrollRef}

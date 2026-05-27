@@ -1,5 +1,5 @@
 import { useCommandStore } from '@/stores/command-store';
-import type { CommandSpec, CommandsAPI, Disposable } from '../types';
+import type { CommandSpec, CommandsAPI, Disposable, PrefixSpec } from '../types';
 
 export function createCommandsAPI(): CommandsAPI {
   return {
@@ -19,6 +19,15 @@ export function createCommandsAPI(): CommandsAPI {
         return undefined;
       }
       return spec.run?.(args);
+    },
+
+    addPrefix(spec: PrefixSpec): Disposable {
+      useCommandStore.getState()._registerPrefix(spec);
+      return {
+        dispose() {
+          useCommandStore.getState()._unregisterPrefix(spec.prefix);
+        },
+      };
     },
   };
 }
