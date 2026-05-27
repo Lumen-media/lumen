@@ -21,6 +21,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDebounceValue, useEventListener } from 'usehooks-ts';
 import { cn } from '@/lib/utils';
 import {
   normalize,
@@ -152,15 +153,6 @@ function Highlight({ text, tokens }: { text: string; tokens: string[] }) {
   if (cursor < text.length)
     out.push(<Fragment key={`p-${cursor}-end`}>{text.slice(cursor)}</Fragment>);
   return <>{out}</>;
-}
-
-function useDebounced<T>(value: T, delay = 120): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = window.setTimeout(() => setDebounced(value), delay);
-    return () => window.clearTimeout(id);
-  }, [value, delay]);
-  return debounced;
 }
 
 function ResultRow({
@@ -431,7 +423,7 @@ function RootView() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const runIdRef = useRef(0);
 
-  const debouncedQuery = useDebounced(query, 120);
+  const [debouncedQuery] = useDebounceValue(query, 120);
   const tokens = useMemo(
     () =>
       debouncedQuery.trim() ? normalize(debouncedQuery.trim()).split(/\s+/).filter(Boolean) : [],
@@ -642,17 +634,12 @@ function AppView({ app }: { app: ActiveApp }) {
 export function QuickShortcutsModal() {
   const { isOpen, toggle, close, activeApp } = useCommandStore();
 
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        toggle();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [toggle]);
+  useEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      toggle();
+    }
+  });
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
