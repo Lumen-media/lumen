@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CommanderAppProps, CommandSpec } from '@/modules/types';
+import type { CommanderAppProps, CommandSpec, PrefixSpec } from '@/modules/types';
 import type React from 'react';
 
 export interface ActiveApp {
@@ -13,6 +13,7 @@ interface CommandStore {
   prefilter: string;
   activeApp: ActiveApp | null;
   commands: CommandSpec[];
+  prefixes: PrefixSpec[];
   open: (prefilter?: string) => void;
   close: () => void;
   toggle: () => void;
@@ -20,6 +21,8 @@ interface CommandStore {
   popApp: () => void;
   _register: (spec: CommandSpec) => void;
   _unregister: (id: string) => void;
+  _registerPrefix: (spec: PrefixSpec) => void;
+  _unregisterPrefix: (prefix: string) => void;
 }
 
 export const useCommandStore = create<CommandStore>((set) => ({
@@ -27,6 +30,7 @@ export const useCommandStore = create<CommandStore>((set) => ({
   prefilter: '',
   activeApp: null,
   commands: [],
+  prefixes: [],
 
   open: (prefilter = '') => set({ isOpen: true, prefilter, activeApp: null }),
   close: () => set({ isOpen: false, prefilter: '', activeApp: null }),
@@ -48,4 +52,13 @@ export const useCommandStore = create<CommandStore>((set) => ({
     })),
   _unregister: (id) =>
     set((s) => ({ commands: s.commands.filter((c) => c.id !== id) })),
+
+  _registerPrefix: (spec) =>
+    set((s) => ({
+      prefixes: s.prefixes.some((p) => p.prefix === spec.prefix)
+        ? s.prefixes.map((p) => (p.prefix === spec.prefix ? spec : p))
+        : [...s.prefixes, spec],
+    })),
+  _unregisterPrefix: (prefix) =>
+    set((s) => ({ prefixes: s.prefixes.filter((p) => p.prefix !== prefix) })),
 }));

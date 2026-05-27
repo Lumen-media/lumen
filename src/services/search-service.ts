@@ -1,4 +1,4 @@
-import type { CommandSpec } from '@/modules/types';
+import type { CommandSpec, PrefixSpec } from '@/modules/types';
 import { mediaDbService, type SearchHit } from './media-db-service';
 import type { MediaType } from './types';
 
@@ -22,6 +22,7 @@ export interface SearchResults {
   lyrics: SearchResult[];
   media: SearchResult[];
   commands: SearchResult[];
+  activePrefix?: PrefixSpec;
   total: number;
 }
 
@@ -30,6 +31,7 @@ export interface SearchOpts {
   scope: SearchScope;
   fullContent: boolean;
   commands: CommandSpec[];
+  prefixes?: PrefixSpec[];
   limitPerGroup?: number;
 }
 
@@ -93,9 +95,39 @@ function commandToResult(spec: CommandSpec): SearchResult {
   };
 }
 
+function prefixResultToSearchResult(r: import('@/modules/types').PrefixResult, spec: PrefixSpec): SearchResult {
+  return {
+    source: r.component ? 'app' : 'command',
+    id: `prefix:${spec.prefix}:${r.id}`,
+    title: r.title,
+    subtitle: r.subtitle,
+    badge: r.badge ?? spec.title.toUpperCase(),
+    commandSpec: {
+      id: r.id,
+      title: r.title,
+      subtitle: r.subtitle,
+      type: r.component ? 'app' : 'action',
+      run: r.run,
+      component: r.component,
+    },
+  };
+}
+
 export async function search(opts: SearchOpts): Promise<SearchResults> {
   const limit = opts.limitPerGroup ?? 12;
   const trimmed = opts.query.trim();
+
+  for (const spec of opts.prefixes ?? []) {
+    const lower = trimmed.toLowerCase();
+    const pfx = spec.prefix.toLowerCase();
+    if (lower.startsWith(`${pfx} `) || lower === pfx) {
+      const rest = trimmed.slice(spec.prefix.length).trimStart();
+      const raw = await spec.handle(rest);
+      const results = raw.map((r) => prefixResultToSearchResult(r, spec));
+      return { lyrics: [], media: [], commands: results, activePrefix: spec, total: results.length };
+    }
+  }
+
   const tokens = trimmed ? normalize(trimmed).split(/\s+/).filter(Boolean) : [];
 
   const wantLyrics = opts.scope === 'all' || opts.scope === 'lyrics';
