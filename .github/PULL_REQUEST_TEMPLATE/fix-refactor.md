@@ -1,39 +1,39 @@
-## O que mudou
+## What changed
 
-<!-- O que foi alterado. Seja específico: componentes, fluxos, comportamentos. -->
+<!-- What was altered. Be specific: components, flows, behaviors. -->
 
 -
 
-### Causa raiz
+### Root cause
 
-<!-- Por que o problema existia ou por que o refactor era necessário. -->
+<!-- Why the problem existed or why the refactor was necessary. -->
 
-### Solução
+### Solution
 
-<!-- Como você resolveu. Decisões técnicas relevantes. -->
+<!-- How you solved it. Relevant technical decisions. -->
 
-## Como reproduzir
+## How to reproduce
 
-**Antes:**
+**Before:**
 1.
 2.
 3.
 
-**Depois:**
+**After:**
 1.
 2.
 3.
 
-## Screenshots / Gravação
+## Screenshots / Recording
 
-<!-- Para mudanças visuais. Pode ser antes/depois, GIF, vídeo curto. -->
+<!-- For visual changes. Before/after, GIF, or short video. -->
 
-## Notas para o revisor
+## Notes for reviewer
 
-<!-- Áreas de atenção, trade-offs assumidos, o que ficou de fora do escopo, comportamentos que diferem entre dev e prod. -->
+<!-- Areas of attention, trade-offs, what was left out of scope, behaviors that differ between dev and prod. -->
 
 ## Checklist
 
-- [ ] Testado manualmente o fluxo principal
-- [ ] Verificado regressão nas áreas adjacentes
+- [ ] Main flow tested manually
+- [ ] Checked for regressions in adjacent areas
 - [ ] Self-reviewed

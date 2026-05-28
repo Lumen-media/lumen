@@ -1,23 +1,37 @@
-## O que mudou
+## 📋 Description
 
--
+Describe clearly and objectively the changes implemented in this PR.
 
-### Por que
+### What was changed?
+- 
 
--
+### Why?
+- 
 
-## Como testar
+## 🔗 Related Issues
 
-1.
-2.
-3.
+- Closes #ISSUE_NUMBER
+- Relates to #ISSUE_NUMBER
 
-## Screenshots / Gravação
+## 🧪 How to Test
 
-<!-- Se aplicável. -->
+1. 
+2. 
+3. 
 
-## Checklist
+## 📸 Screenshots/Evidence
 
-- [ ] Testado manualmente
-- [ ] Sem regressão nas áreas adjacentes
-- [ ] Self-reviewed
+<!-- If applicable, add screenshots or GIFs demonstrating the changes -->
+
+## ✅ Checklist
+
+- [ ] Code follows the project's coding style
+- [ ] Tests have been added or updated to cover the changes
+- [ ] Documentation has been updated (if applicable)
+- [ ] All new and existing tests pass
+- [ ] Code has been self-reviewed before requesting review
+- [ ] No conflicts with the base branch
+
+## 📝 Additional Notes
+
+<!-- Extra information for reviewers, technical decisions, trade-offs, etc. -->
