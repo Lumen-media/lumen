@@ -1,40 +1,39 @@
-## 📋 Description
+## O que mudou
 
-Bugfix or refactor. Summarize the change objectively.
+<!-- O que foi alterado. Seja específico: componentes, fluxos, comportamentos. -->
 
-### What was changed?
-- Affected areas (modules, endpoints, components).
-- Relevant visual/contract changes.
+-
 
-### Why?
-- Root cause of the bug or motivation for the refactor.
-- Issue/incident link (e.g., fixes #123).
+### Causa raiz
 
-## 🔗 Related Issues
+<!-- Por que o problema existia ou por que o refactor era necessário. -->
 
-- Fixes #ISSUE_NUMBER
-- Relates to #ISSUE_NUMBER
+### Solução
 
-## 🧪 How to Test
+<!-- Como você resolveu. Decisões técnicas relevantes. -->
 
-1. Steps to reproduce before/after.
-2. Required environments/flags/fixtures.
-3. Expected results.
+## Como reproduzir
 
-## 📸 Screenshots/Evidence
+**Antes:**
+1.
+2.
+3.
 
-<!-- Logs, screenshots, or GIFs that demonstrate the fix -->
+**Depois:**
+1.
+2.
+3.
 
-## ✅ Checklist
+## Screenshots / Gravação
 
-- [ ] Public contracts remain intact
-- [ ] Telemetry/monitoring still works
-- [ ] Rollback plan documented
-- [ ] Tests added or updated
-- [ ] All tests passing
+<!-- Para mudanças visuais. Pode ser antes/depois, GIF, vídeo curto. -->
+
+## Notas para o revisor
+
+<!-- Áreas de atenção, trade-offs assumidos, o que ficou de fora do escopo, comportamentos que diferem entre dev e prod. -->
+
+## Checklist
+
+- [ ] Testado manualmente o fluxo principal
+- [ ] Verificado regressão nas áreas adjacentes
 - [ ] Self-reviewed
-- [ ] Issue/incident referenced
-
-## 📝 Additional Notes
-
-<!-- Known risks, performance impact, follow-ups, or debt assumed -->
