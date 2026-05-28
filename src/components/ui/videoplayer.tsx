@@ -68,8 +68,14 @@ export const Videoplayer = ({
   const currentFilePath = useRef<string | null>(null);
   const pendingThumbnail = useRef<string | null>(null);
   const pendingSeekTime = useRef<number | null>(null);
+  const switchingUrlRef = useRef(false);
+  const loadSeqRef = useRef(0);
   const [ws, setWs] = useState<WebSocket | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  wsRef.current = ws;
   const [playing, setPlaying] = useState(autoplay);
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
   const [volume, setVolume] = useState(1);
   const [mutedState, setMutedState] = useState(muted);
   const [played, setPlayed] = useState(0);
@@ -86,11 +92,11 @@ export const Videoplayer = ({
   }, [muted]);
 
   const handlePlayPause = useCallback(() => {
-    if (playing && ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ event: 'manual_pause' }));
+    if (playingRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ event: 'manual_pause' }));
     }
-    setPlaying((prevPlaying) => !prevPlaying);
-  }, [playing, ws]);
+    setPlaying((prev) => !prev);
+  }, []);
 
   const handleVolumeChange = (e: number) => {
     setVolume(e);
@@ -145,86 +151,91 @@ export const Videoplayer = ({
   }, []);
 
   useEffect(() => {
-    const unlistenVolume = listen('set-volume', (event) => {
-      const volumeReceived = event.payload as number;
-      if (typeof volumeReceived === 'number' && volumeReceived >= 0 && volumeReceived <= 100) {
-        const newVolumeState = volumeReceived / 100;
-        setVolume(newVolumeState);
-      }
-    });
+    let mounted = true;
+    const registered: Array<() => void> = [];
 
-    const unlistenMute = listen('mute', () => {
-      handleMute();
-    });
-
-    const unlistenPlayPause = listen('play-pause', () => {
-      handlePlayPause();
-    });
-
-    const unlistenSeek = listen('seek', (event) => {
-      const seconds = event.payload as number;
-      if (playerRef.current) {
-        playerRef.current.seekTo(seconds, 'seconds');
-        setPlayed(seconds / (playerRef.current.getDuration() || 1));
-      }
-    });
-
-    const unlistenLoop = listen('video-loop', (event) => {
-      setIsLooping(event.payload as boolean);
-    });
-
-    const unlistenStop = listen('stop', () => {
-      setPlaying(false);
-      if (playerRef.current) {
-        playerRef.current.seekTo(0, 'seconds');
+    Promise.all([
+      listen('set-volume', (event) => {
+        if (!mounted) return;
+        const v = event.payload as number;
+        if (typeof v === 'number' && v >= 0 && v <= 100) setVolume(v / 100);
+      }),
+      listen('mute', () => {
+        if (!mounted) return;
+        handleMute();
+      }),
+      listen('play-pause', () => {
+        if (!mounted) return;
+        handlePlayPause();
+      }),
+      listen('seek', (event) => {
+        if (!mounted) return;
+        const seconds = event.payload as number;
+        if (playerRef.current) {
+          playerRef.current.seekTo(seconds, 'seconds');
+          setPlayed(seconds / (playerRef.current.getDuration() || 1));
+        }
+      }),
+      listen('video-loop', (event) => {
+        if (!mounted) return;
+        setIsLooping(event.payload as boolean);
+      }),
+      listen('stop', () => {
+        if (!mounted) return;
+        setPlaying(false);
+        if (playerRef.current) {
+          playerRef.current.seekTo(0, 'seconds');
+          setPlayed(0);
+        }
+      }),
+      listen<{ url: string; time: number }>('load-url', async (event) => {
+        const seq = ++loadSeqRef.current;
+        const { url: filePath, time: seekTime } = event.payload;
+        if (currentBlobUrl.current) {
+          URL.revokeObjectURL(currentBlobUrl.current);
+          currentBlobUrl.current = null;
+        }
+        const mimeTypes: Record<string, string> = {
+          mp4: 'video/mp4',
+          webm: 'video/webm',
+          mkv: 'video/x-matroska',
+          avi: 'video/x-msvideo',
+          mov: 'video/quicktime',
+          mp3: 'audio/mpeg',
+          wav: 'audio/wav',
+          ogg: 'audio/ogg',
+          flac: 'audio/flac',
+          aac: 'audio/aac',
+          m4a: 'audio/mp4',
+        };
+        const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+        const mime = mimeTypes[ext] ?? 'application/octet-stream';
+        const data = await readFile(filePath);
+        if (loadSeqRef.current !== seq) return;
+        const blobUrl = URL.createObjectURL(new Blob([data], { type: mime }));
+        currentBlobUrl.current = blobUrl;
+        currentFilePath.current = filePath;
+        pendingSeekTime.current = seekTime > 0 ? seekTime : null;
+        pendingThumbnail.current = mime.startsWith('video/')
+          ? await thumbnailService.getThumbnail(filePath).catch(() => null)
+          : null;
+        if (loadSeqRef.current !== seq) return;
+        switchingUrlRef.current = true;
         setPlayed(0);
-      }
-    });
-
-    const unlistenLoadUrl = listen<{ url: string; time: number }>('load-url', async (event) => {
-      const { url: filePath, time: seekTime } = event.payload;
-      if (currentBlobUrl.current) {
-        URL.revokeObjectURL(currentBlobUrl.current);
-        currentBlobUrl.current = null;
-      }
-      const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
-      const mimeTypes: Record<string, string> = {
-        mp4: 'video/mp4',
-        webm: 'video/webm',
-        mkv: 'video/x-matroska',
-        avi: 'video/x-msvideo',
-        mov: 'video/quicktime',
-        mp3: 'audio/mpeg',
-        wav: 'audio/wav',
-        ogg: 'audio/ogg',
-        flac: 'audio/flac',
-        aac: 'audio/aac',
-        m4a: 'audio/mp4',
-      };
-      const mime = mimeTypes[ext] ?? 'application/octet-stream';
-      const data = await readFile(filePath);
-      const blobUrl = URL.createObjectURL(new Blob([data], { type: mime }));
-      currentBlobUrl.current = blobUrl;
-      currentFilePath.current = filePath;
-      pendingSeekTime.current = seekTime > 0 ? seekTime : null;
-      if (mime.startsWith('video/')) {
-        pendingThumbnail.current = await thumbnailService.getThumbnail(filePath).catch(() => null);
+        setActiveUrl(blobUrl);
+        setPlaying(true);
+      }),
+    ]).then((fns) => {
+      if (mounted) {
+        registered.push(...fns);
       } else {
-        pendingThumbnail.current = null;
+        fns.forEach((f) => f());
       }
-      setPlayed(0);
-      setActiveUrl(blobUrl);
-      setPlaying(true);
     });
 
     return () => {
-      unlistenVolume.then((f) => f());
-      unlistenMute.then((f) => f());
-      unlistenPlayPause.then((f) => f());
-      unlistenSeek.then((f) => f());
-      unlistenLoop.then((f) => f());
-      unlistenStop.then((f) => f());
-      unlistenLoadUrl.then((f) => f());
+      mounted = false;
+      registered.forEach((f) => f());
     };
   }, [handleMute, handlePlayPause]);
 
@@ -239,12 +250,14 @@ export const Videoplayer = ({
       )}
     >
       <ReactPlayer
+        key={activeUrl}
         ref={playerRef}
         url={activeUrl}
         playing={playing}
         volume={volume}
         muted={mutedState}
         onReady={async () => {
+          switchingUrlRef.current = false;
           if (pendingSeekTime.current !== null && pendingSeekTime.current > 0) {
             playerRef.current?.seekTo(pendingSeekTime.current, 'seconds');
             pendingSeekTime.current = null;
@@ -271,7 +284,9 @@ export const Videoplayer = ({
           setPlaying(false);
         }}
         onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
+        onPause={() => {
+          if (!switchingUrlRef.current) setPlaying(false);
+        }}
         loop={isLooping}
         controls={false}
         width="100%"
@@ -283,6 +298,7 @@ export const Videoplayer = ({
           'controls flex flex-col gap-1 absolute bottom-0 left-0 w-full bg-linear-to-t from-black/60 to-transparent p-4 translate-y-20 group-hover:translate-0 transition-transform duration-300',
           {
             'translate-y-0': !playing,
+            hidden: !interactive,
           }
         )}
       >
