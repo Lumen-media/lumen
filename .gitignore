@@ -57,6 +57,7 @@ next-env.d.ts
 # IDE
 .vscode/*
 !.vscode/extensions.json
+lumen.code-workspace
 .idea/
 *.swp
 *.swo
