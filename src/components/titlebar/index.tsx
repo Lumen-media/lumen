@@ -25,16 +25,27 @@ import { useWindowState } from './use-window-state';
 import { TitlebarWindowControls } from './window-controls';
 
 function MenuItems({ items, t }: { items: MenuItemDef[]; t: (key: string) => string }) {
-  return items.map((item) =>
-    item.type === 'separator' ? (
-      <MenubarSeparator key={crypto.randomUUID()} />
-    ) : (
+  return items.map((item, i) => {
+    if (item.type === 'separator') {
+      return <MenubarSeparator key={item.id ?? `sep-${i}`} />;
+    }
+    if (item.type === 'submenu') {
+      return (
+        <MenubarSub key={item.label}>
+          <MenubarSubTrigger>{t(item.label)}</MenubarSubTrigger>
+          <MenubarSubContent>
+            <MenuItems items={item.items} t={t} />
+          </MenubarSubContent>
+        </MenubarSub>
+      );
+    }
+    return (
       <MenubarItem key={item.label} onClick={item.onClick}>
         {t(item.label)}
         {item.shortcut && <MenubarShortcut>{item.shortcut}</MenubarShortcut>}
       </MenubarItem>
-    )
-  );
+    );
+  });
 }
 
 export function TitleBar() {
@@ -208,7 +219,7 @@ export function TitleBar() {
           <button
             data-no-window-drag="true"
             type="button"
-            onClick={openCommand}
+            onClick={() => openCommand()}
             className="flex w-full max-w-md items-center gap-2 rounded-lg border border-border/70 bg-muted/45 px-3 py-1 text-xs transition-colors hover:bg-primary/10"
           >
             <Search className="size-3.5 shrink-0 text-muted-foreground" />

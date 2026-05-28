@@ -49,6 +49,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 symphonia = { version = "0.5", default-features = false, features = ["mp3", "aac", "isomp4", "opt-simd"] }
 blake3 = "1"
 rayon = "1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [

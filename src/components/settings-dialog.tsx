@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Info,
   Monitor,
+  Package,
   Palette,
   RotateCcw,
   Settings,
@@ -23,6 +24,7 @@ import { AboutSection } from './settings/about-section';
 import { AdvancedSection } from './settings/advanced-section';
 import { DevicePermissionsSection } from './settings/device-permissions-section';
 import { GeneralAccessSection } from './settings/general-access-section';
+import { ModulesSection } from './settings/modules-section';
 import { ThemeSection } from './settings/theme-section';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader } from './ui/card';
@@ -40,6 +42,11 @@ const SECTION_TITLES: Record<SettingsSection, { label: string; title: string; de
     title: 'About',
     description:
       'Review app version details, system information, and quick access to release notes and legal resources.',
+  },
+  modules: {
+    label: 'Application settings',
+    title: 'Modules',
+    description: 'Manage installed modules. Enable, disable, reload or uninstall.',
   },
 };
 
@@ -169,6 +176,18 @@ export const SettingsDialog = () => {
 
             <Button
               variant="ghost"
+              onClick={() => handleNavClick('modules')}
+              className={cn(
+                'w-full justify-start gap-2.5',
+                activeSection === 'modules' && 'bg-primary/10 text-primary font-medium'
+              )}
+            >
+              <Package className="size-4" />
+              {t('Modules')}
+            </Button>
+
+            <Button
+              variant="ghost"
               onClick={() => handleNavClick('about')}
               className={cn(
                 'w-full justify-start gap-2.5',
@@ -234,6 +253,7 @@ export const SettingsDialog = () => {
                 {activeSection === 'remote_general' && <GeneralAccessSection />}
                 {activeSection === 'remote_permissions' && <DevicePermissionsSection />}
                 {activeSection === 'advanced' && <AdvancedSection />}
+                {activeSection === 'modules' && <ModulesSection />}
                 {activeSection === 'about' && <AboutSection />}
               </div>
             </ScrollArea>

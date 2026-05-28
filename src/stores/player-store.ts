@@ -25,6 +25,7 @@ interface PlayerStore {
   currentLyricPath: string | null;
   currentLyricSlideIndex: number;
   currentLyricTotalSlides: number;
+  currentImagePath: string | null;
 
   initWs: () => () => void;
   initListeners: () => () => void;
@@ -43,6 +44,7 @@ interface PlayerStore {
   setIsDragging: (dragging: boolean) => void;
   loadFile: (filePath: string, seekTime?: number) => Promise<void>;
   presentLyric: (filePath: string) => Promise<void>;
+  presentImage: (filePath: string) => Promise<void>;
   restoreLastMedia: () => Promise<void>;
 }
 
@@ -111,6 +113,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   currentLyricPath: null,
   currentLyricSlideIndex: 0,
   currentLyricTotalSlides: 0,
+  currentImagePath: null,
 
   initWs: () => {
     const socket = new WebSocket('ws://localhost:8080');
@@ -482,6 +485,29 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentLyricTotalSlides: 0,
     });
     void broadcastPlayerSync(get, 'load_lyric');
+
+    if (win) {
+      await win.show();
+      set({ isScreenOpen: true });
+    }
+  },
+
+  presentImage: async (filePath: string) => {
+    let win = await getMediaWindow();
+    if (!win) {
+      try {
+        const readyPromise = waitForMediaWindowReady();
+        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+        await readyPromise;
+        win = await getMediaWindow();
+      } catch {
+        return;
+      }
+    }
+
+    const { emit } = await import('@tauri-apps/api/event');
+    await emit('load-image', { url: filePath });
+    set({ currentImagePath: filePath });
 
     if (win) {
       await win.show();
