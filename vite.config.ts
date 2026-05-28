@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react-swc';
 import { defineConfig } from 'vite';
+import { lumenHostModules } from './scripts/vite-plugin-lumen-host-modules';
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -17,10 +18,17 @@ export default defineConfig({
     tanstackRouter({
       routesDirectory: "./src/app",
     }),
+    lumenHostModules(),
   ],
 
   define: {
     __BUILD_DATE__: JSON.stringify(buildDate),
+  },
+
+  build: {
+    rollupOptions: {
+      external: ['react', 'react-dom', 'react-dom/client'],
+    },
   },
 
   clearScreen: false,

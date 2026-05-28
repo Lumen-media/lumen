@@ -121,6 +121,7 @@ function MediaWindowComponent() {
   const [isFullscreen, setIsFullscreen] = useState(true);
   const [mode, setMode] = useState<'video' | 'lyric'>('video');
   const [lyricPath, setLyricPath] = useState('');
+  const [imagePath, setImagePath] = useState<string | null>(null);
   const [streamOverlayActive, setStreamOverlayActive] = useState(false);
 
   const saveCurrentPosition = useCallback(async () => {
@@ -238,11 +239,17 @@ function MediaWindowComponent() {
     const unlistenLyric = listen<{ url: string }>('load-lyric', (event) => {
       setMode('lyric');
       setLyricPath(event.payload.url);
+      setImagePath(null);
     });
 
     const unlistenLoadUrl = listen('load-url', () => {
       setMode('video');
       invoke('push_stream_blank').catch(() => {});
+    });
+
+    const unlistenLoadImage = listen<{ url: string }>('load-image', (event) => {
+      setImagePath(event.payload.url);
+      setMode('video');
     });
 
     const unlistenStreamOverlay = listen<{ active: boolean }>('stream-overlay-toggle', (event) => {
@@ -252,6 +259,7 @@ function MediaWindowComponent() {
     return () => {
       unlistenLyric.then((f) => f());
       unlistenLoadUrl.then((f) => f());
+      unlistenLoadImage.then((f) => f());
       unlistenStreamOverlay.then((f) => f());
     };
   }, []);
@@ -266,6 +274,20 @@ function MediaWindowComponent() {
   return (
     <div className="relative h-dvh w-dvw bg-black">
       <Videoplayer className="h-full w-full" url="" autoplay muted={false} interactive={false} />
+      {imagePath && mode !== 'lyric' && (
+        <button
+          type="button"
+          aria-label="Close image"
+          className="absolute inset-0 z-10 flex items-center justify-center bg-black cursor-pointer"
+          onClick={() => setImagePath(null)}
+        >
+          <img
+            src={`asset://localhost/${imagePath.replace(/\\/g, '/')}`}
+            alt=""
+            className="max-h-full max-w-full object-contain"
+          />
+        </button>
+      )}
       {mode === 'lyric' && lyricPath && (
         <div className="absolute inset-0 z-10">
           <LyricPresentation filePath={lyricPath} />

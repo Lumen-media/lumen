@@ -11,11 +11,13 @@ import {
   LucideVolumeX,
 } from 'lucide-react';
 import { useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
+import { mediaDbService } from '@/services/media-db-service';
 import { usePlayerStore } from '@/stores/player-store';
-import { Button } from './ui/button';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card';
+import { useQueueStore } from '@/stores/queue-store';
 
 interface MiniPlayerProps {
   className?: string;
@@ -33,6 +35,7 @@ function formatTime(seconds: number): string {
 
 export function MiniPlayer({ className }: MiniPlayerProps) {
   const player = usePlayerStore();
+  const queue = useQueueStore();
 
   useEffect(() => {
     const cleanupWs = player.initWs();
@@ -43,6 +46,36 @@ export function MiniPlayer({ className }: MiniPlayerProps) {
       cleanupListeners();
     };
   }, [player.initWs, player.initListeners, player.restoreLastMedia]);
+
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const { source, path, action } = (e as CustomEvent<{ source: string; path: string; action: 'play' | 'queue' }>).detail;
+
+      if (action === 'play') {
+        if (source === 'lyric') { await player.presentLyric(path); return; }
+        if (source === 'image') { await player.presentImage(path); return; }
+        await player.loadFile(path);
+        return;
+      }
+
+      if (action === 'queue') {
+        const hit = await mediaDbService.getByPath(path);
+        if (!hit) return;
+        await queue.addToQueue({
+          name: hit.name,
+          path: hit.path,
+          size: 0,
+          modifiedAt: new Date(hit.modified_at),
+          extension: hit.path.split('.').pop() ?? '',
+          duration: hit.duration ?? undefined,
+          artist: hit.artist ?? undefined,
+        });
+      }
+    };
+
+    window.addEventListener('lumen:commander-open', handler);
+    return () => window.removeEventListener('lumen:commander-open', handler);
+  }, [player, queue]);
 
   const iconBtn =
     'p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors';
