@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { create } from 'zustand';
 import { getSetting, saveSetting } from '@/services/db';
@@ -43,7 +43,7 @@ interface PlayerStore {
   handleSliderCommit: (value: number[]) => void;
   setIsDragging: (dragging: boolean) => void;
   loadFile: (filePath: string, seekTime?: number) => Promise<void>;
-  presentLyric: (filePath: string) => Promise<void>;
+  presentLyric: (filePath: string, startIndex?: number) => Promise<void>;
   presentImage: (filePath: string) => Promise<void>;
   restoreLastMedia: () => Promise<void>;
 }
@@ -459,7 +459,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
   },
 
-  presentLyric: async (filePath: string) => {
+  presentLyric: async (filePath: string, startIndex = 0) => {
     let win = await getMediaWindow();
     if (!win) {
       try {
@@ -478,7 +478,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       await new Promise((r) => setTimeout(r, 50));
     }
 
-    get().sendWs({ event: 'load_lyric', url: filePath });
+    get().sendWs({ event: 'load_lyric', url: filePath, startIndex });
+    emit('lyric-start-slide', { startIndex }).catch(() => {});
     set({
       currentLyricPath: filePath,
       currentLyricSlideIndex: 0,
@@ -505,7 +506,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
     }
 
-    const { emit } = await import('@tauri-apps/api/event');
     await emit('load-image', { url: filePath });
     set({ currentImagePath: filePath });
 
