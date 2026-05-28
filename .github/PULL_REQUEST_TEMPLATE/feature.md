@@ -1,41 +1,30 @@
-## 📋 Description
+## O que foi entregue
 
-Feature request implementation. Keep it concise and clear.
+<!-- Descreva o que foi implementado. Componentes, fluxos, integrações. -->
 
-### What was changed?
-- Main deliverables (components, endpoints, business rules).
-- UX/API/contracts impact if any.
+-
 
-### Why?
-- What problem does this solve?
-- Link to planning/issue/epic (e.g., closes #123).
+### Por que
 
-## 🔗 Related Issues
+<!-- Problema que resolve ou demanda que atende. -->
 
-- Closes #ISSUE_NUMBER
-- Relates to #ISSUE_NUMBER
+## Como usar / testar
 
-## 🧪 How to Test
+1.
+2.
+3.
 
-1. Steps to validate the feature (flows, flags, user roles).
-2. Sample data or seeds.
-3. Expected results.
+## Screenshots / Gravação
 
-## 📸 Screenshots/Evidence
+<!-- Para features visuais. GIF ou vídeo curto ajudam muito. -->
 
-<!-- If applicable, add screenshots or GIFs demonstrating the feature -->
+## Notas para o revisor
 
-## ✅ Checklist
+<!-- Decisões de design, trade-offs, o que ficou fora do escopo, dependências. -->
 
-- [ ] UX/API/contract impact covered
-- [ ] Docs or release notes updated
-- [ ] Migrations/Seeds applied (if any)
-- [ ] Rollout/rollback flags defined
-- [ ] Tests added or updated
-- [ ] All tests passing
+## Checklist
+
+- [ ] Fluxo principal testado manualmente
+- [ ] Casos de borda verificados
+- [ ] Sem regressão nas áreas adjacentes
 - [ ] Self-reviewed
-- [ ] QA/Stakeholders notified
-
-## 📝 Additional Notes
-
-<!-- Known risks, trade-offs, planned follow-ups, or out-of-scope limits -->
