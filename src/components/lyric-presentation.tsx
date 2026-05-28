@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { readFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
+import { useEventListener, useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
 import { useProfiles } from '@/hooks/use-profiles';
 import { type LyricData, parseLyricFile } from '@/services/lyric-service';
 import { useProfileStore } from '@/stores/profile-store';
@@ -81,15 +81,19 @@ function useSlideBgSrc(path?: string) {
   return displayedSrc;
 }
 
-export function LyricPresentation({ filePath }: { filePath: string }) {
+export function LyricPresentation({ filePath, startIndex = 0 }: { filePath: string; startIndex?: number }) {
   useProfiles();
   const { profiles, activeProfileId } = useProfileStore();
   const profileBackground =
     profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.src ?? undefined;
 
   const [lyricData, setLyricData] = useState<LyricData | null>(null);
-  const [currentSlide, setCurrentSlide] = useState(0);
+  const [currentSlide, setCurrentSlide] = useState(startIndex);
   const textRef = useRef<HTMLDivElement>(null);
+  const startIndexRef = useRef(startIndex);
+  startIndexRef.current = startIndex;
+  const lyricDataRef = useRef(lyricData);
+  lyricDataRef.current = lyricData;
   const { width: winW, height: winH } = useWindowSize();
   const availableH = winH - winW * 0.1;
 
@@ -99,10 +103,17 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
       .then((content) => {
         const data = parseLyricFile(content);
         setLyricData(data);
-        setCurrentSlide(0);
+        setCurrentSlide(startIndexRef.current);
       })
       .catch(console.error);
   }, [filePath]);
+
+  useEffect(() => {
+    const data = lyricDataRef.current;
+    if (!data) return;
+    const clamped = Math.max(0, Math.min(startIndex, data.slides.length - 1));
+    setCurrentSlide(clamped);
+  }, [startIndex]);
 
   useEffect(() => {
     if (!lyricData || !filePath) return;
@@ -167,26 +178,29 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
   useEffect(() => {
     const unlistenNext = listen('next', () => goNext());
     const unlistenPrev = listen('previous', () => goPrev());
+    const unlistenStartSlide = listen<{ startIndex: number }>('lyric-start-slide', (e) => {
+      const data = lyricDataRef.current;
+      if (!data) return;
+      const clamped = Math.max(0, Math.min(e.payload.startIndex, data.slides.length - 1));
+      changeSlide(clamped);
+    });
 
     return () => {
       unlistenNext.then((f) => f());
       unlistenPrev.then((f) => f());
+      unlistenStartSlide.then((f) => f());
     };
-  }, [goNext, goPrev]);
+  }, [goNext, goPrev, changeSlide]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
-        e.preventDefault();
-        goNext();
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        goPrev();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goNext, goPrev]);
+  useEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+      e.preventDefault();
+      goNext();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      goPrev();
+    }
+  });
 
   const slide = lyricData?.slides[currentSlide];
   const fontSizeNum = Number.parseFloat(lyricData?.metadata.fontSize ?? '48') || 48;

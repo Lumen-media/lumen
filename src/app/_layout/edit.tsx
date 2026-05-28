@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { Pencil } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
+import { useEventListener, useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -12,6 +12,7 @@ import type { LyricData, LyricSlide } from '@/services/lyric-service';
 import { thumbnailService } from '@/services/thumbnail-service';
 import { useLyricEditStore } from '@/stores/lyric-edit-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
+import { usePlayerStore } from '@/stores/player-store';
 import { useProfileStore } from '@/stores/profile-store';
 
 export const Route = createFileRoute('/_layout/edit')({
@@ -23,6 +24,7 @@ function RouteComponent() {
   const openLyricModal = useLyricModalStore((s) => s.open);
   const { filePath, lyricData, slideIds, selectedSlideIndex, selectSlide, isLoading, restore } =
     useLyricEditStore();
+  const presentLyric = usePlayerStore((s) => s.presentLyric);
   const { profiles, activeProfileId } = useProfileStore();
   const profileBackground =
     profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.src ?? undefined;
@@ -47,6 +49,18 @@ function RouteComponent() {
   useEffect(() => {
     if (!filePath) restore();
   }, [filePath, restore]);
+
+  useEventListener('keydown', (e: KeyboardEvent) => {
+    if (!lyricData) return;
+    const total = lyricData.slides.length;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      handleSelectSlide(selectedSlideIndex === null ? 0 : Math.min(selectedSlideIndex + 1, total - 1));
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      handleSelectSlide(selectedSlideIndex === null ? 0 : Math.max(selectedSlideIndex - 1, 0));
+    }
+  });
 
   if (!lyricData || !filePath) {
     return (
@@ -73,7 +87,7 @@ function RouteComponent() {
         </Button>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
+      <ScrollArea className="flex-1 min-h-0" viewportClassName="focus-visible:ring-0 focus-visible:outline-none">
         <div className="flex flex-col px-6 pb-4 py-1">
           {lyricData.slides.map((slide, index) => (
             <div key={slideIds[index]}>
@@ -86,7 +100,10 @@ function RouteComponent() {
                 slide={slide}
                 index={index}
                 isSelected={selectedSlideIndex === index}
-                onClick={() => handleSelectSlide(index)}
+                onClick={(e) => {
+                  if (e.detail === 2 && filePath) presentLyric(filePath, index);
+                  else handleSelectSlide(index);
+                }}
                 font={lyricData.metadata.font}
               />
             </div>
@@ -111,7 +128,10 @@ function RouteComponent() {
                 isSelected={selectedSlideIndex === index}
                 lyricData={lyricData}
                 profileBackground={profileBackground}
-                onClick={() => handleSelectSlide(index)}
+                onClick={(e) => {
+                  if (e.detail === 2 && filePath) presentLyric(filePath, index);
+                  else handleSelectSlide(index);
+                }}
               />
             ))}
           </div>
@@ -128,7 +148,7 @@ const SlideRow = forwardRef<
     slide: LyricSlide;
     index: number;
     isSelected: boolean;
-    onClick: () => void;
+    onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
     font?: string;
   }
 >(({ slide, index, isSelected, onClick, font }, ref) => {
@@ -201,7 +221,7 @@ const SequenceThumbnail = forwardRef<
     isSelected: boolean;
     lyricData: LyricData;
     profileBackground?: string;
-    onClick: () => void;
+    onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   }
 >(({ slide, isSelected, lyricData, profileBackground, onClick }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null!);
@@ -242,7 +262,7 @@ const SequenceThumbnail = forwardRef<
     <button
       ref={ref}
       type="button"
-      onClick={onClick}
+      onClick={(e) => onClick(e)}
       className={cn(
         'shrink-0 w-40 rounded-lg overflow-hidden transition-all outline-none',
         isSelected ? 'ring-2 ring-primary' : 'ring-1 ring-border/30 hover:ring-border/60'
