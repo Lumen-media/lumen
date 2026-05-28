@@ -12,6 +12,7 @@ import type { LyricData, LyricSlide } from '@/services/lyric-service';
 import { thumbnailService } from '@/services/thumbnail-service';
 import { useLyricEditStore } from '@/stores/lyric-edit-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
+import { useProfileStore } from '@/stores/profile-store';
 
 export const Route = createFileRoute('/_layout/edit')({
   component: RouteComponent,
@@ -22,6 +23,9 @@ function RouteComponent() {
   const openLyricModal = useLyricModalStore((s) => s.open);
   const { filePath, lyricData, slideIds, selectedSlideIndex, selectSlide, isLoading, restore } =
     useLyricEditStore();
+  const { profiles, activeProfileId } = useProfileStore();
+  const profileBackground =
+    profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.src ?? undefined;
 
   const thumbRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const slideRowRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
@@ -106,6 +110,7 @@ function RouteComponent() {
                 slide={slide}
                 isSelected={selectedSlideIndex === index}
                 lyricData={lyricData}
+                profileBackground={profileBackground}
                 onClick={() => handleSelectSlide(index)}
               />
             ))}
@@ -195,16 +200,17 @@ const SequenceThumbnail = forwardRef<
     slide: LyricSlide;
     isSelected: boolean;
     lyricData: LyricData;
+    profileBackground?: string;
     onClick: () => void;
   }
->(({ slide, isSelected, lyricData, onClick }, ref) => {
+>(({ slide, isSelected, lyricData, profileBackground, onClick }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null!);
   const textRef = useRef<HTMLDivElement>(null);
   const { width: containerWidth = 0 } = useResizeObserver({ ref: containerRef });
   const scale = containerWidth / THUMB_VIRTUAL_W;
   const fontSizeNum = Number.parseFloat(lyricData.metadata.fontSize) || 48;
 
-  const effectiveBg = slide.background || lyricData.metadata.globalBackground;
+  const effectiveBg = slide.background || lyricData.metadata.globalBackground || profileBackground;
   const bgSrc = useBackgroundSrc(effectiveBg);
 
   useIsomorphicLayoutEffect(() => {
