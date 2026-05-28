@@ -18,6 +18,7 @@ import { DeleteFileAlert } from '@/components/delete-file-alert';
 import { FileListItem } from '@/components/file-list-item';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAnnounce } from '@/hooks/use-announce';
 import { cn } from '@/lib/utils';
 import { type FileInfo, fileInitService, fileManagementService, type MediaType } from '@/services';
@@ -332,13 +333,15 @@ export function MediaPanel() {
                   </p>
                 </div>
               ) : (
-                <div
+                <ScrollArea
                   ref={parentRef}
-                  className="h-full overflow-auto focus:outline-none"
-                  onKeyDown={handleKeyDown}
-                  tabIndex={0}
-                  role="listbox"
-                  aria-label={`${currentItem?.label || 'Files'} list`}
+                  className="h-full"
+                  viewportProps={{
+                    onKeyDown: handleKeyDown,
+                    tabIndex: 0,
+                    role: 'listbox',
+                    'aria-label': `${currentItem?.label || 'Files'} list`,
+                  }}
                 >
                   <div
                     style={{
@@ -388,7 +391,7 @@ export function MediaPanel() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </ScrollArea>
               )}
             </div>
           </>

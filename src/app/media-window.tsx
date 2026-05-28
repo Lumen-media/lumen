@@ -121,6 +121,7 @@ function MediaWindowComponent() {
   const [isFullscreen, setIsFullscreen] = useState(true);
   const [mode, setMode] = useState<'video' | 'lyric'>('video');
   const [lyricPath, setLyricPath] = useState('');
+  const [lyricStartIndex, setLyricStartIndex] = useState(0);
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [streamOverlayActive, setStreamOverlayActive] = useState(false);
 
@@ -242,6 +243,10 @@ function MediaWindowComponent() {
       setImagePath(null);
     });
 
+    const unlistenStartSlide = listen<{ startIndex: number }>('lyric-start-slide', (event) => {
+      setLyricStartIndex(event.payload.startIndex);
+    });
+
     const unlistenLoadUrl = listen('load-url', () => {
       setMode('video');
       invoke('push_stream_blank').catch(() => {});
@@ -258,6 +263,7 @@ function MediaWindowComponent() {
 
     return () => {
       unlistenLyric.then((f) => f());
+      unlistenStartSlide.then((f) => f());
       unlistenLoadUrl.then((f) => f());
       unlistenLoadImage.then((f) => f());
       unlistenStreamOverlay.then((f) => f());
@@ -290,7 +296,7 @@ function MediaWindowComponent() {
       )}
       {mode === 'lyric' && lyricPath && (
         <div className="absolute inset-0 z-10">
-          <LyricPresentation filePath={lyricPath} />
+          <LyricPresentation filePath={lyricPath} startIndex={lyricStartIndex} />
         </div>
       )}
       {streamOverlayActive && (

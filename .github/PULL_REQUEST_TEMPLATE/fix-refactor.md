@@ -3,12 +3,12 @@
 Bugfix or refactor. Summarize the change objectively.
 
 ### What was changed?
-- Affected areas (modules, endpoints, components).
-- Relevant visual/contract changes.
+- Affected areas (components, stores, services).
+- Relevant visual or behavioral changes.
 
 ### Why?
 - Root cause of the bug or motivation for the refactor.
-- Issue/incident link (e.g., fixes #123).
+- Issue link if applicable (e.g., fixes #123).
 
 ## 🔗 Related Issues
 
@@ -17,24 +17,26 @@ Bugfix or refactor. Summarize the change objectively.
 
 ## 🧪 How to Test
 
-1. Steps to reproduce before/after.
-2. Required environments/flags/fixtures.
-3. Expected results.
+**Before:**
+1.
+2.
 
-## 📸 Screenshots/Evidence
+**After:**
+1.
+2.
 
-<!-- Logs, screenshots, or GIFs that demonstrate the fix -->
+## 📸 Screenshots / Recording
+
+<!-- Logs, screenshots, or GIFs that demonstrate the fix. -->
 
 ## ✅ Checklist
 
-- [ ] Public contracts remain intact
-- [ ] Telemetry/monitoring still works
-- [ ] Rollback plan documented
+- [ ] Main flow tested manually
+- [ ] Checked for regressions in adjacent areas
+- [ ] Behavior differences between dev and prod documented (if any)
 - [ ] Tests added or updated
-- [ ] All tests passing
 - [ ] Self-reviewed
-- [ ] Issue/incident referenced
 
 ## 📝 Additional Notes
 
-<!-- Known risks, performance impact, follow-ups, or debt assumed -->
+<!-- Known risks, trade-offs, follow-ups, or out-of-scope items. -->
