@@ -1,39 +1,42 @@
-## What changed
+## 📋 Description
 
-<!-- What was altered. Be specific: components, flows, behaviors. -->
+Bugfix or refactor. Summarize the change objectively.
 
--
+### What was changed?
+- Affected areas (components, stores, services).
+- Relevant visual or behavioral changes.
 
-### Root cause
+### Why?
+- Root cause of the bug or motivation for the refactor.
+- Issue link if applicable (e.g., fixes #123).
 
-<!-- Why the problem existed or why the refactor was necessary. -->
+## 🔗 Related Issues
 
-### Solution
+- Fixes #ISSUE_NUMBER
+- Relates to #ISSUE_NUMBER
 
-<!-- How you solved it. Relevant technical decisions. -->
-
-## How to reproduce
+## 🧪 How to Test
 
 **Before:**
 1.
 2.
-3.
 
 **After:**
 1.
 2.
-3.
 
-## Screenshots / Recording
+## 📸 Screenshots / Recording
 
-<!-- For visual changes. Before/after, GIF, or short video. -->
+<!-- Logs, screenshots, or GIFs that demonstrate the fix. -->
 
-## Notes for reviewer
-
-<!-- Areas of attention, trade-offs, what was left out of scope, behaviors that differ between dev and prod. -->
-
-## Checklist
+## ✅ Checklist
 
 - [ ] Main flow tested manually
 - [ ] Checked for regressions in adjacent areas
+- [ ] Behavior differences between dev and prod documented (if any)
+- [ ] Tests added or updated
 - [ ] Self-reviewed
+
+## 📝 Additional Notes
+
+<!-- Known risks, trade-offs, follow-ups, or out-of-scope items. -->
