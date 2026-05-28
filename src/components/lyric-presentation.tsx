@@ -3,7 +3,9 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { readFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
+import { useProfiles } from '@/hooks/use-profiles';
 import { type LyricData, parseLyricFile } from '@/services/lyric-service';
+import { useProfileStore } from '@/stores/profile-store';
 
 function useBackgroundSrc(path?: string) {
   const [src, setSrc] = useState<string | undefined>();
@@ -80,6 +82,11 @@ function useSlideBgSrc(path?: string) {
 }
 
 export function LyricPresentation({ filePath }: { filePath: string }) {
+  useProfiles();
+  const { profiles, activeProfileId } = useProfileStore();
+  const profileBackground =
+    profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.src ?? undefined;
+
   const [lyricData, setLyricData] = useState<LyricData | null>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const textRef = useRef<HTMLDivElement>(null);
@@ -102,7 +109,7 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
     const slide = lyricData.slides[currentSlide];
     const parsedFontSize = Number.parseInt(lyricData.metadata.fontSize, 10);
     const fontSize = Number.isFinite(parsedFontSize) ? parsedFontSize : 48;
-    const background = slide?.background || lyricData.metadata.globalBackground || undefined;
+    const background = slide?.background || lyricData.metadata.globalBackground || profileBackground || undefined;
 
     emit('lyric-slide-changed', {
       filePath,
@@ -128,7 +135,7 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
         active: true,
       },
     }).catch(() => {});
-  }, [currentSlide, filePath, lyricData]);
+  }, [currentSlide, filePath, lyricData, profileBackground]);
 
   const totalSlides = lyricData?.slides.length ?? 0;
   const [textVisible, setTextVisible] = useState(true);
@@ -207,7 +214,7 @@ export function LyricPresentation({ filePath }: { filePath: string }) {
     }
   });
 
-  const globalBgSrc = useBackgroundSrc(lyricData?.metadata.globalBackground);
+  const globalBgSrc = useBackgroundSrc(lyricData?.metadata.globalBackground || profileBackground);
   const slideBgSrc = useSlideBgSrc(slide?.background);
 
   if (!lyricData || !slide) {
