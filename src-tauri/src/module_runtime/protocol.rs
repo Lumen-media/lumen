@@ -7,7 +7,6 @@ pub fn handle_module_request(
     request: tauri::http::Request<Vec<u8>>,
 ) -> tauri::http::Response<Vec<u8>> {
     let runtime = ctx.app_handle().state::<ModuleRuntime>();
-    let modules_dir = runtime.modules_dir.clone();
     let registry = runtime.registry.clone();
 
     let uri = request.uri().to_string();
@@ -28,21 +27,26 @@ pub fn handle_module_request(
     let module_id = parts[0];
     let file_path = parts[1];
 
-    let enabled = registry
+    let entry = registry
         .lock()
         .ok()
-        .and_then(|reg| reg.get(module_id).ok().flatten())
-        .map(|e| e.enabled)
-        .unwrap_or(false);
+        .and_then(|reg| reg.get(module_id).ok().flatten());
 
-    if !enabled {
+    let Some(entry) = entry else {
+        return tauri::http::Response::builder()
+            .status(403)
+            .body(b"Forbidden: module is not enabled".to_vec())
+            .unwrap();
+    };
+
+    if !entry.enabled {
         return tauri::http::Response::builder()
             .status(403)
             .body(b"Forbidden: module is not enabled".to_vec())
             .unwrap();
     }
 
-    let full_path = modules_dir.join(module_id).join(file_path);
+    let full_path = entry.path.join(file_path);
 
     match std::fs::read(&full_path) {
         Ok(bytes) => {

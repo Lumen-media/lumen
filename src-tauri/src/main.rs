@@ -1,9 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod devices;
+mod module_runtime;
 mod streaming;
 mod thumbnail;
 mod websocket;
+
+use module_runtime::{ModuleRuntime, dev_server::start_dev_server, protocol::handle_module_request};
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -245,6 +248,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok();
 
     tauri::Builder::default()
+        .register_uri_scheme_protocol("lumen-module", handle_module_request)
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_sql::Builder::new().build())
@@ -280,6 +284,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            let runtime = ModuleRuntime::init(app.handle())
+                .expect("failed to initialize module runtime");
+            app.manage(runtime);
+
+            if cfg!(debug_assertions) {
+                let app_handle = app.handle().clone();
+                async_runtime::spawn(async move {
+                    start_dev_server(app_handle).await;
+                });
+            }
+
             devices::ensure_remote_access_ready(&app.handle()).map_err(|e| e.to_string())?;
             let streaming_state = streaming::initialize_streaming_state(&app.handle())?;
             app.manage(streaming_state);
@@ -325,7 +340,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             streaming::manager::push_stream_slide,
             streaming::manager::push_stream_blank,
             set_stream_overlay,
-            thumbnail::get_thumbnail
+            thumbnail::get_thumbnail,
+            module_runtime::module_list_installed,
+            module_runtime::module_install,
+            module_runtime::module_get,
+            module_runtime::module_enable,
+            module_runtime::module_disable,
+            module_runtime::module_uninstall,
+            module_runtime::module_data_json_load,
+            module_runtime::module_data_json_save,
+            module_runtime::module_data_json_set,
+            module_runtime::module_data_json_delete,
+            module_runtime::module_fs_read,
+            module_runtime::module_fs_write,
+            module_runtime::module_fs_exists,
+            module_runtime::module_fs_list,
+            module_runtime::module_fs_remove,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

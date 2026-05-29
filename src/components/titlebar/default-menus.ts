@@ -1,5 +1,7 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useSettingsStore } from '@/stores/settings-store';
+import { installModule } from '@/modules/injector';
 import type { MenuDef } from './menu-registry';
 import { useMenuRegistry } from './menu-registry';
 
@@ -78,6 +80,23 @@ const DEFAULT_MENUS: MenuDef[] = [
     ],
   },
   {
+    id: 'tools',
+    label: 'Tools',
+    items: [
+      {
+        type: 'action',
+        label: 'New Module',
+        onClick: async () => {
+          const selected = await open({
+            multiple: false,
+            filters: [{ name: 'Lumen Module', extensions: ['lumenpack'] }],
+          });
+          if (selected) await installModule(selected as string);
+        },
+      },
+    ],
+  },
+  {
     id: 'help',
     label: 'Help',
     items: [
@@ -90,11 +109,6 @@ const DEFAULT_MENUS: MenuDef[] = [
         onClick: () => useSettingsStore.getState().open('about'),
       },
     ],
-  },
-  {
-    id: 'modules',
-    label: 'Modules',
-    items: [{ type: 'action', label: 'New Module' }],
   },
 ];
 

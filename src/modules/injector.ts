@@ -79,8 +79,22 @@ export async function loadModule(manifest: ModuleManifest) {
   const store = useModuleStore.getState();
 
   try {
-    const mod = await import(/* @vite-ignore */ `lumen-module://${manifest.id}/${manifest.entry}`);
-    const PluginClass = mod.default as new () => LumenPlugin;
+    let mod: unknown;
+    if (import.meta.env.DEV) {
+      const res = await fetch(`/__modules/${manifest.id}/${manifest.entry}?t=${Date.now()}`);
+      if (!res.ok) throw new Error(`module fetch failed: ${res.status}`);
+      const code = await res.text();
+      const blob = new Blob([code], { type: 'application/javascript' });
+      const blobUrl = URL.createObjectURL(blob);
+      try {
+        mod = await import(/* @vite-ignore */ blobUrl);
+      } finally {
+        URL.revokeObjectURL(blobUrl);
+      }
+    } else {
+      mod = await import(/* @vite-ignore */ `lumen-module://${manifest.id}/${manifest.entry}`);
+    }
+    const PluginClass = (mod as { default: new () => LumenPlugin }).default;
 
     const plugin = new PluginClass();
     plugin.manifest = manifest;
@@ -137,11 +151,9 @@ export async function reloadModule(id: string) {
 }
 
 export async function installModule(path: string, devMode = false) {
-  await invoke('module_install', { path, devMode });
-  const result = await invoke<{ manifest: ModuleManifest; source: string }>(
-    'module_get',
-    { id: path },
-  ).catch(() => null);
+  const result = await invoke<{ manifest: ModuleManifest; source: string; enabled: boolean }>(
+    'module_install', { path, devMode }
+  );
   if (!result) return;
 
   useModuleStore.getState().registerModule({

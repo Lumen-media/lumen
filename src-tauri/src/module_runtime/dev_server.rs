@@ -2,8 +2,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::http::{HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
@@ -43,6 +43,7 @@ pub async fn start_dev_server(app: AppHandle) {
         .route("/modules/{id}/reload", post(reload_module))
         .route("/modules/{id}/disable", post(disable_module))
         .route("/modules/{id}", delete(uninstall_module))
+        .route("/module-files/{id}/{*file}", get(serve_module_file))
         .with_state(Arc::new(state));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], DEV_SERVER_PORT));
@@ -134,5 +135,36 @@ async fn uninstall_module(
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "error": e })),
         ),
+    }
+}
+
+async fn serve_module_file(
+    State(state): State<Arc<AppState>>,
+    Path((id, file)): Path<(String, String)>,
+) -> Response {
+    use tauri::Manager;
+    let runtime = state.app.state::<ModuleRuntime>();
+    let entry = runtime.registry.lock().ok()
+        .and_then(|reg| reg.get(&id).ok().flatten());
+
+    let Some(entry) = entry else {
+        return (StatusCode::NOT_FOUND, "module not found").into_response();
+    };
+
+    let full_path = entry.path.join(&file);
+    match std::fs::read(&full_path) {
+        Ok(bytes) => {
+            let mime = match full_path.extension().and_then(|e| e.to_str()).unwrap_or("") {
+                "js" | "mjs" => "application/javascript",
+                "css" => "text/css",
+                "json" => "application/json",
+                _ => "application/octet-stream",
+            };
+            let mut res = (StatusCode::OK, bytes).into_response();
+            res.headers_mut().insert("Content-Type", HeaderValue::from_static(mime));
+            res.headers_mut().insert("Access-Control-Allow-Origin", HeaderValue::from_static("*"));
+            res
+        }
+        Err(_) => (StatusCode::NOT_FOUND, "file not found").into_response(),
     }
 }
