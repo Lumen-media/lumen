@@ -8,6 +8,7 @@ import { useModules } from '@/hooks/use-modules';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useSingleInstance } from '@/hooks/use-single-instance';
 import { useTheme } from '@/hooks/use-theme';
+import { DialogSlot } from '@/modules/components/DialogSlot';
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -26,6 +27,7 @@ function RootComponent() {
       <GlobalAlert />
       <QuickShortcutsModal />
       <LyricModal />
+      <DialogSlot />
     </React.Fragment>
   );
 }

@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { useModuleStore } from '../store';
 import type { UIAPI } from '../types';
 
 export function createUIAPI(openCommandPaletteFn: (prefilter?: string) => void): UIAPI {
@@ -31,6 +32,10 @@ export function createUIAPI(openCommandPaletteFn: (prefilter?: string) => void):
 
     openCommandPalette(prefilter?: string) {
       openCommandPaletteFn(prefilter);
+    },
+
+    openDialog(panelId: string) {
+      useModuleStore.getState().openDialog(panelId);
     },
   };
 }

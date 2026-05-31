@@ -4,6 +4,7 @@ import type { ModuleRecord, ModuleStatus, PanelSpec } from './types';
 interface ModuleStore {
   modules: Map<string, ModuleRecord>;
   panels: Map<string, PanelSpec[]>;
+  openDialogId: string | null;
 
   registerModule(record: ModuleRecord): void;
   setStatus(id: string, status: ModuleStatus, error?: string): void;
@@ -14,11 +15,15 @@ interface ModuleStore {
   removePanel(moduleId: string, panelId: string): void;
   removePanelsForModule(moduleId: string): void;
   getPanelsForSlot(slot: string): PanelSpec[];
+
+  openDialog(id: string): void;
+  closeDialog(): void;
 }
 
 export const useModuleStore = create<ModuleStore>((set, get) => ({
   modules: new Map(),
   panels: new Map(),
+  openDialogId: null,
 
   registerModule(record) {
     set((s) => {
@@ -87,6 +92,14 @@ export const useModuleStore = create<ModuleStore>((set, get) => ({
       next.delete(moduleId);
       return { panels: next };
     });
+  },
+
+  openDialog(id) {
+    set({ openDialogId: id });
+  },
+
+  closeDialog() {
+    set({ openDialogId: null });
   },
 
   getPanelsForSlot(slot) {
