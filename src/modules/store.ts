@@ -5,6 +5,8 @@ interface ModuleStore {
   modules: Map<string, ModuleRecord>;
   panels: Map<string, PanelSpec[]>;
   openDialogId: string | null;
+  presenterViewId: string | null;
+  presenterProps: unknown;
 
   registerModule(record: ModuleRecord): void;
   setStatus(id: string, status: ModuleStatus, error?: string): void;
@@ -18,12 +20,16 @@ interface ModuleStore {
 
   openDialog(id: string): void;
   closeDialog(): void;
+  projectPanel(viewId: string, props?: unknown): void;
+  clearPresenter(): void;
 }
 
 export const useModuleStore = create<ModuleStore>((set, get) => ({
   modules: new Map(),
   panels: new Map(),
   openDialogId: null,
+  presenterViewId: null,
+  presenterProps: undefined,
 
   registerModule(record) {
     set((s) => {
@@ -100,6 +106,14 @@ export const useModuleStore = create<ModuleStore>((set, get) => ({
 
   closeDialog() {
     set({ openDialogId: null });
+  },
+
+  projectPanel(viewId, props) {
+    set({ presenterViewId: viewId, presenterProps: props });
+  },
+
+  clearPresenter() {
+    set({ presenterViewId: null, presenterProps: undefined });
   },
 
   getPanelsForSlot(slot) {
