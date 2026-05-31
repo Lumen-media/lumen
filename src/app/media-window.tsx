@@ -2,6 +2,9 @@ import { createFileRoute } from '@tanstack/react-router';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PresenterSlot } from '@/modules/components/PresenterSlot';
+import { bootPresenterModules } from '@/modules/presenter-injector';
+import { useModuleStore } from '@/modules/store';
 import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
 
 import { LyricPresentation } from '@/components/lyric-presentation';
@@ -217,6 +220,24 @@ function MediaWindowComponent() {
     emit('media-window-ready').catch(() => {});
   }, []);
 
+  useEffect(() => {
+    bootPresenterModules()
+      .then(() => emit('module:presenter-ready').catch(() => {}))
+      .catch(console.error);
+
+    const unlistenProject = listen<{ viewId: string; props: unknown }>('module:presenter-project', (e) => {
+      useModuleStore.getState().projectPanel(e.payload.viewId, e.payload.props);
+    });
+    const unlistenClear = listen('module:presenter-clear', () => {
+      useModuleStore.getState().clearPresenter();
+    });
+
+    return () => {
+      unlistenProject.then((f) => f());
+      unlistenClear.then((f) => f());
+    };
+  }, []);
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
       const key = event.key || event.code;
@@ -304,6 +325,7 @@ function MediaWindowComponent() {
           <StreamOverlay />
         </div>
       )}
+      <PresenterSlot />
     </div>
   );
 }

@@ -5,11 +5,9 @@ export interface Disposable {
 }
 
 export type SlotName =
-  | 'sidebar.right.tabs'
   | 'dialog'
   | 'presenter.content'
-  | 'toolbar'
-  | 'statusbar';
+  | 'sidebar.right.tabs';
 
 export interface PanelProps {
   close?: () => void;
@@ -257,10 +255,12 @@ export interface PlayerHostAPI {
 
 export interface PresentationHostAPI {
   state(): 'idle' | 'live';
+  onStateChange(handler: (state: 'idle' | 'live') => void): Disposable;
   project(viewId: string, props?: unknown): void;
   clear(): void;
   isWindowOpen(): boolean;
 }
+
 
 export interface ThemeRef {
   id: string;

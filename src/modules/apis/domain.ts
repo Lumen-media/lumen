@@ -1,5 +1,9 @@
+import { invoke } from '@tauri-apps/api/core';
+import { emit, listen } from '@tauri-apps/api/event';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { lyricService } from '@/services/lyric-service';
 import { mediaDbService } from '@/services/media-db-service';
+import { useModuleStore } from '../store';
 import type {
   LibraryHostAPI,
   LyricsHostAPI,
@@ -156,19 +160,53 @@ export function createPlayerHostAPI(): PlayerHostAPI {
   };
 }
 
+async function ensureMediaWindow(): Promise<void> {
+  let win = await WebviewWindow.getByLabel('media-window').catch(() => null);
+
+  if (!win) {
+    await invoke('create_window', { label: 'media-window', title: 'Media Player' }).catch(() => {});
+
+    await new Promise<void>((resolve) => {
+      const fallback = setTimeout(resolve, 6000);
+      listen('module:presenter-ready', () => {
+        clearTimeout(fallback);
+        resolve();
+      }).catch(() => {});
+    });
+
+    win = await WebviewWindow.getByLabel('media-window').catch(() => null);
+  }
+
+  if (win) {
+    const visible = await win.isVisible().catch(() => false);
+    if (!visible) await win.show().catch(() => {});
+  }
+}
+
 export function createPresentationHostAPI(): PresentationHostAPI {
   return {
     state() {
-      return 'idle';
+      return useModuleStore.getState().presenterViewId ? 'live' : 'idle';
+    },
+    onStateChange(handler) {
+      const onProject = globalBus.on('presentation:project', () => handler('live'));
+      const onClear = globalBus.on('presentation:clear', () => handler('idle'));
+      return { dispose() { onProject.dispose(); onClear.dispose(); } };
     },
     project(viewId, props) {
+      useModuleStore.getState().projectPanel(viewId, props);
       globalBus.emit('presentation:project', { viewId, props });
+      ensureMediaWindow()
+        .then(() => emit('module:presenter-project', { viewId, props }))
+        .catch(() => {});
     },
     clear() {
+      useModuleStore.getState().clearPresenter();
       globalBus.emit('presentation:clear');
+      emit('module:presenter-clear').catch(() => {});
     },
     isWindowOpen() {
-      return false;
+      return useModuleStore.getState().presenterViewId !== null;
     },
   };
 }
