@@ -74,6 +74,7 @@ export interface UIAPI {
   confirm(opts: { title: string; message: string; danger?: boolean }): Promise<boolean>;
   prompt(opts: { title: string; placeholder?: string; initial?: string }): Promise<string | null>;
   openCommandPalette(prefilter?: string): void;
+  openDialog(panelId: string): void;
 }
 
 export interface MenuItemSeparator {

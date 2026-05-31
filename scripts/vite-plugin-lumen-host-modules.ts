@@ -14,7 +14,7 @@ function makeNamedExportWrapper(specifier: string, viteUrl: string): string {
   return `import _mod from ${JSON.stringify(viteUrl)};\n${exports}\nexport default _mod;\n`;
 }
 
-const MODULE_SDK_STUB = `
+const MODULE_SDK_STUB = ` 
 export class LumenPlugin {
   constructor() {}
   async onload(_host) {}
@@ -54,12 +54,29 @@ async function bundleDep(entrypoint: string): Promise<string> {
 function viteDepUrl(server: ViteDevServer, specifier: string): string {
   const relCacheDir = path.relative(server.config.root, server.config.cacheDir).replace(/\\/g, '/');
   const flatId = specifier.replace(/\//g, '_');
-  return `/${relCacheDir}/deps/${flatId}.js`;
+  const base = `/${relCacheDir}/deps/${flatId}.js`;
+
+  try {
+    const metadataPath = path.join(server.config.cacheDir, 'deps', '_metadata.json');
+    const meta = JSON.parse(fs.readFileSync(metadataPath, 'utf8')) as { browserHash?: string; hash?: string };
+    const hash = meta.browserHash ?? meta.hash;
+    if (hash) return `${base}?v=${hash}`;
+  } catch {
+    // metadata not ready yet — fall through
+  }
+
+  return base;
 }
 
 export function lumenHostModules(): Plugin {
+  let projectRoot = process.cwd();
+
   return {
     name: 'lumen-host-modules',
+
+    config(cfg) {
+      if (cfg.root) projectRoot = cfg.root;
+    },
 
     transformIndexHtml() {
       const imports: Record<string, string> = {
@@ -71,6 +88,8 @@ export function lumenHostModules(): Plugin {
       imports['react-dom/client'] = '/__lumen/react-dom.js';
       imports['react/jsx-runtime'] = '/__lumen/react-jsx-runtime.js';
       imports['react/jsx-dev-runtime'] = '/__lumen/react-jsx-dev-runtime.js';
+      imports['@lumen-media/ui'] = '/__lumen/ui.js';
+      imports['@lumen-media/module-sdk/ui'] = '/__lumen/ui.js';
 
       return [
         {
@@ -129,7 +148,19 @@ export function lumenHostModules(): Plugin {
         }
 
         if (file === 'ui.js') {
-          res.end('// @lumen/ui not yet packaged — use host components via React props');
+          const uiEntry = path.resolve(server.config.root, 'src/lib/module-ui.ts');
+          try {
+            const result = await server.transformRequest(uiEntry);
+            if (result?.code) {
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.end(result.code);
+              return;
+            }
+          } catch (err) {
+            console.error('[lumen-host-modules] Failed to serve ui.js:', err);
+          }
+          res.statusCode = 500;
+          res.end('// Failed to load ui.js');
           return;
         }
 
@@ -159,11 +190,22 @@ export function lumenHostModules(): Plugin {
       }
 
       this.emitFile({ type: 'asset', fileName: '__lumen/module-sdk.js', source: MODULE_SDK_STUB });
-      this.emitFile({
-        type: 'asset',
-        fileName: '__lumen/ui.js',
-        source: '// @lumen/ui not yet packaged — use host components via React props',
-      });
+
+      const uiEntry = path.resolve(projectRoot, 'src/lib/module-ui.ts');
+      if (fs.existsSync(uiEntry)) {
+        const uiResult = await build({
+          entryPoints: [uiEntry],
+          bundle: true,
+          format: 'esm',
+          write: false,
+          minify: true,
+          platform: 'browser',
+          external: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+          alias: { '@': path.resolve(projectRoot, 'src') },
+          loader: { '.tsx': 'tsx', '.ts': 'ts' },
+        });
+        this.emitFile({ type: 'asset', fileName: '__lumen/ui.js', source: uiResult.outputFiles[0].text });
+      }
     },
   };
 }
