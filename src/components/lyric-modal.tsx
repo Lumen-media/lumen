@@ -14,18 +14,18 @@ import { LyricBackgroundModal, type LyricBackgroundModalRef } from './lyric-back
 import { TextEditor, type TextEditorRef } from './text-editor';
 import { Button } from './ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from './ui/card';
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from './ui/combobox';
 import { Dialog, DialogClose, DialogContent } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
 import { Separator } from './ui/separator';
 import { Toggle } from './ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
@@ -335,30 +335,33 @@ export const LyricModal = () => {
                     <CardHeader className="p-4 flex-row items-center gap-7">
                       <h4 className="uppercase">{t('Theme Settings')}</h4>
 
-                      <Select
+                      <Combobox
                         value={selectedFont}
                         onValueChange={(val) => form.setFieldValue('font', val ?? '')}
                       >
-                        <SelectTrigger className="w-full max-w-44 h-8 bg-background dark:bg-background border-0">
-                          <SelectValue placeholder="Font" />
-                        </SelectTrigger>
-                        <SelectContent
-                          className="min-w-[--anchor-width] w-auto max-w-xs"
+                        <ComboboxInput
+                          className="w-full max-w-44 h-8 bg-background dark:bg-background border-0"
+                          placeholder="Font"
+                        />
+                        <ComboboxContent
+                          className="w-72 max-w-[min(18rem,calc(100dvw-2rem))]"
                           align="center"
                         >
-                          <SelectGroup>
+                          <ComboboxList>
+                            <ComboboxEmpty>{t('No font found.')}</ComboboxEmpty>
                             {fontOptions.map((item) => (
-                              <SelectItem
-                                key={item.value}
-                                value={item.value}
-                                textClassName="whitespace-pre-wrap text-ellipsis line-clamp-2"
-                              >
-                                <span style={{ fontFamily: item.value }}>{item.label}</span>
-                              </SelectItem>
+                              <ComboboxItem key={item.value} value={item.value}>
+                                <span
+                                  className="min-w-0 flex-1 truncate"
+                                  style={{ fontFamily: item.value }}
+                                >
+                                  {item.label}
+                                </span>
+                              </ComboboxItem>
                             ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
+                          </ComboboxList>
+                        </ComboboxContent>
+                      </Combobox>
 
                       <Input
                         className="max-w-24 h-8 bg-background border-0"
