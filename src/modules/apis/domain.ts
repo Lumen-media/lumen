@@ -160,6 +160,11 @@ export function createPlayerHostAPI(): PlayerHostAPI {
   };
 }
 
+listen('module:presenter-window-closed', () => {
+  useModuleStore.getState().clearPresenter();
+  globalBus.emit('presentation:clear');
+}).catch(() => {});
+
 async function ensureMediaWindow(): Promise<void> {
   let win = await WebviewWindow.getByLabel('media-window').catch(() => null);
 

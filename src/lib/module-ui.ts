@@ -11,7 +11,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Toggle, toggleVariants } from "@/components/ui/toggle";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { Combobox } from "@/components/ui/combobox";
+import {
+  Combobox as _Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxGroup,
+  ComboboxLabel,
+  ComboboxCollection,
+  ComboboxEmpty,
+  ComboboxSeparator,
+} from "@/components/ui/combobox";
 
 import {
   Dialog as _Dialog,
@@ -301,6 +312,18 @@ const InputGroup = Object.assign(_InputGroup, {
   InputGroupInput,
   InputGroupText,
   InputGroupTextarea,
+});
+
+const Combobox = Object.assign(_Combobox, {
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxGroup,
+  ComboboxLabel,
+  ComboboxCollection,
+  ComboboxEmpty,
+  ComboboxSeparator,
 });
 
 const ScrollArea = Object.assign(_ScrollArea, {

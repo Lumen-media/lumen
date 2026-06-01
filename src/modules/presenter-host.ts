@@ -80,6 +80,9 @@ export async function createPresenterHost(manifest: ModuleManifest): Promise<Lum
       clear: noop,
       isWindowOpen: stub(true),
     },
+    fonts: {
+      list: stub(Promise.resolve([] as string[])),
+    },
     themes: {
       current: stub({ id: 'default', name: 'Default', colorMode: 'dark' as const, accentId: 'cyan' }),
       list: stub([]),
