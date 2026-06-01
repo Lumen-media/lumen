@@ -11,6 +11,7 @@ import {
   createQueueHostAPI,
   createThemesHostAPI,
 } from './apis/domain';
+import { createFontsAPI } from './apis/fonts';
 import { createFsAPI } from './apis/fs';
 import { createI18nAPI } from './apis/i18n';
 import { createLoggerAPI } from './apis/logger';
@@ -49,6 +50,7 @@ export async function createHost(
     player: createPlayerHostAPI(),
     presentation: createPresentationHostAPI(),
     themes: createThemesHostAPI(),
+    fonts: createFontsAPI(),
 
     fs: createFsAPI(id),
     net: createNetAPI(),

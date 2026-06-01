@@ -218,6 +218,9 @@ function MediaWindowComponent() {
 
   useEffect(() => {
     emit('media-window-ready').catch(() => {});
+    const onUnload = () => emit('module:presenter-window-closed').catch(() => {});
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
   }, []);
 
   useEffect(() => {

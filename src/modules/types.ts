@@ -253,6 +253,10 @@ export interface PlayerHostAPI {
   prev(): void;
 }
 
+export interface FontsAPI {
+  list(): Promise<string[]>;
+}
+
 export interface PresentationHostAPI {
   state(): 'idle' | 'live';
   onStateChange(handler: (state: 'idle' | 'live') => void): Disposable;
@@ -322,6 +326,7 @@ export interface LumenHost {
   player: PlayerHostAPI;
   presentation: PresentationHostAPI;
   themes: ThemesHostAPI;
+  fonts: FontsAPI;
 
   fs: FsAPI;
   net: NetAPI;
