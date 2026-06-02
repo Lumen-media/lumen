@@ -1,6 +1,13 @@
 import { toast } from 'sonner';
 import { useModuleStore } from '../store';
-import type { UIAPI } from '../types';
+import type { SelectedBackground, UIAPI } from '../types';
+
+type BgPickerOpener = (onSelect: (bg: SelectedBackground) => void) => void;
+let _bgPickerOpener: BgPickerOpener | null = null;
+
+export function setBackgroundPickerOpener(fn: BgPickerOpener) {
+  _bgPickerOpener = fn;
+}
 
 export function createUIAPI(openCommandPaletteFn: (prefilter?: string) => void): UIAPI {
   return {
@@ -36,6 +43,10 @@ export function createUIAPI(openCommandPaletteFn: (prefilter?: string) => void):
 
     openDialog(panelId: string) {
       useModuleStore.getState().openDialog(panelId);
+    },
+
+    openBackgroundPicker(onSelect) {
+      _bgPickerOpener?.(onSelect);
     },
   };
 }
