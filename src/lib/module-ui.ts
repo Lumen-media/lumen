@@ -10,6 +10,12 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Toggle, toggleVariants } from "@/components/ui/toggle";
+import { ToggleGroup as _ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  HoverCard as _HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import {
   Combobox as _Combobox,
@@ -330,6 +336,15 @@ const ScrollArea = Object.assign(_ScrollArea, {
   ScrollBar,
 });
 
+const ToggleGroup = Object.assign(_ToggleGroup, {
+  ToggleGroupItem,
+});
+
+const HoverCard = Object.assign(_HoverCard, {
+  HoverCardTrigger,
+  HoverCardContent,
+});
+
 const TextEditor = Object.assign(_TextEditor, {
   Toolbar: TextEditorToolbar,
   BubbleMenu: TextEditorBubbleMenu,
@@ -370,4 +385,6 @@ export {
   TextEditor,
   type TextEditorRef,
   type BubbleMenuItem,
+  ToggleGroup,
+  HoverCard,
 };
