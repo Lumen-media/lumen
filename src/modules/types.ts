@@ -67,12 +67,19 @@ export interface CommandsAPI {
   addPrefix(spec: PrefixSpec): Disposable;
 }
 
+export interface SelectedBackground {
+  type: 'theme' | 'image' | 'video';
+  src: string;
+  name: string;
+}
+
 export interface UIAPI {
   notify(opts: { title?: string; message: string; level?: 'info' | 'warn' | 'error' }): void;
   confirm(opts: { title: string; message: string; danger?: boolean }): Promise<boolean>;
   prompt(opts: { title: string; placeholder?: string; initial?: string }): Promise<string | null>;
   openCommandPalette(prefilter?: string): void;
   openDialog(panelId: string): void;
+  openBackgroundPicker(onSelect: (bg: SelectedBackground) => void): void;
 }
 
 export interface MenuItemSeparator {

@@ -35,6 +35,7 @@ export async function createPresenterHost(manifest: ModuleManifest): Promise<Lum
       prompt: stub(Promise.resolve(null)),
       openCommandPalette: noop,
       openDialog: noop,
+      openBackgroundPicker: noop,
     },
 
     bus: { emit: noop, on: () => noopDisposable },
