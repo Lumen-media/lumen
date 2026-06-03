@@ -3,6 +3,7 @@
 import { readFile } from '@tauri-apps/plugin-fs';
 import { t } from 'i18next';
 import { ImagePlus, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { useBoolean, useOnClickOutside } from 'usehooks-ts';
 import { useTheme } from '@/hooks/use-theme';
@@ -66,7 +67,13 @@ function BackgroundPreview({ background }: { background: Profile['defaultBackgro
   return <img src={src} alt={background.name} className="size-full object-cover" />;
 }
 
+const LANGUAGES = [
+  { value: 'en', label: 'English' },
+  { value: 'pt-BR', label: 'Português (Brasil)' },
+];
+
 export function ThemeSection() {
+  const { i18n: i18nInstance } = useTranslation();
   const { colorMode, accentId } = useTheme();
   const {
     profiles,
@@ -216,6 +223,28 @@ export function ThemeSection() {
                 <SelectContent className="p-1">
                   <SelectItem value="light">{t('Lumen Light')}</SelectItem>
                   <SelectItem value="dark">{t('Lumen Dark')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">{t('Language')}</p>
+              <Select
+                value={i18nInstance.language}
+                onValueChange={(lang) => {
+                  localStorage.setItem('lumen-language', lang);
+                  i18nInstance.changeLanguage(lang).then(() => window.location.reload());
+                }}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LANGUAGES.map((lang) => (
+                    <SelectItem key={lang.value} value={lang.value}>
+                      {lang.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
