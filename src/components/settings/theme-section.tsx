@@ -1,9 +1,8 @@
 'use client';
 
 import { readFile } from '@tauri-apps/plugin-fs';
-import { t } from 'i18next';
+import { useTranslation } from '@/lib/i18n';
 import { ImagePlus, X } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { useBoolean, useOnClickOutside } from 'usehooks-ts';
 import { useTheme } from '@/hooks/use-theme';
@@ -73,7 +72,7 @@ const LANGUAGES = [
 ];
 
 export function ThemeSection() {
-  const { i18n: i18nInstance } = useTranslation();
+  const { t, locale } = useTranslation();
   const { colorMode, accentId } = useTheme();
   const {
     profiles,
@@ -230,10 +229,9 @@ export function ThemeSection() {
             <div className="space-y-1.5">
               <p className="text-sm font-medium">{t('Language')}</p>
               <Select
-                value={i18nInstance.language}
+                value={activeProfile?.language ?? locale}
                 onValueChange={(lang) => {
-                  localStorage.setItem('lumen-language', lang);
-                  i18nInstance.changeLanguage(lang).then(() => window.location.reload());
+                  if (activeProfile) updateProfile(activeProfile.id, { language: lang });
                 }}
               >
                 <SelectTrigger className="w-32">

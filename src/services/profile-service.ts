@@ -5,6 +5,7 @@ import { getProfilesPath } from './app-paths';
 export interface Profile {
   id: string;
   name: string;
+  language?: string;
   colorMode: 'dark' | 'light';
   accentId: string;
   defaultBackground: {

@@ -6,12 +6,14 @@ import {
   saveProfile,
   type Profile,
 } from '@/services/profile-service';
+import { useI18nStore } from '@/lib/i18n';
 import { type AccentId, type ColorMode, useThemeStore } from './theme-store';
 
 function buildDefaultProfile(): Profile {
   return {
     id: 'default',
     name: 'Default',
+    language: localStorage.getItem('lumen-language') ?? 'en',
     colorMode: 'dark',
     accentId: 'cyan',
     defaultBackground: null,
@@ -20,9 +22,11 @@ function buildDefaultProfile(): Profile {
 }
 
 function applyProfile(profile: Profile) {
-  const store = useThemeStore.getState();
-  store.setColorMode(profile.colorMode as ColorMode);
-  store.setAccentId(profile.accentId as AccentId);
+  const theme = useThemeStore.getState();
+  theme.setColorMode(profile.colorMode as ColorMode);
+  theme.setAccentId(profile.accentId as AccentId);
+  const lang = profile.language ?? localStorage.getItem('lumen-language') ?? 'en';
+  useI18nStore.getState().setLocale(lang);
 }
 
 interface ProfileState {
@@ -33,7 +37,7 @@ interface ProfileState {
   createProfile: (name: string) => Promise<void>;
   updateProfile: (
     id: string,
-    patch: Partial<Pick<Profile, 'name' | 'colorMode' | 'accentId' | 'defaultBackground'>>
+    patch: Partial<Pick<Profile, 'name' | 'language' | 'colorMode' | 'accentId' | 'defaultBackground'>>
   ) => Promise<void>;
   removeProfile: (id: string) => Promise<void>;
   resetProfile: (id: string) => Promise<void>;
@@ -98,6 +102,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     set({ profiles: updated });
     if (get().activeProfileId === id) applyProfile(updatedProfile);
   },
+
 
   removeProfile: async (id) => {
     const { profiles, activeProfileId } = get();

@@ -165,7 +165,7 @@ listen('module:presenter-window-closed', () => {
   globalBus.emit('presentation:clear');
 }).catch(() => {});
 
-async function ensureMediaWindow(): Promise<void> {
+async function ensureMediaWindow(): Promise<{ created: boolean }> {
   let win = await WebviewWindow.getByLabel('media-window').catch(() => null);
 
   if (!win) {
@@ -180,15 +180,17 @@ async function ensureMediaWindow(): Promise<void> {
     });
 
     win = await WebviewWindow.getByLabel('media-window').catch(() => null);
+    return { created: true };
   }
 
-  if (win) {
-    const visible = await win.isVisible().catch(() => false);
-    if (!visible) await win.show().catch(() => {});
-  }
+  const visible = await win.isVisible().catch(() => false);
+  if (!visible) await win.show().catch(() => {});
+  return { created: false };
 }
 
 export function createPresentationHostAPI(): PresentationHostAPI {
+  let openedByModule = false;
+
   return {
     state() {
       return useModuleStore.getState().presenterViewId ? 'live' : 'idle';
@@ -199,16 +201,26 @@ export function createPresentationHostAPI(): PresentationHostAPI {
       return { dispose() { onProject.dispose(); onClear.dispose(); } };
     },
     project(viewId, props) {
+      const isFirstProject = useModuleStore.getState().presenterViewId === null;
       useModuleStore.getState().projectPanel(viewId, props);
       globalBus.emit('presentation:project', { viewId, props });
       ensureMediaWindow()
-        .then(() => emit('module:presenter-project', { viewId, props }))
+        .then(({ created }) => {
+          if (isFirstProject && created) openedByModule = true;
+          return emit('module:presenter-project', { viewId, props });
+        })
         .catch(() => {});
     },
     clear() {
       useModuleStore.getState().clearPresenter();
       globalBus.emit('presentation:clear');
       emit('module:presenter-clear').catch(() => {});
+      if (openedByModule) {
+        openedByModule = false;
+        WebviewWindow.getByLabel('media-window')
+          .then((w) => w?.close())
+          .catch(() => {});
+      }
     },
     isWindowOpen() {
       return useModuleStore.getState().presenterViewId !== null;

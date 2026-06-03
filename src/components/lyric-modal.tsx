@@ -1,5 +1,5 @@
 import { useForm } from '@tanstack/react-form';
-import { t } from 'i18next';
+import { useTranslation } from '@/lib/i18n';
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, ImagePlus, Palette } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -197,6 +197,7 @@ const defaultValues: LyricFormValues = {
 };
 
 export const LyricModal = () => {
+  const { t } = useTranslation();
   const { isOpen, filePath, close } = useLyricModalStore();
   const { profiles, activeProfileId } = useProfileStore();
   const activeProfile = profiles.find((p) => p.id === activeProfileId);

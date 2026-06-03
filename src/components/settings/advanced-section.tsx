@@ -1,9 +1,10 @@
 'use client';
 
-import { t } from 'i18next';
+import { useTranslation } from '@/lib/i18n';
 import { Cpu, Globe, MonitorPlay, Shield } from 'lucide-react';
 import { useEffect } from 'react';
 
+import { useAppSettingsStore } from '@/stores/app-settings-store';
 import { useStreamingStore } from '@/stores/streaming-store';
 import { CardContent } from '../ui/card';
 import { Input } from '../ui/input';
@@ -12,7 +13,9 @@ import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
 
 export function AdvancedSection() {
+  const { t } = useTranslation();
   const { config, status, init, updateConfig } = useStreamingStore();
+  const { developerMode, setDeveloperMode } = useAppSettingsStore();
 
   useEffect(() => {
     init().catch(() => {});
@@ -212,6 +215,18 @@ export function AdvancedSection() {
             {t('Streaming tracks are created on-demand and released when subscribers disconnect.')}
           </p>
         </CardContent>
+      </CardContent>
+
+      <CardContent variant="muted" className="gap-3 p-4 rounded-xl">
+        <div className="flex items-center justify-between rounded-lg p-4">
+          <div>
+            <p className="text-sm font-medium">{t('Developer Mode')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('Enable advanced options for module development and debugging.')}
+            </p>
+          </div>
+          <Switch checked={developerMode} onCheckedChange={setDeveloperMode} />
+        </div>
       </CardContent>
     </div>
   );

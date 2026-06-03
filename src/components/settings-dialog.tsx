@@ -1,6 +1,6 @@
 'use client';
 
-import { t } from 'i18next';
+import { useTranslation } from '@/lib/i18n';
 import {
   ChevronDown,
   Info,
@@ -51,6 +51,7 @@ const SECTION_TITLES: Record<SettingsSection, { label: string; title: string; de
 };
 
 export const SettingsDialog = () => {
+  const { t } = useTranslation();
   const version = useAppVersion();
   const { profiles, activeProfileId, resetProfile } = useProfileStore();
   const { isOpen, activeSection, open, close } = useSettingsStore();

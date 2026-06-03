@@ -1,6 +1,6 @@
 'use client';
 
-import { t } from 'i18next';
+import { useTranslation } from '@/lib/i18n';
 import { Loader2, QrCode, RefreshCw } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useEffect, useMemo, useState } from 'react';
@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS: RemoteAccessSettings = {
 };
 
 export function GeneralAccessSection() {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<RemoteAccessSettings>(DEFAULT_SETTINGS);
   const [localIp, setLocalIp] = useState<string>('');
   const [registration, setRegistration] = useState<RegistrationTokenPayload | null>(null);

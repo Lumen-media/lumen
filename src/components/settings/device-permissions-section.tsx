@@ -1,6 +1,6 @@
 'use client';
 
-import { t } from 'i18next';
+import { useTranslation } from '@/lib/i18n';
 import { BookOpen, ImagePlus, Loader2, MonitorPlay, Music, Smartphone, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
@@ -18,14 +18,15 @@ const PERMISSION_FEATURES: Array<{
   label: string;
   icon: ReactNode;
 }> = [
-  { id: 'player', label: 'Player', icon: <Music className="size-3.5" /> },
-  { id: 'lyrics', label: 'Lyrics', icon: <Music className="size-3.5" /> },
-  { id: 'bible', label: 'Bible', icon: <BookOpen className="size-3.5" /> },
-  { id: 'media', label: 'Media', icon: <ImagePlus className="size-3.5" /> },
-  { id: 'streaming', label: 'Streaming', icon: <MonitorPlay className="size-3.5" /> },
-];
+    { id: 'player', label: 'Player', icon: <Music className="size-3.5" /> },
+    { id: 'lyrics', label: 'Lyrics', icon: <Music className="size-3.5" /> },
+    { id: 'bible', label: 'Bible', icon: <BookOpen className="size-3.5" /> },
+    { id: 'media', label: 'Media', icon: <ImagePlus className="size-3.5" /> },
+    { id: 'streaming', label: 'Streaming', icon: <MonitorPlay className="size-3.5" /> },
+  ];
 
 export function DevicePermissionsSection() {
+  const { t } = useTranslation();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -247,7 +248,7 @@ export function DevicePermissionsSection() {
                       </div>
                     </TableCell>
                     <TableCell className="px-4 py-3 text-xs text-muted-foreground">
-                      {formatLastSeen(device.last_connected_at)}
+                      {formatLastSeen(t, device.last_connected_at)}
                     </TableCell>
                     {PERMISSION_FEATURES.map((feature) => (
                       <TableCell key={feature.id} className="px-4 py-3 text-center">
@@ -287,7 +288,7 @@ export function DevicePermissionsSection() {
   );
 }
 
-function formatLastSeen(timestamp?: number | null) {
+function formatLastSeen(t: (key: string) => string, timestamp?: number | null) {
   if (!timestamp) {
     return t('Never');
   }

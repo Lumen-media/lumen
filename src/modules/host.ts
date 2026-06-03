@@ -19,6 +19,7 @@ import { createNetAPI } from './apis/net';
 import { createPanelsAPI } from './apis/panels';
 import { createSettingsAPI } from './apis/settings';
 import { createUIAPI } from './apis/ui';
+import { useI18nStore } from '@/lib/i18n';
 import type { LumenHost, ModuleManifest } from './types';
 
 export async function createHost(
@@ -31,7 +32,7 @@ export async function createHost(
   return {
     meta: { id, version: manifest.version },
     window: 'main',
-    app: { version: appVersion, locale: localStorage.getItem('lumen-language') || navigator.language },
+    app: { version: appVersion, locale: useI18nStore.getState().locale || navigator.language },
 
     panels: createPanelsAPI(id),
     commands: createCommandsAPI(),
