@@ -31,7 +31,7 @@ export async function createHost(
   return {
     meta: { id, version: manifest.version },
     window: 'main',
-    app: { version: appVersion, locale: navigator.language },
+    app: { version: appVersion, locale: localStorage.getItem('lumen-language') || navigator.language },
 
     panels: createPanelsAPI(id),
     commands: createCommandsAPI(),
