@@ -1,6 +1,6 @@
 import { Copy, Minus, Plus, Square, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { TitlebarControlButton } from './control-button';
 import type { DesktopOsType } from './use-os-type';

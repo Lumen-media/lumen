@@ -24,7 +24,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from '@/lib/i18n';
 import { useDebounceValue, useEventListener } from 'usehooks-ts';
 import { cn } from '@/lib/utils';
 import {

@@ -1,7 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { join } from '@tauri-apps/api/path';
 import { exists, mkdir, readDir, remove, stat, writeFile } from '@tauri-apps/plugin-fs';
-import { t } from 'i18next';
+import { useTranslation } from '@/lib/i18n';
 import {
   CheckIcon,
   DownloadIcon,
@@ -222,6 +222,7 @@ function UnsplashImage({ src, alt }: { src: string; alt: string }) {
 }
 
 export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRef> }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<MediaTab>('themes');
   const [selected, setSelected] = useState<SelectedBackground | null>(null);

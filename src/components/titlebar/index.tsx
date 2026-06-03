@@ -1,7 +1,7 @@
 import { PhysicalPosition } from '@tauri-apps/api/window';
 import { MoreHorizontal, Search } from 'lucide-react';
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from '@/lib/i18n';
 import { useEventListener } from 'usehooks-ts';
 import { useCommandStore } from '@/stores/command-store';
 import { Kbd } from '../ui/kbd';

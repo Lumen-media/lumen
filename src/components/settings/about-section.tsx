@@ -1,6 +1,6 @@
 'use client';
 
-import { t } from 'i18next';
+import { useTranslation } from '@/lib/i18n';
 import { ArrowRight, Code2, FileText, Lock, RefreshCw, Shield, Sparkles } from 'lucide-react';
 
 import { useAppVersion } from '@/hooks/use-app-version';
@@ -17,6 +17,7 @@ const RESOURCES = [
 ];
 
 export function AboutSection() {
+  const { t } = useTranslation();
   const version = useAppVersion();
   const { os, arch, memory, gpu } = useSystemInfo();
 

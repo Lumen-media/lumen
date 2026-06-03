@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Pencil } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from '@/lib/i18n';
 import { useEventListener, useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';

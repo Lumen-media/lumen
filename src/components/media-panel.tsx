@@ -12,7 +12,7 @@ import {
   Video,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { DeleteFileAlert } from '@/components/delete-file-alert';
 import { FileListItem } from '@/components/file-list-item';
