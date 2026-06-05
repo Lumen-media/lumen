@@ -63,12 +63,21 @@ export function PresenterSlot() {
     }
     return null;
   });
+
+  const moduleId = useModuleStore<string | null>((s) => {
+    if (!s.presenterViewId) return null;
+    for (const [modId, specs] of s.panels.entries()) {
+      if (specs.some((p) => p.id === s.presenterViewId && p.slot === 'presenter.content')) {
+        return modId;
+      }
+    }
+    return null;
+  });
   const props = useModuleStore((s) => s.presenterProps) as Record<string, unknown>;
 
-  if (!spec) return null;
+  if (!spec || !moduleId) return null;
 
   const Component = spec.component;
-  const moduleId = spec.id.split('.').slice(0, -1).join('.');
   const background = props?.background as string | undefined;
   const bg = background === 'media' ? (props?.backgroundMedia as BackgroundMedia | undefined) : undefined;
 
@@ -77,7 +86,9 @@ export function PresenterSlot() {
       {background === 'default' && <PresenterDefaultBackground />}
       {bg && <PresenterBackground media={bg} />}
       <ModuleErrorBoundary moduleId={moduleId} panelId={spec.id}>
-        <Component {...props} onClose={clearPresenter} />
+        <div data-module-scope={moduleId}>
+          <Component {...props} onClose={clearPresenter} />
+        </div>
       </ModuleErrorBoundary>
     </div>
   );
