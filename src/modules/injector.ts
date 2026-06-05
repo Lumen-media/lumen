@@ -47,6 +47,15 @@ function installGlobalErrorHandlers() {
   });
 }
 
+function scopeModuleStyles(moduleId: string) {
+  const styleEl = document.head.querySelector<HTMLStyleElement>(
+    `style[data-module="${CSS.escape(moduleId)}"]`,
+  );
+  if (styleEl?.textContent) {
+    styleEl.textContent = `@scope ([data-module-scope="${moduleId}"]) {\n${styleEl.textContent}\n}`;
+  }
+}
+
 export async function bootModules() {
   if (!globalHandlersInstalled) {
     installGlobalErrorHandlers();
@@ -105,6 +114,8 @@ export async function loadModule(manifest: ModuleManifest) {
     const trackedHost = wrapHostForTracking(host, disposables);
 
     await plugin.onload(trackedHost);
+
+    scopeModuleStyles(manifest.id);
 
     loaded.set(manifest.id, { plugin, disposables, errorTimestamps: [] });
     store.setStatus(manifest.id, 'active');
