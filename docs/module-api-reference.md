@@ -527,6 +527,47 @@ Exposed on the host but still only wired via bus — read methods return empty/d
 
 ---
 
+## `host.themes` — background APIs ✅
+
+Two methods on `host.themes` are fully implemented and read real profile state.
+
+### `defaultBackground()`
+
+Returns the active profile's default background, or `null` if none is set.
+
+```ts
+const bg = host.themes.defaultBackground()
+// { type: 'theme' | 'image' | 'video', src: string, name: string } | null
+```
+
+> **Do not call this at `onload` and store the result.** The profile store may not be hydrated yet when the module loads — `defaultBackground()` can return `null` even when a background is configured. Use `onDefaultBackgroundChange` instead.
+
+### `onDefaultBackgroundChange(handler)`
+
+Subscribes to background changes and fires immediately with the current value once the profile store is ready. The handler receives a blob URL — the host reads the file using Lumen's own filesystem access before calling back.
+
+```ts
+// In onload:
+const hostExt = host as unknown as {
+  themes: {
+    onDefaultBackgroundChange?: (
+      handler: (bg: { src: string; type: string; name: string } | null) => void
+    ) => { dispose(): void }
+  }
+}
+
+hostExt.themes.onDefaultBackgroundChange?.((bg) => {
+  if (!bg) return
+  // bg.src is already a blob URL — safe to use directly in <img> or CSS
+})
+```
+
+**Why the cast?** This method is not yet in the public SDK types (`ThemesHostAPI`). It exists on the Lumen runtime but is accessed via `as unknown as` until the next SDK minor adds it.
+
+**Why not use `host.fs.read()` yourself?** Module file access (`host.fs`) is sandboxed to the module's own data directory. Reading arbitrary paths from the host filesystem (e.g. theme image files stored under `lumen/files/media/themes/`) will throw `path traversal attempt blocked`. The host reads those files on your behalf and delivers a blob URL.
+
+---
+
 ## `host.menus` ✅
 
 Registers menus and menu items in the application titlebar.
