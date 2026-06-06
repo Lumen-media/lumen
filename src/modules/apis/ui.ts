@@ -1,3 +1,4 @@
+import { readFile } from '@tauri-apps/plugin-fs';
 import { toast } from 'sonner';
 import { useModuleStore } from '../store';
 import type { SelectedBackground, UIAPI } from '../types';
@@ -46,7 +47,16 @@ export function createUIAPI(openCommandPaletteFn: (prefilter?: string) => void):
     },
 
     openBackgroundPicker(onSelect) {
-      _bgPickerOpener?.(onSelect);
+      if (!_bgPickerOpener) return;
+      _bgPickerOpener((bg) => {
+        const src = bg.src ?? '';
+        const isFilePath = src && !src.startsWith('blob:') && !src.startsWith('http') && !src.startsWith('data:');
+        if (!isFilePath) { onSelect(bg); return; }
+        readFile(src)
+          .then((bytes) => URL.createObjectURL(new Blob([bytes])))
+          .then((blobUrl) => onSelect({ ...bg, src: blobUrl }))
+          .catch(() => onSelect(bg));
+      });
     },
   };
 }
