@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { emit, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { lyricService } from '@/services/lyric-service';
@@ -16,6 +17,7 @@ import type {
   ThemesHostAPI,
 } from '../types';
 import { globalBus } from './bus';
+import { useProfileStore } from '@/stores/profile-store';
 
 function stripExt(name: string): string {
   return name.replace(/\.[^/.]+$/, '');
@@ -238,6 +240,45 @@ export function createThemesHostAPI(): ThemesHostAPI {
     },
     apply(id) {
       globalBus.emit('themes:apply', { id });
+    },
+    defaultBackground() {
+      const { profiles, activeProfileId } = useProfileStore.getState();
+      const profile = profiles.find((p) => p.id === activeProfileId);
+      return profile?.defaultBackground ?? null;
+    },
+    onDefaultBackgroundChange(handler) {
+      let lastSrc: string | null | undefined = undefined;
+
+      const fire = (bg: { src: string; type: 'theme' | 'image' | 'video'; name: string } | null) => {
+        const src = bg?.src ?? null;
+        if (!src || src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:')) {
+          handler(bg);
+          return;
+        }
+        readFile(src)
+          .then((bytes) => URL.createObjectURL(new Blob([bytes])))
+          .then((blobUrl) => handler({ ...bg!, src: blobUrl }))
+          .catch(() => handler(bg));
+      };
+
+      const unsub = useProfileStore.subscribe((state) => {
+        const profile = state.profiles.find((p) => p.id === state.activeProfileId);
+        const bg = profile?.defaultBackground ?? null;
+        const src = bg?.src ?? null;
+        if (src === lastSrc) return;
+        lastSrc = src;
+        fire(bg);
+      });
+
+      const { profiles, activeProfileId } = useProfileStore.getState();
+      const profile = profiles.find((p) => p.id === activeProfileId);
+      const current = profile?.defaultBackground ?? null;
+      if (current?.src) {
+        lastSrc = current.src;
+        fire(current);
+      }
+
+      return { dispose: unsub };
     },
   };
 }
