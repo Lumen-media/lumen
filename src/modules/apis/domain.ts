@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { readFile } from '@tauri-apps/plugin-fs';
+import { thumbnailService } from '@/services/thumbnail-service';
 import { emit, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { lyricService } from '@/services/lyric-service';
@@ -255,9 +256,11 @@ export function createThemesHostAPI(): ThemesHostAPI {
           handler(bg);
           return;
         }
-        readFile(src)
-          .then((bytes) => URL.createObjectURL(new Blob([bytes])))
-          .then((blobUrl) => handler({ ...bg!, src: blobUrl }))
+        Promise.all([
+          readFile(src).then((bytes) => URL.createObjectURL(new Blob([bytes]))),
+          thumbnailService.getThumbnail(src, 200).catch(() => null),
+        ])
+          .then(([blobUrl, thumb]) => handler({ ...bg!, src: blobUrl, ...(thumb ? { thumb } : {}) }))
           .catch(() => handler(bg));
       };
 

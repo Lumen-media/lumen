@@ -285,7 +285,7 @@ export interface ThemesHostAPI {
   list(): ThemeRef[];
   apply(id: string): void;
   defaultBackground(): { src: string; type: 'theme' | 'image' | 'video'; name: string } | null;
-  onDefaultBackgroundChange(handler: (bg: { src: string; type: 'theme' | 'image' | 'video'; name: string } | null) => void): Disposable;
+  onDefaultBackgroundChange(handler: (bg: { src: string; thumb?: string; type: 'theme' | 'image' | 'video'; name: string } | null) => void): Disposable;
 }
 
 export interface FsAPI {
