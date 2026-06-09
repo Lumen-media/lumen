@@ -24,7 +24,7 @@ export class LumenPlugin {
 
 const HOST_DEPS_PROD: Record<string, string> = {
   'react.js': 'react',
-  'react-dom.js': 'react-dom/client',
+  'react-dom.js': 'react-dom',
   'react-jsx-runtime.js': 'react/jsx-runtime',
   'react-jsx-dev-runtime.js': 'react/jsx-dev-runtime',
 };
@@ -166,7 +166,7 @@ export function lumenHostModules(): Plugin {
 
         const DEV_WRAPPERS: Record<string, string> = {
           'react.js': 'react',
-          'react-dom.js': 'react-dom/client',
+          'react-dom.js': 'react-dom',
           'react-jsx-runtime.js': 'react/jsx-runtime',
           'react-jsx-dev-runtime.js': 'react/jsx-dev-runtime',
         };
