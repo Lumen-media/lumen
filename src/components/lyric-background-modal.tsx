@@ -137,6 +137,14 @@ const DEFAULT_IMAGES: UnsplashPhoto[] = [
       small: 'https://images.unsplash.com/photo-1494500764479-0c8f2919a3d8?w=400&q=80&fit=crop',
     },
   },
+  {
+    id: '12',
+    alt_description: 'Milky Way',
+    urls: {
+      raw: 'https://images.unsplash.com/photo-1656464868371-602be27fd4c2',
+      small: 'https://images.unsplash.com/photo-1656464868371-602be27fd4c2?w=400&q=80&fit=crop',
+    },
+  },
 ];
 
 interface MediaThumbnailProps {
