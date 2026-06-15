@@ -88,6 +88,25 @@ export function createQueueHostAPI(): QueueHostAPI {
     markPlayed(id) {
       globalBus.emit('queue:markPlayed', { id });
     },
+    state() {
+      return { items: [], currentIndex: null };
+    },
+    onChange(handler) {
+      return globalBus.on('queue:changed', handler);
+    },
+    next() {
+      globalBus.emit('queue:next');
+    },
+    previous() {
+      globalBus.emit('queue:previous');
+    },
+    goTo(index) {
+      globalBus.emit('queue:goTo', { index });
+    },
+    registerTrigger(spec) {
+      const dispose = useModuleStore.getState().registerQueueTrigger(spec);
+      return { dispose };
+    },
   };
 }
 
