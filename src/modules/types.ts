@@ -201,6 +201,20 @@ export interface QueueItem {
   played: boolean;
 }
 
+export interface QueueState {
+  items: { id: string; title: string }[];
+  currentIndex: number | null;
+}
+
+export interface QueueTriggerSpec {
+  id: string;
+  label: string;
+  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  ConfigComponent: React.ComponentType<{ value: unknown; onChange: (value: unknown) => void }>;
+  defaultConfig: unknown;
+  onFire(config: unknown): void;
+}
+
 export interface QueueHostAPI {
   items(): QueueItem[];
   currentIndex(): number;
@@ -209,6 +223,12 @@ export interface QueueHostAPI {
   reorder(fromIndex: number, toIndex: number): void;
   shuffle(): void;
   markPlayed(id: string): void;
+  state(): QueueState;
+  onChange(handler: (state: QueueState) => void): Disposable;
+  next(): void;
+  previous(): void;
+  goTo(index: number): void;
+  registerTrigger(spec: QueueTriggerSpec): Disposable;
 }
 
 export type MediaType = 'audio' | 'video' | 'image';

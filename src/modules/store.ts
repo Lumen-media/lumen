@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import type { ModuleRecord, ModuleStatus, PanelSpec } from './types';
+import type { ModuleRecord, ModuleStatus, PanelSpec, QueueTriggerSpec } from './types';
 
 interface ModuleStore {
   modules: Map<string, ModuleRecord>;
   panels: Map<string, PanelSpec[]>;
+  queueTriggerSpecs: Map<string, QueueTriggerSpec>;
   openDialogId: string | null;
   presenterViewId: string | null;
   presenterProps: unknown;
@@ -18,6 +19,9 @@ interface ModuleStore {
   removePanelsForModule(moduleId: string): void;
   getPanelsForSlot(slot: string): PanelSpec[];
 
+  registerQueueTrigger(spec: QueueTriggerSpec): () => void;
+  getQueueTriggerSpecs(): QueueTriggerSpec[];
+
   openDialog(id: string): void;
   closeDialog(): void;
   projectPanel(viewId: string, props?: unknown): void;
@@ -27,6 +31,7 @@ interface ModuleStore {
 export const useModuleStore = create<ModuleStore>((set, get) => ({
   modules: new Map(),
   panels: new Map(),
+  queueTriggerSpecs: new Map(),
   openDialogId: null,
   presenterViewId: null,
   presenterProps: undefined,
@@ -98,6 +103,25 @@ export const useModuleStore = create<ModuleStore>((set, get) => ({
       next.delete(moduleId);
       return { panels: next };
     });
+  },
+
+  registerQueueTrigger(spec) {
+    set((s) => {
+      const next = new Map(s.queueTriggerSpecs);
+      next.set(spec.id, spec);
+      return { queueTriggerSpecs: next };
+    });
+    return () => {
+      set((s) => {
+        const next = new Map(s.queueTriggerSpecs);
+        next.delete(spec.id);
+        return { queueTriggerSpecs: next };
+      });
+    };
+  },
+
+  getQueueTriggerSpecs() {
+    return Array.from(get().queueTriggerSpecs.values());
   },
 
   openDialog(id) {
