@@ -282,7 +282,36 @@ if (name !== null) { /* user confirmed */ }
 // Open command palette
 host.ui.openCommandPalette();
 host.ui.openCommandPalette('search');  // with prefilter
+
+// Open the background picker — lets the user choose a theme/image/video background
+host.ui.openBackgroundPicker((bg) => {
+  // bg: { type: 'theme' | 'image' | 'video', src: string, name: string }
+  console.log('Selected background:', bg.src)
+})
+
+// Open the media picker — lets the user choose a library item (image, audio, video, lyric, presentation)
+host.ui.openMediaPicker((item) => {
+  // item: LibraryItem
+  console.log('Selected media:', item.id, item.title, item.type)
+})
 ```
+
+### `LibraryItem`
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` | Library item ID |
+| `title` | `string` | Display name |
+| `type` | `'image' \| 'audio' \| 'video' \| 'lyric' \| 'presentation'` | Media type |
+| `thumbnail` | `string` (optional) | Thumbnail URL/blob |
+
+### `SelectedBackground`
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | `'theme' \| 'image' \| 'video'` | Background type |
+| `src` | `string` | Blob URL or theme identifier |
+| `name` | `string` | Display name |
 
 ---
 
@@ -512,18 +541,80 @@ const locale = host.i18n.locale();
 
 ---
 
+## `host.queue` ⚠️
+
+Read state and navigate the playback queue.
+
+```ts
+// Read current state
+const state = host.queue.state()
+// { items: QueueItem[], currentIndex: number | null }
+
+// Subscribe to changes
+const unsub = host.queue.onChange((state) => {
+  console.log('Current item:', state.items[state.currentIndex ?? 0])
+})
+unsub.dispose()
+
+// Navigation
+host.queue.next()
+host.queue.previous()
+host.queue.goTo(2)   // 0-based index
+```
+
+### `QueueItem`
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` | Unique item identifier |
+| `title` | `string` | Display title |
+
+### `QueueHostAPI`
+
+| Method | Returns | Description |
+|---|---|---|
+| `state()` | `QueueState` | Current items + currentIndex |
+| `onChange(handler)` | `Disposable` | Subscribe to state changes |
+| `next()` | `void` | Advance to next item |
+| `previous()` | `void` | Go to previous item |
+| `goTo(index)` | `void` | Jump to specific index |
+
+> ⚠️ `state()` read and `onChange` work. Write navigation methods (`next`, `previous`, `goTo`) emit via the app event bus.
+
+---
+
+## `host.player` ⚠️
+
+Control the active media player.
+
+```ts
+// Advance to next slide (for presentations/lyrics)
+host.player.nextSlide()
+
+// Play a specific library item by ID
+host.player.play('media-item-id')
+```
+
+### `PlayerHostAPI`
+
+| Method | Returns | Description |
+|---|---|---|
+| `nextSlide()` | `void` | Advances to next slide in the active presentation/lyric |
+| `play(itemId)` | `void` | Plays the library item with the given ID |
+
+> ⚠️ Methods emit via bus — full read state (`current()`, `state()`, `volume()`) not yet wired.
+
+---
+
 ## Domain APIs 🚧
 
-Exposed on the host but still only wired via bus — read methods return empty/default data. Use them only to emit events for now; to react to real app state, prefer `host.bus.on(...)`.
+Still only wired via bus — read methods return empty/default data.
 
 | API | Read methods | Write methods |
 |---|---|---|
 | `host.lyrics` | `list()` → `[]`, `get()` → `null`, `currentSlide()` → `null` | `advance()`, `back()` emit on bus |
-| `host.queue` | `items()` → `[]`, `currentIndex()` → `-1` | `add()`, `remove()`, `reorder()`, `shuffle()`, `markPlayed()` emit on bus |
 | `host.library` | `list()` → `[]`, `get()` → `null` | — |
-| `host.player` | `current()` → `null`, `state()` → `'idle'`, `volume()` → `1` | `play()`, `pause()`, `seek()`, `next()`, `prev()` emit on bus |
 | `host.presentation` | `state()` → `'idle'`, `isWindowOpen()` → `false` | `project()`, `clear()` emit on bus |
-| `host.themes` | `current()` → default theme, `list()` → `[default theme]` | `apply()` emits on bus |
 
 ---
 
@@ -660,6 +751,51 @@ host.menus.register({
 | `'live'` | Live |
 | `'modules'` | Modules |
 | `'help'` | Help |
+
+---
+
+## `host.queue.registerTrigger` 🚧 (planned)
+
+Registers a custom trigger that users can attach to queue items. When the queue item plays, Lumen calls `onFire` with the saved config.
+
+```ts
+import { Timer } from 'lucide-react'
+
+host.queue.registerTrigger({
+  id: 'my-module.timer',
+  label: 'Countdown Timer',
+  icon: Timer,
+  ConfigComponent: TimerConfig,   // React component for configuration UI
+  defaultConfig: { totalSeconds: 300 },
+  onFire(config) {
+    // called when the queue item this trigger is attached to starts playing
+    startMyTimer(config.totalSeconds)
+  },
+})
+```
+
+### How it works in the app
+
+1. User right-clicks a queue item → context menu shows a "Triggers" submenu listing registered triggers
+2. User selects a trigger → a popover opens with `ConfigComponent` rendered
+3. User configures and confirms → trigger instance saved on that queue item
+4. Queue item plays → Lumen calls `onFire(config)`
+5. Queue item shows a small chip badge indicating a trigger is attached
+
+### `QueueTriggerSpec<T>`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | ✓ | Unique identifier (`module-id.name`) |
+| `label` | `string` | ✓ | Displayed in the context menu and chip badge |
+| `icon` | `ComponentType` | | Lucide or custom icon |
+| `ConfigComponent` | `ComponentType<{ value: T; onChange: (v: T) => void }>` | ✓ | Rendered in the config popover |
+| `defaultConfig` | `T` | ✓ | Initial value for new trigger instances |
+| `onFire` | `(config: T) => void` | ✓ | Called when the queue item plays |
+
+Returns a `Disposable` — registered trigger is removed on module unload.
+
+> 🚧 `registerTrigger` is not yet implemented in the Lumen app or the SDK. The spec and module-side implementation can be written in advance. See `docs/plan.md` for the full design.
 
 ---
 
