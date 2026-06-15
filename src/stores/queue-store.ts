@@ -20,6 +20,7 @@ interface QueueStore {
   shiftQueue: (excludePath?: string) => Promise<FileInfo | null>;
   clearQueue: () => Promise<void>;
   shuffleQueue: () => Promise<void>;
+  reorderQueue: (orderedIds: number[]) => Promise<void>;
   updateMetadata: (filePath: string, metadata: { duration?: number; title?: string; artist?: string }) => Promise<void>;
 }
 
@@ -91,6 +92,14 @@ export const useQueueStore = create<QueueStore>((set) => ({
     await queueDbService.loadQueue().then((items) => {
       set({ queue: items.map((item) => ({ id: item.id, file: item, played: item.played })) });
     });
+  },
+
+  reorderQueue: async (orderedIds) => {
+    set((s) => {
+      const map = new Map(s.queue.map((item) => [item.id, item]));
+      return { queue: orderedIds.map((id) => map.get(id)!).filter(Boolean) };
+    });
+    await queueDbService.reorderQueue(orderedIds);
   },
 
   updateMetadata: async (filePath, metadata) => {

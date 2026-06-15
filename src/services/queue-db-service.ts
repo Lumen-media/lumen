@@ -155,6 +155,13 @@ class QueueDbService {
     await db.execute('DELETE FROM queue');
   }
 
+  async reorderQueue(orderedIds: number[]): Promise<void> {
+    const db = await this.ready();
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.execute('UPDATE queue SET position = $1 WHERE id = $2', [i, orderedIds[i]]);
+    }
+  }
+
   async shuffleQueue(): Promise<void> {
     const db = await this.ready();
     const rows = await db.select<QueueRow[]>('SELECT * FROM queue ORDER BY position ASC');
