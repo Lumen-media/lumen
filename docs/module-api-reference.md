@@ -754,9 +754,9 @@ host.menus.register({
 
 ---
 
-## `host.queue.registerTrigger` 🚧 (planned)
+## `host.queue.registerTrigger`
 
-Registers a custom trigger that users can attach to queue items. When the queue item plays, Lumen calls `onFire` with the saved config.
+Registers a custom trigger in the queue. Active triggers fire whenever any queue item plays.
 
 ```ts
 import { Timer } from 'lucide-react'
@@ -776,11 +776,11 @@ host.queue.registerTrigger({
 
 ### How it works in the app
 
-1. User right-clicks a queue item → context menu shows a "Triggers" submenu listing registered triggers
-2. User selects a trigger → a popover opens with `ConfigComponent` rendered
-3. User configures and confirms → trigger instance saved on that queue item
-4. Queue item plays → Lumen calls `onFire(config)`
-5. Queue item shows a small chip badge indicating a trigger is attached
+1. User right-clicks anywhere in the queue area → context menu shows registered triggers directly
+2. User clicks a trigger → a dialog opens with `ConfigComponent` rendered
+3. User configures and confirms → trigger instance saved to the queue
+4. Any queue item plays → Lumen calls `onFire(config)` for all active trigger instances
+5. Active triggers are shown in a "Queue Triggers" section at the bottom of the queue panel
 
 ### `QueueTriggerSpec<T>`
 
@@ -795,7 +795,6 @@ host.queue.registerTrigger({
 
 Returns a `Disposable` — registered trigger is removed on module unload.
 
-> 🚧 `registerTrigger` is not yet implemented in the Lumen app or the SDK. The spec and module-side implementation can be written in advance. See `docs/plan.md` for the full design.
 
 ---
 
