@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { CheckCircle2, ListX, X, Zap } from 'lucide-react';
+import { CheckCircle2, ListX, Tag, X, Zap } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -42,11 +42,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
-
+import type { QueueTriggerSpec } from '@/modules/types';
+import { useQueueEntriesStore, type ListEntry, type TriggerInstance } from '@/stores/queue-entries-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { type QueueItem, useQueueStore } from '@/stores/queue-store';
 
-type TriggerInstance = { id: string; triggerId: string; config: unknown };
 type TriggerDialog = {
   triggerId: string;
   config: unknown;
@@ -174,9 +174,16 @@ function QueueTab({
   const currentFilePath = usePlayerStore((s) => s.currentFilePath);
   const triggerSpecsMap = useModuleStore((s) => s.queueTriggerSpecs);
   const triggerSpecs = Array.from(triggerSpecsMap.values());
-  const [triggerInstances, setTriggerInstances] = useState<TriggerInstance[]>([]);
+
+  const entries = useQueueEntriesStore((s) => s.entries);
+  const { syncQueue, setEntries } = useQueueEntriesStore.getState();
+
   const [triggerDialog, setTriggerDialog] = useState<TriggerDialog>(null);
   const [contextTargetItem, setContextTargetItem] = useState<QueueItem | null>(null);
+
+  useEffect(() => {
+    syncQueue(queue);
+  }, [queue]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -186,10 +193,15 @@ function QueueTab({
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = queue.findIndex((i) => String(i.id) === String(active.id));
-    const newIndex = queue.findIndex((i) => String(i.id) === String(over.id));
-    if (oldIndex === -1 || newIndex === -1) return;
-    onReorder(arrayMove(queue, oldIndex, newIndex).map((i) => i.id));
+    const oldIdx = entries.findIndex((e) => e.id === String(active.id));
+    const newIdx = entries.findIndex((e) => e.id === String(over.id));
+    if (oldIdx === -1 || newIdx === -1) return;
+    const next = arrayMove(entries, oldIdx, newIdx);
+    setEntries(next);
+    const orderedQueueIds = next
+      .filter((e): e is Extract<ListEntry, { kind: 'item' }> => e.kind === 'item')
+      .map((e) => e.item.id);
+    onReorder(orderedQueueIds);
   }
 
   function openAddTrigger(triggerId: string) {
@@ -205,26 +217,23 @@ function QueueTab({
   function saveTrigger() {
     if (!triggerDialog) return;
     const { triggerId, config, instanceId } = triggerDialog;
-    setTriggerInstances((prev) => {
-      if (instanceId) {
-        return prev.map((i) => (i.id === instanceId ? { ...i, config } : i));
-      }
-      return [...prev, { id: crypto.randomUUID(), triggerId, config }];
-    });
+    if (instanceId) {
+      setEntries(
+        entries.map((e) =>
+          e.kind === 'trigger' && e.id === instanceId
+            ? { ...e, inst: { ...e.inst, config } }
+            : e
+        )
+      );
+    } else {
+      const newInst: TriggerInstance = { id: crypto.randomUUID(), triggerId, config, showLabel: false };
+      setEntries([...entries, { kind: 'trigger', id: newInst.id, inst: newInst }]);
+    }
     setTriggerDialog(null);
   }
 
-  function removeTriggerInstance(instanceId: string) {
-    setTriggerInstances((prev) => prev.filter((i) => i.id !== instanceId));
-  }
-
-  function handlePlay(item: QueueItem) {
-    onPlay(item);
-    const specs = useModuleStore.getState().getQueueTriggerSpecs();
-    for (const inst of triggerInstances) {
-      const spec = specs.find((s) => s.id === inst.triggerId);
-      spec?.onFire(inst.config);
-    }
+  function removeTriggerInstance(entryId: string) {
+    setEntries(entries.filter((e) => e.id !== entryId));
   }
 
   const formatDuration = (seconds?: number) => {
@@ -239,15 +248,11 @@ function QueueTab({
     | React.ComponentType<{ value: unknown; onChange: (v: unknown) => void }>
     | undefined;
 
-  const currentItemIndex = currentFilePath
-    ? queue.findIndex((item) => item.file.path === currentFilePath)
-    : -1;
-
-  const isPlaying = currentItemIndex >= 0;
-  const currentItem = isPlaying ? queue[currentItemIndex] : null;
-  const upNextItems = isPlaying
-    ? [...queue.slice(0, currentItemIndex), ...queue.slice(currentItemIndex + 1)]
-    : queue;
+  const itemPositions = new Map<string, number>();
+  let pos = 0;
+  for (const entry of entries) {
+    if (entry.kind === 'item') itemPositions.set(entry.id, pos++);
+  }
 
   if (queue.length === 0) {
     return (
@@ -269,90 +274,50 @@ function QueueTab({
               modifiers={[restrictToVerticalAxis, restrictToParentElement]}
             >
               <SortableContext
-                items={queue.map((i) => String(i.id))}
+                items={entries.map((e) => e.id)}
                 strategy={verticalListSortingStrategy}
               >
-                {currentItem && (
-                  <div className="px-4 pt-4 pb-2">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
-                      Now Playing
-                    </h3>
-                    <SortableQueueItem
-                      item={currentItem}
-                      isCurrent
-                      onPlay={handlePlay}
-                      onContextMenu={() => setContextTargetItem(currentItem)}
-                      formatDuration={formatDuration}
-                    />
-                  </div>
-                )}
-
-                {upNextItems.length > 0 && (
-                  <div className="px-4 pb-4 pt-2">
-                    {isPlaying && (
-                      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
-                        Up Next
-                      </h3>
-                    )}
-                    <div className="space-y-1">
-                      {upNextItems.map((item, idx) => (
+                <div className="px-4 py-3 space-y-1">
+                  {entries.map((entry) => {
+                    if (entry.kind === 'item') {
+                      const isCurrent = entry.item.file.path === currentFilePath;
+                      return (
                         <SortableQueueItem
-                          key={item.id}
-                          item={item}
-                          isCurrent={false}
-                          index={isPlaying ? (idx < currentItemIndex ? idx : idx + 1) : idx}
-                          onPlay={handlePlay}
-                          onContextMenu={() => setContextTargetItem(item)}
+                          key={entry.id}
+                          sortableId={entry.id}
+                          item={entry.item}
+                          isCurrent={isCurrent}
+                          index={itemPositions.get(entry.id) ?? 0}
+                          onPlay={onPlay}
+                          onContextMenu={() => setContextTargetItem(entry.item)}
                           formatDuration={formatDuration}
                         />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </SortableContext>
-            </DndContext>
-
-            {triggerInstances.length > 0 && (
-              <div className="px-4 pb-3">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
-                  Queue Triggers
-                </h3>
-                <div className="flex flex-col gap-1">
-                  {triggerInstances.map((inst) => {
-                    const spec = triggerSpecs.find((s) => s.id === inst.triggerId);
+                      );
+                    }
+                    const spec = triggerSpecs.find((s) => s.id === entry.inst.triggerId);
                     if (!spec) return null;
                     return (
-                      <div
-                        key={inst.id}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] font-medium"
-                        style={{
-                          background: 'color-mix(in srgb, var(--primary) 10%, transparent)',
-                          color: 'var(--primary)',
-                        }}
-                      >
-                        {spec.icon ? <spec.icon size={11} /> : <Zap size={11} />}
-                        <button
-                          type="button"
-                          onClick={() => openEditTrigger(inst)}
-                          className="bg-transparent border-none p-0 cursor-pointer flex-1 text-left"
-                          style={{ color: 'inherit' }}
-                        >
-                          {spec.label}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeTriggerInstance(inst.id)}
-                          className="bg-transparent border-none p-0 cursor-pointer opacity-50 hover:opacity-100"
-                          style={{ color: 'inherit' }}
-                        >
-                          <X size={10} />
-                        </button>
-                      </div>
+                      <SortableTriggerItem
+                        key={entry.id}
+                        inst={entry.inst}
+                        spec={spec}
+                        onEdit={() => openEditTrigger(entry.inst)}
+                        onRemove={() => removeTriggerInstance(entry.id)}
+                        onToggleLabel={() =>
+                          setEntries(
+                            entries.map((e) =>
+                              e.id === entry.id && e.kind === 'trigger'
+                                ? { ...e, inst: { ...e.inst, showLabel: !e.inst.showLabel } }
+                                : e
+                            )
+                          )
+                        }
+                      />
                     );
                   })}
                 </div>
-              </div>
-            )}
+              </SortableContext>
+            </DndContext>
           </ScrollArea>
 
           <div className="border-t border-border p-3 shrink-0 flex gap-2">
@@ -439,6 +404,7 @@ function QueueTab({
 }
 
 function SortableQueueItem({
+  sortableId,
   item,
   isCurrent,
   index,
@@ -446,6 +412,7 @@ function SortableQueueItem({
   onContextMenu,
   formatDuration,
 }: {
+  sortableId: string;
   item: QueueItem;
   isCurrent: boolean;
   index?: number;
@@ -454,7 +421,7 @@ function SortableQueueItem({
   formatDuration: (s?: number) => string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: String(item.id),
+    id: sortableId,
   });
 
   return (
@@ -498,6 +465,83 @@ function SortableQueueItem({
           </div>
           <div className="text-xs text-muted-foreground font-medium shrink-0 ml-2">
             {formatDuration(item.file.duration)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SortableTriggerItem({
+  inst,
+  spec,
+  onEdit,
+  onRemove,
+  onToggleLabel,
+}: {
+  inst: TriggerInstance;
+  spec: QueueTriggerSpec;
+  onEdit: () => void;
+  onRemove: () => void;
+  onToggleLabel: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: inst.id,
+  });
+
+  const SummaryComp = spec.SummaryComponent as
+    | React.ComponentType<{ value: unknown; onEdit: () => void }>
+    | undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        onDoubleClick={onEdit}
+        className="flex items-center rounded-lg touch-none select-none border border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors"
+      >
+        <div className="flex flex-1 items-center justify-between min-w-0 px-3 py-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {spec.icon ? (
+              <spec.icon size={14} className="text-primary shrink-0" />
+            ) : (
+              <Zap size={14} className="text-primary shrink-0" />
+            )}
+            <div className="flex flex-col min-w-0">
+              {inst.showLabel && (
+                <span className="font-semibold text-sm text-primary leading-tight line-clamp-1">
+                  {spec.label}
+                </span>
+              )}
+              {SummaryComp && (
+                <SummaryComp value={inst.config} onEdit={onEdit} />
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-0.5 shrink-0 ml-2">
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={onToggleLabel}
+              className={cn(
+                'p-0.5 rounded bg-transparent border-none cursor-pointer text-primary transition-opacity',
+                inst.showLabel ? 'opacity-70 hover:opacity-100' : 'opacity-25 hover:opacity-60'
+              )}
+            >
+              <Tag size={11} />
+            </button>
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={onRemove}
+              className="p-0.5 rounded opacity-50 hover:opacity-100 text-primary bg-transparent border-none cursor-pointer"
+            >
+              <X size={12} />
+            </button>
           </div>
         </div>
       </div>
