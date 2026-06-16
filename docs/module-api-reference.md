@@ -756,7 +756,7 @@ host.menus.register({
 
 ## `host.queue.registerTrigger`
 
-Registers a custom trigger in the queue. Active triggers fire whenever any queue item plays.
+Registers a queue trigger. Triggers are placed **between** items in the queue and intercept the auto-advance flow — when the item before the trigger finishes playing, the trigger fires before the next item loads.
 
 ```ts
 import { Timer } from 'lucide-react'
@@ -765,33 +765,69 @@ host.queue.registerTrigger({
   id: 'my-module.timer',
   label: 'Countdown Timer',
   icon: Timer,
-  ConfigComponent: TimerConfig,   // React component for configuration UI
+  ConfigComponent: TimerConfig,
+  SummaryComponent: TimerSummary,   // optional — shown inline in the queue item
   defaultConfig: { totalSeconds: 300 },
   onFire(config) {
-    // called when the queue item this trigger is attached to starts playing
     startMyTimer(config.totalSeconds)
+    // call host.queue.next() when done to advance to the next queue item
   },
 })
 ```
 
+### Auto-advance flow
+
+Triggers intercept the queue's auto-advance — they do **not** fire when the user manually plays an item.
+
+```
+[Video A ends] → advanceQueue() finds trigger T between A and B
+              → calls T.onFire(config)          ← your module runs
+              → queue pauses here
+              → module calls host.queue.next()  ← when done
+              → advanceQueue() resumes, finds Video B
+              → Video B plays
+```
+
+The trigger is responsible for calling `host.queue.next()` when it's done — that's what unblocks the queue. Multiple triggers between the same two items fire in order, each waiting for `next()` before the next fires.
+
 ### How it works in the app
 
-1. User right-clicks anywhere in the queue area → context menu shows registered triggers directly
-2. User clicks a trigger → a dialog opens with `ConfigComponent` rendered
-3. User configures and confirms → trigger instance saved to the queue
-4. Any queue item plays → Lumen calls `onFire(config)` for all active trigger instances
-5. Active triggers are shown in a "Queue Triggers" section at the bottom of the queue panel
+1. User right-clicks anywhere in the queue panel → context menu shows registered trigger types
+2. User selects a trigger type → config dialog opens with `ConfigComponent` rendered
+3. User confirms → trigger instance is inserted into the queue as a draggable item
+4. Trigger instances can be dragged to any position between queue items
+5. Each trigger item has a label toggle (tag icon) — hides or shows the spec label text
+6. `SummaryComponent` (if provided) renders inside the item to show config values compactly
 
 ### `QueueTriggerSpec<T>`
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | `string` | ✓ | Unique identifier (`module-id.name`) |
-| `label` | `string` | ✓ | Displayed in the context menu and chip badge |
+| `label` | `string` | ✓ | Shown in the context menu and togglable in the queue item |
 | `icon` | `ComponentType` | | Lucide or custom icon |
-| `ConfigComponent` | `ComponentType<{ value: T; onChange: (v: T) => void }>` | ✓ | Rendered in the config popover |
+| `ConfigComponent` | `ComponentType<{ value: T; onChange: (v: T) => void }>` | ✓ | Rendered in the config dialog |
+| `SummaryComponent` | `ComponentType<{ value: T; onEdit: () => void }>` | | Compact inline display of the config — rendered inside the queue item |
 | `defaultConfig` | `T` | ✓ | Initial value for new trigger instances |
-| `onFire` | `(config: T) => void` | ✓ | Called when the queue item plays |
+| `onFire` | `(config: T) => void` | ✓ | Called when the queue auto-advances past this trigger |
+
+### `SummaryComponent`
+
+When provided, `SummaryComponent` is rendered inside the trigger's queue item instead of (or alongside) the label. Use it to show a compact representation of the current config — e.g. a countdown module showing `"5:00"` instead of `"Wait (Countdown)"`.
+
+```tsx
+function TimerSummary({ value, onEdit }: { value: TimerConfig; onEdit: () => void }) {
+  const mins = Math.floor(value.totalSeconds / 60)
+  const secs = value.totalSeconds % 60
+  return (
+    <button onClick={onEdit} className="font-mono text-sm text-primary">
+      {mins}:{String(secs).padStart(2, '0')}
+    </button>
+  )
+}
+```
+
+`onEdit` opens the standard config dialog when called. The summary is display-only by default — clicking it is the recommended way to open the edit dialog from a custom component.
 
 Returns a `Disposable` — registered trigger is removed on module unload.
 
