@@ -211,6 +211,7 @@ export interface QueueTriggerSpec {
   label: string;
   icon?: React.ComponentType<{ size?: number; className?: string }>;
   ConfigComponent: React.ComponentType<{ value: unknown; onChange: (value: unknown) => void }>;
+  SummaryComponent?: React.ComponentType<{ value: unknown; onEdit: () => void }>;
   defaultConfig: unknown;
   onFire(config: unknown): void;
 }

@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { getSetting, saveSetting } from '@/services/db';
 import { remoteSyncService } from '@/services/remote-sync-service';
 import { useQueueStore } from '@/stores/queue-store';
+import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 
 interface PlayerStore {
   localTime: number;
@@ -186,12 +187,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       void broadcastPlayerSync(get, 'stop');
       invoke('push_stream_blank').catch(() => {});
 
-      useQueueStore
-        .getState()
-        .shiftQueue(get().currentFilePath ?? undefined)
-        .then((next) => {
-          if (next) get().loadFile(next.path);
-        });
+      const result = useQueueEntriesStore.getState().advanceQueue(get().currentFilePath);
+      if (result.type === 'play') {
+        void get().loadFile(result.path);
+      }
     });
 
     const unlistenSetVolume = listen<number>('set-volume', (event) => {
