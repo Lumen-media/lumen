@@ -6,6 +6,8 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { lyricService } from '@/services/lyric-service';
 import { mediaDbService } from '@/services/media-db-service';
 import { useModuleStore } from '../store';
+import { usePlayerStore } from '@/stores/player-store';
+import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 import type {
   LibraryHostAPI,
   LyricsHostAPI,
@@ -95,7 +97,12 @@ export function createQueueHostAPI(): QueueHostAPI {
       return globalBus.on('queue:changed', handler);
     },
     next() {
-      globalBus.emit('queue:next');
+      const result = useQueueEntriesStore.getState().advanceQueue(
+        usePlayerStore.getState().currentFilePath
+      );
+      if (result.type === 'play') {
+        void usePlayerStore.getState().loadFile(result.path);
+      }
     },
     previous() {
       globalBus.emit('queue:previous');
