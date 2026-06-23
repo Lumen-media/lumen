@@ -60,6 +60,7 @@ async fn create_window(
     app_handle: tauri::AppHandle,
     label: String,
     title: String,
+    route: Option<String>,
     window_state: State<'_, WindowState>,
 ) -> Result<(), String> {
     let main_window = app_handle
@@ -110,7 +111,7 @@ async fn create_window(
     let window = tauri::WebviewWindowBuilder::new(
         &app_handle,
         &label,
-        tauri::WebviewUrl::App("/media-window".into()),
+        tauri::WebviewUrl::App(route.unwrap_or_else(|| "/media-window".to_string()).into()),
     )
     .title(&title)
     .decorations(false)

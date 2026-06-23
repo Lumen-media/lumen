@@ -16,6 +16,7 @@ import type {
   MediaType as PublicMediaType,
   PlayerHostAPI,
   PresentationHostAPI,
+  OverlayHostAPI,
   QueueHostAPI,
   ThemesHostAPI,
 } from '../types';
@@ -194,6 +195,13 @@ listen('module:presenter-window-closed', () => {
   globalBus.emit('presentation:clear');
 }).catch(() => {});
 
+listen('module:overlay-window-closed', () => {
+  overlayViewId = null;
+  globalBus.emit('overlay:clear');
+}).catch(() => {});
+
+let overlayViewId: string | null = null;
+
 async function ensureMediaWindow(): Promise<{ created: boolean }> {
   let win = await WebviewWindow.getByLabel('media-window').catch(() => null);
 
@@ -217,6 +225,33 @@ async function ensureMediaWindow(): Promise<{ created: boolean }> {
   return { created: false };
 }
 
+async function ensureOverlayWindow(): Promise<{ created: boolean }> {
+  let win = await WebviewWindow.getByLabel('module-overlay-window').catch(() => null);
+
+  if (!win) {
+    await invoke('create_window', {
+      label: 'module-overlay-window',
+      title: 'Module Overlay',
+      route: '/module-overlay-window',
+    }).catch(() => {});
+
+    await new Promise<void>((resolve) => {
+      const fallback = setTimeout(resolve, 6000);
+      listen('module:overlay-ready', () => {
+        clearTimeout(fallback);
+        resolve();
+      }).catch(() => {});
+    });
+
+    win = await WebviewWindow.getByLabel('module-overlay-window').catch(() => null);
+    if (win) await win.show().catch(() => {});
+    return { created: true };
+  }
+
+  const visible = await win.isVisible().catch(() => false);
+  if (!visible) await win.show().catch(() => {});
+  return { created: false };
+}
 export function createPresentationHostAPI(): PresentationHostAPI {
   let openedByModule = false;
 
@@ -257,6 +292,36 @@ export function createPresentationHostAPI(): PresentationHostAPI {
   };
 }
 
+export function createOverlayHostAPI(): OverlayHostAPI {
+  return {
+    state() {
+      return overlayViewId ? 'live' : 'idle';
+    },
+    onStateChange(handler) {
+      const onProject = globalBus.on('overlay:project', () => handler('live'));
+      const onClear = globalBus.on('overlay:clear', () => handler('idle'));
+      return { dispose() { onProject.dispose(); onClear.dispose(); } };
+    },
+    project(viewId, props) {
+      overlayViewId = viewId;
+      globalBus.emit('overlay:project', { viewId, props });
+      ensureOverlayWindow()
+        .then(() => emit('module:overlay-project', { viewId, props }))
+        .catch(() => {});
+    },
+    clear() {
+      overlayViewId = null;
+      globalBus.emit('overlay:clear');
+      emit('module:overlay-clear').catch(() => {});
+      WebviewWindow.getByLabel('module-overlay-window')
+        .then((window) => window?.close())
+        .catch(() => {});
+    },
+    isWindowOpen() {
+      return overlayViewId !== null;
+    },
+  };
+}
 export function createThemesHostAPI(): ThemesHostAPI {
   return {
     current() {
