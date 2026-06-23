@@ -197,10 +197,17 @@ listen('module:presenter-window-closed', () => {
 
 listen('module:overlay-window-closed', () => {
   overlayViewId = null;
+  overlayProps = undefined;
   globalBus.emit('overlay:clear');
 }).catch(() => {});
 
+listen('module:overlay-ready', () => {
+  if (!overlayViewId) return;
+  emit('module:overlay-project', { viewId: overlayViewId, props: overlayProps }).catch(() => {});
+}).catch(() => {});
+
 let overlayViewId: string | null = null;
+let overlayProps: unknown;
 
 async function ensureMediaWindow(): Promise<{ created: boolean }> {
   let win = await WebviewWindow.getByLabel('media-window').catch(() => null);
