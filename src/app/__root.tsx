@@ -15,21 +15,29 @@ export const Route = createRootRoute({
   component: RootComponent,
 });
 
+const AUXILIARY_WINDOW_PATHS = new Set(['/media-window', '/module-overlay-window']);
+
 function RootComponent() {
-  useSingleInstance();
+  const isAuxiliaryWindow = AUXILIARY_WINDOW_PATHS.has(window.location.pathname);
+
+  useSingleInstance(!isAuxiliaryWindow);
   useTheme();
   useProfiles();
-  useModules();
+  useModules(!isAuxiliaryWindow);
 
   return (
     <React.Fragment>
       <Outlet />
-      <Toaster />
-      <GlobalAlert />
-      <QuickShortcutsModal />
-      <LyricModal />
-      <DialogSlot />
-      <BackgroundPickerSlot />
+      {!isAuxiliaryWindow && (
+        <React.Fragment>
+          <Toaster />
+          <GlobalAlert />
+          <QuickShortcutsModal />
+          <LyricModal />
+          <DialogSlot />
+          <BackgroundPickerSlot />
+        </React.Fragment>
+      )}
     </React.Fragment>
   );
 }
