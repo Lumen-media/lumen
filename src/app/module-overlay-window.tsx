@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { emit, listen } from '@tauri-apps/api/event';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { PresenterSlot } from '@/modules/components/PresenterSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
@@ -10,6 +10,15 @@ export const Route = createFileRoute('/module-overlay-window')({
 });
 
 function ModuleOverlayWindow() {
+  const closeWindow = useCallback(async () => {
+    try {
+      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      await getCurrentWebviewWindow().close();
+    } catch (error) {
+      console.error('Failed to close overlay window:', error);
+    }
+  }, []);
+
   useEffect(() => {
     const onUnload = () => emit('module:overlay-window-closed').catch(() => {});
     window.addEventListener('beforeunload', onUnload);
@@ -17,26 +26,54 @@ function ModuleOverlayWindow() {
   }, []);
 
   useEffect(() => {
-    bootPresenterModules()
-      .then(() => emit('module:overlay-ready').catch(() => {}))
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      void closeWindow();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [closeWindow]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let disposeProject: (() => void) | null = null;
+    let disposeClear: (() => void) | null = null;
+
+    Promise.all([
+      listen<{ viewId: string; props: unknown }>('module:overlay-project', (event) => {
+        useModuleStore.getState().projectPanel(event.payload.viewId, event.payload.props);
+      }),
+      listen('module:overlay-clear', () => {
+        useModuleStore.getState().clearPresenter();
+      }),
+    ])
+      .then(([unlistenProject, unlistenClear]) => {
+        if (cancelled) {
+          unlistenProject();
+          unlistenClear();
+          return;
+        }
+
+        disposeProject = unlistenProject;
+        disposeClear = unlistenClear;
+        return bootPresenterModules();
+      })
+      .then(() => {
+        if (!cancelled) emit('module:overlay-ready').catch(() => {});
+      })
       .catch(console.error);
 
-    const unlistenProject = listen<{ viewId: string; props: unknown }>('module:overlay-project', (event) => {
-      useModuleStore.getState().projectPanel(event.payload.viewId, event.payload.props);
-    });
-
-    const unlistenClear = listen('module:overlay-clear', () => {
-      useModuleStore.getState().clearPresenter();
-    });
-
     return () => {
-      unlistenProject.then((dispose) => dispose());
-      unlistenClear.then((dispose) => dispose());
+      cancelled = true;
+      disposeProject?.();
+      disposeClear?.();
     };
   }, []);
 
   return (
-    <div className="relative h-dvh w-dvw bg-transparent overflow-hidden">
+    <div className="fixed inset-0 h-dvh w-dvw overflow-hidden bg-black">
       <PresenterSlot />
     </div>
   );
