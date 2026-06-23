@@ -198,23 +198,24 @@ function MediaWindowComponent() {
     }
   };
 
-  const checkFullscreenState = async () => {
+  const ensureDefaultWindowMode = useCallback(async () => {
     try {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
       const window = getCurrentWebviewWindow();
 
       if (window) {
-        const fullscreen = await window.isFullscreen();
-        setIsFullscreen(fullscreen);
+        await window.setFullscreen(true);
+        await setDecorations(false);
+        setIsFullscreen(true);
       }
     } catch (error) {
-      console.error('Failed to check fullscreen state:', error);
+      console.error('Failed to enforce media window defaults:', error);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    checkFullscreenState();
-  }, []);
+    void ensureDefaultWindowMode();
+  }, [ensureDefaultWindowMode]);
 
   useEffect(() => {
     emit('media-window-ready').catch(() => {});
@@ -332,3 +333,4 @@ function MediaWindowComponent() {
     </div>
   );
 }
+
