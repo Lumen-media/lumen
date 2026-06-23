@@ -7,6 +7,7 @@ import {
   createLibraryHostAPI,
   createLyricsHostAPI,
   createPlayerHostAPI,
+  createOverlayHostAPI,
   createPresentationHostAPI,
   createQueueHostAPI,
   createThemesHostAPI,
@@ -50,6 +51,7 @@ export async function createHost(
     library: createLibraryHostAPI(),
     player: createPlayerHostAPI(),
     presentation: createPresentationHostAPI(),
+    overlay: createOverlayHostAPI(),
     themes: createThemesHostAPI(),
     fonts: createFontsAPI(),
 

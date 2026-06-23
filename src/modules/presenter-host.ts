@@ -60,6 +60,12 @@ export async function createPresenterHost(manifest: ModuleManifest): Promise<Lum
       items: stub([]),
       currentIndex: stub(-1),
       add: noop, remove: noop, reorder: noop, shuffle: noop, markPlayed: noop,
+      state: stub({ items: [], currentIndex: null }),
+      onChange: () => noopDisposable,
+      next: noop,
+      previous: noop,
+      goTo: noop,
+      registerTrigger: () => noopDisposable,
     },
     library: {
       list: stub(Promise.resolve([])),
@@ -81,6 +87,13 @@ export async function createPresenterHost(manifest: ModuleManifest): Promise<Lum
       clear: noop,
       isWindowOpen: stub(true),
     },
+    overlay: {
+      state: stub('idle' as const),
+      onStateChange: () => noopDisposable,
+      project: noop,
+      clear: noop,
+      isWindowOpen: stub(false),
+    },
     fonts: {
       list: stub(Promise.resolve([] as string[])),
     },
@@ -88,6 +101,8 @@ export async function createPresenterHost(manifest: ModuleManifest): Promise<Lum
       current: stub({ id: 'default', name: 'Default', colorMode: 'dark' as const, accentId: 'cyan' }),
       list: stub([]),
       apply: noop,
+      defaultBackground: stub(null),
+      onDefaultBackgroundChange: () => noopDisposable,
     },
 
     fs: createFsAPI(id),
