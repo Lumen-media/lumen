@@ -20,9 +20,22 @@ function ModuleOverlayWindow() {
   }, []);
 
   useEffect(() => {
-    const onUnload = () => emit('module:overlay-window-closed').catch(() => {});
-    window.addEventListener('beforeunload', onUnload);
-    return () => window.removeEventListener('beforeunload', onUnload);
+    let detachCloseListener: (() => void) | undefined;
+
+    import('@tauri-apps/api/window')
+      .then(({ getCurrentWindow }) => getCurrentWindow().onCloseRequested(() => {
+        emit('module:overlay-window-closed').catch(() => {});
+      }))
+      .then((unlisten) => {
+        detachCloseListener = unlisten;
+      })
+      .catch((error) => {
+        console.error('Failed to bind overlay close listener:', error);
+      });
+
+    return () => {
+      detachCloseListener?.();
+    };
   }, []);
 
   useEffect(() => {
