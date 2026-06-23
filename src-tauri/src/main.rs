@@ -160,6 +160,7 @@ async fn create_overlay_window(
     .decorations(true)
     .fullscreen(false)
     .inner_size(960.0, 540.0)
+    .min_inner_size(720.0, 405.0)
     .visible(false)
     .build()
     .map_err(|e| format!("Failed to create overlay window: {}", e))?;
@@ -402,3 +403,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
