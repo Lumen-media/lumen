@@ -4,7 +4,8 @@
   "description": "Capability for the main window",
   "windows": [
     "main",
-    "media-window"
+    "media-window",
+    "module-overlay-window"
   ],
   "permissions": [
     "core:default",
