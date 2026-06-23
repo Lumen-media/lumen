@@ -37,38 +37,20 @@ function ModuleOverlayWindow() {
   }, [closeWindow]);
 
   useEffect(() => {
-    let cancelled = false;
-    let disposeProject: (() => void) | null = null;
-    let disposeClear: (() => void) | null = null;
-
-    Promise.all([
-      listen<{ viewId: string; props: unknown }>('module:overlay-project', (event) => {
-        useModuleStore.getState().projectPanel(event.payload.viewId, event.payload.props);
-      }),
-      listen('module:overlay-clear', () => {
-        useModuleStore.getState().clearPresenter();
-      }),
-    ])
-      .then(([unlistenProject, unlistenClear]) => {
-        if (cancelled) {
-          unlistenProject();
-          unlistenClear();
-          return;
-        }
-
-        disposeProject = unlistenProject;
-        disposeClear = unlistenClear;
-        return bootPresenterModules();
-      })
-      .then(() => {
-        if (!cancelled) emit('module:overlay-ready').catch(() => {});
-      })
+    bootPresenterModules()
+      .then(() => emit('module:overlay-ready').catch(() => {}))
       .catch(console.error);
 
+    const unlistenProject = listen<{ viewId: string; props: unknown }>('module:overlay-project', (event) => {
+      useModuleStore.getState().projectPanel(event.payload.viewId, event.payload.props);
+    });
+    const unlistenClear = listen('module:overlay-clear', () => {
+      useModuleStore.getState().clearPresenter();
+    });
+
     return () => {
-      cancelled = true;
-      disposeProject?.();
-      disposeClear?.();
+      unlistenProject.then((f) => f());
+      unlistenClear.then((f) => f());
     };
   }, []);
 

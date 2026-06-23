@@ -201,13 +201,19 @@ listen('module:overlay-window-closed', () => {
   globalBus.emit('overlay:clear');
 }).catch(() => {});
 
-listen('module:overlay-ready', () => {
-  if (!overlayViewId) return;
-  emit('module:overlay-project', { viewId: overlayViewId, props: overlayProps }).catch(() => {});
-}).catch(() => {});
-
 let overlayViewId: string | null = null;
 let overlayProps: unknown;
+
+function syncOverlayProjection() {
+  if (!overlayViewId) return;
+  emit('module:overlay-project', { viewId: overlayViewId, props: overlayProps }).catch(() => {});
+}
+
+listen('module:overlay-ready', () => {
+  syncOverlayProjection();
+  setTimeout(syncOverlayProjection, 100);
+  setTimeout(syncOverlayProjection, 400);
+}).catch(() => {});
 
 async function ensureMediaWindow(): Promise<{ created: boolean }> {
   let win = await WebviewWindow.getByLabel('media-window').catch(() => null);
@@ -236,14 +242,10 @@ async function ensureOverlayWindow(): Promise<{ created: boolean }> {
   let win = await WebviewWindow.getByLabel('module-overlay-window').catch(() => null);
 
   if (!win) {
-    await invoke('create_window', {
+    await invoke('create_overlay_window', {
       label: 'module-overlay-window',
       title: 'Module Overlay',
       route: '/module-overlay-window',
-      fullscreen: false,
-      decorations: true,
-      width: 960,
-      height: 540,
     }).catch(() => {});
 
     await new Promise<void>((resolve) => {
@@ -255,12 +257,16 @@ async function ensureOverlayWindow(): Promise<{ created: boolean }> {
     });
 
     win = await WebviewWindow.getByLabel('module-overlay-window').catch(() => null);
-    if (win) await win.show().catch(() => {});
+    if (win) {
+      await win.show().catch(() => {});
+      syncOverlayProjection();
+    }
     return { created: true };
   }
 
   const visible = await win.isVisible().catch(() => false);
   if (!visible) await win.show().catch(() => {});
+  syncOverlayProjection();
   return { created: false };
 }
 export function createPresentationHostAPI(): PresentationHostAPI {
@@ -317,9 +323,7 @@ export function createOverlayHostAPI(): OverlayHostAPI {
       overlayViewId = viewId;
       overlayProps = props;
       globalBus.emit('overlay:project', { viewId, props });
-      ensureOverlayWindow()
-        .then(() => emit('module:overlay-project', { viewId, props }))
-        .catch(() => {});
+      ensureOverlayWindow().catch(() => {});
     },
     clear() {
       overlayViewId = null;
