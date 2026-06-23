@@ -19,12 +19,34 @@ function ModuleOverlayWindow() {
     }
   }, []);
 
+  const setDecorations = useCallback(async (decorated: boolean) => {
+    try {
+      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      await getCurrentWebviewWindow().setDecorations(decorated);
+    } catch (error) {
+      console.error('Failed to set overlay window decorations:', error);
+    }
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      const window = getCurrentWebviewWindow();
+      const nextFullscreen = !(await window.isFullscreen());
+
+      await window.setFullscreen(nextFullscreen);
+      await setDecorations(!nextFullscreen);
+    } catch (error) {
+      console.error('Failed to toggle overlay fullscreen:', error);
+    }
+  }, [setDecorations]);
+
   useEffect(() => {
     let detachCloseListener: (() => void) | undefined;
 
     import('@tauri-apps/api/window')
       .then(({ getCurrentWindow }) => getCurrentWindow().onCloseRequested(() => {
-        emit('module:overlay-window-closed').catch(() => {});
+        emit('module:overlay-window-closed').catch(() => { });
       }))
       .then((unlisten) => {
         detachCloseListener = unlisten;
@@ -40,6 +62,12 @@ function ModuleOverlayWindow() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'F11') {
+        event.preventDefault();
+        void toggleFullscreen();
+        return;
+      }
+
       if (event.key !== 'Escape') return;
       event.preventDefault();
       void closeWindow();
@@ -47,11 +75,11 @@ function ModuleOverlayWindow() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [closeWindow]);
+  }, [closeWindow, toggleFullscreen]);
 
   useEffect(() => {
     bootPresenterModules()
-      .then(() => emit('module:overlay-ready').catch(() => {}))
+      .then(() => emit('module:overlay-ready').catch(() => { }))
       .catch(console.error);
 
     const unlistenProject = listen<{ viewId: string; props: unknown }>('module:overlay-project', (event) => {
