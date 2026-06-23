@@ -240,6 +240,10 @@ async function ensureOverlayWindow(): Promise<{ created: boolean }> {
       label: 'module-overlay-window',
       title: 'Module Overlay',
       route: '/module-overlay-window',
+      fullscreen: false,
+      decorations: true,
+      width: 960,
+      height: 540,
     }).catch(() => {});
 
     await new Promise<void>((resolve) => {
@@ -311,6 +315,7 @@ export function createOverlayHostAPI(): OverlayHostAPI {
     },
     project(viewId, props) {
       overlayViewId = viewId;
+      overlayProps = props;
       globalBus.emit('overlay:project', { viewId, props });
       ensureOverlayWindow()
         .then(() => emit('module:overlay-project', { viewId, props }))
@@ -318,6 +323,7 @@ export function createOverlayHostAPI(): OverlayHostAPI {
     },
     clear() {
       overlayViewId = null;
+      overlayProps = undefined;
       globalBus.emit('overlay:clear');
       emit('module:overlay-clear').catch(() => {});
       WebviewWindow.getByLabel('module-overlay-window')
