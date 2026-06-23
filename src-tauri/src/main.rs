@@ -61,15 +61,22 @@ async fn create_window(
     label: String,
     title: String,
     route: Option<String>,
+    fullscreen: Option<bool>,
+    decorations: Option<bool>,
+    width: Option<f64>,
+    height: Option<f64>,
     window_state: State<'_, WindowState>,
 ) -> Result<(), String> {
     let main_window = app_handle
         .get_webview_window("main")
         .ok_or_else(|| "Main window not found".to_string())?;
 
-    let saved_position = {
+    let open_fullscreen = fullscreen.unwrap_or(true);
+    let saved_position = if open_fullscreen {
         let positions = window_state.positions.lock().unwrap();
         positions.get(&label).cloned()
+    } else {
+        None
     };
 
     let target_position = if let Some((saved_x, saved_y)) = saved_position {
@@ -77,7 +84,7 @@ async fn create_window(
             x: saved_x,
             y: saved_y,
         }
-    } else {
+    } else if open_fullscreen {
         let current_monitor = main_window
             .current_monitor()
             .map_err(|e| format!("Failed to get current monitor: {}", e))?
@@ -106,16 +113,25 @@ async fn create_window(
             x: monitor_position.x,
             y: monitor_position.y,
         }
-    };
+    } else {
+        let main_position = main_window
+            .outer_position()
+            .map_err(|e| format!("Failed to get main window position: {}", e))?;
 
+        tauri::PhysicalPosition {
+            x: main_position.x + 80,
+            y: main_position.y + 80,
+        }
+    };
     let window = tauri::WebviewWindowBuilder::new(
         &app_handle,
         &label,
         tauri::WebviewUrl::App(route.unwrap_or_else(|| "/media-window".to_string()).into()),
     )
     .title(&title)
-    .decorations(false)
-    .fullscreen(true)
+    .decorations(decorations.unwrap_or(!open_fullscreen))
+    .fullscreen(open_fullscreen)
+    .inner_size(width.unwrap_or(960.0), height.unwrap_or(540.0))
     .visible(false)
     .build()
     .map_err(|e| format!("Failed to create window: {}", e))?;
@@ -124,13 +140,15 @@ async fn create_window(
         .set_position(tauri::Position::Physical(target_position))
         .map_err(|e| format!("Failed to set window position: {}", e))?;
 
-    window
-        .set_fullscreen(true)
-        .map_err(|e| format!("Failed to set fullscreen: {}", e))?;
+    if open_fullscreen {
+        window
+            .set_fullscreen(true)
+            .map_err(|e| format!("Failed to set fullscreen: {}", e))?;
 
-    {
-        let mut positions = window_state.positions.lock().unwrap();
-        positions.insert(label.clone(), (target_position.x, target_position.y));
+        {
+            let mut positions = window_state.positions.lock().unwrap();
+            positions.insert(label.clone(), (target_position.x, target_position.y));
+        }
     }
 
     Ok(())
