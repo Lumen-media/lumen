@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './app/__root'
+import { Route as ModuleOverlayWindowRouteImport } from './app/module-overlay-window'
 import { Route as MediaWindowRouteImport } from './app/media-window'
 import { Route as LayoutRouteImport } from './app/_layout'
 import { Route as LayoutIndexRouteImport } from './app/_layout/index'
@@ -17,6 +18,11 @@ import { Route as LayoutPresentationRouteImport } from './app/_layout/presentati
 import { Route as LayoutLiveRouteImport } from './app/_layout/live'
 import { Route as LayoutEditRouteImport } from './app/_layout/edit'
 
+const ModuleOverlayWindowRoute = ModuleOverlayWindowRouteImport.update({
+  id: '/module-overlay-window',
+  path: '/module-overlay-window',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MediaWindowRoute = MediaWindowRouteImport.update({
   id: '/media-window',
   path: '/media-window',
@@ -54,6 +60,7 @@ const LayoutEditRoute = LayoutEditRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/media-window': typeof MediaWindowRoute
+  '/module-overlay-window': typeof ModuleOverlayWindowRoute
   '/edit': typeof LayoutEditRoute
   '/live': typeof LayoutLiveRoute
   '/presentation': typeof LayoutPresentationRoute
@@ -62,6 +69,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/media-window': typeof MediaWindowRoute
+  '/module-overlay-window': typeof ModuleOverlayWindowRoute
   '/edit': typeof LayoutEditRoute
   '/live': typeof LayoutLiveRoute
   '/presentation': typeof LayoutPresentationRoute
@@ -72,6 +80,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
   '/media-window': typeof MediaWindowRoute
+  '/module-overlay-window': typeof ModuleOverlayWindowRoute
   '/_layout/edit': typeof LayoutEditRoute
   '/_layout/live': typeof LayoutLiveRoute
   '/_layout/presentation': typeof LayoutPresentationRoute
@@ -82,17 +91,26 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/media-window'
+    | '/module-overlay-window'
     | '/edit'
     | '/live'
     | '/presentation'
     | '/settings'
     | '/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/media-window' | '/edit' | '/live' | '/presentation' | '/settings' | '/'
+  to:
+    | '/media-window'
+    | '/module-overlay-window'
+    | '/edit'
+    | '/live'
+    | '/presentation'
+    | '/settings'
+    | '/'
   id:
     | '__root__'
     | '/_layout'
     | '/media-window'
+    | '/module-overlay-window'
     | '/_layout/edit'
     | '/_layout/live'
     | '/_layout/presentation'
@@ -103,10 +121,18 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   LayoutRoute: typeof LayoutRouteWithChildren
   MediaWindowRoute: typeof MediaWindowRoute
+  ModuleOverlayWindowRoute: typeof ModuleOverlayWindowRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/module-overlay-window': {
+      id: '/module-overlay-window'
+      path: '/module-overlay-window'
+      fullPath: '/module-overlay-window'
+      preLoaderRoute: typeof ModuleOverlayWindowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/media-window': {
       id: '/media-window'
       path: '/media-window'
@@ -181,6 +207,7 @@ const LayoutRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   LayoutRoute: LayoutRouteWithChildren,
   MediaWindowRoute: MediaWindowRoute,
+  ModuleOverlayWindowRoute: ModuleOverlayWindowRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
