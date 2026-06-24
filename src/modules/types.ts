@@ -7,7 +7,8 @@ export interface Disposable {
 export type SlotName =
   | 'dialog'
   | 'presenter.content'
-  | 'sidebar.right.tabs';
+  | 'sidebar.right.tabs'
+  | 'app.header.trailing';
 
 export interface PanelProps {
   close?: () => void;
@@ -405,3 +406,4 @@ export interface ModuleRecord {
   errorCount: number;
   source: 'bundled' | 'store' | 'sideload' | 'dev';
 }
+
