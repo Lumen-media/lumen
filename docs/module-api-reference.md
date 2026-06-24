@@ -100,13 +100,17 @@ host.panels.add({
 
 | Value | Position |
 |---|---|
-| `'sidebar.right.tabs'` | Right sidebar tab |
-| `'toolbar'` | Toolbar |
-| `'statusbar'` | Bottom status bar |
-| `'presenter.content'` | Presenter window |
-| `'dialog'` | Modal over content |
+| `'sidebar.left.tabs'` | Left sidebar tab area |
+| `'sidebar.right.tabs'` | Right sidebar tab area |
+| `'main.center'` | Main center content area |
+| `'dialog'` | Modal content opened through `host.ui.openDialog(id)` |
+| `'presenter.content'` | Presenter/media output surface |
+| `'settings.section'` | Settings page section |
+| `'command-palette.section'` | Section inside the command palette |
+| `'editor.lyrics.toolbar'` | Lyrics editor toolbar area |
+| `'app.header.trailing'` | Compact slot at the start of the header's right-side controls |
 
-> ⚠️ No `<PanelSlot>` is placed in the app layout yet. Panels register successfully but are not visually rendered until slots are inserted.
+The host only renders some slots today. `dialog`, `presenter.content`, and `app.header.trailing` are active surfaces in the current app shell; the remaining slots are part of the typed contract and may be wired progressively.
 
 ---
 
@@ -879,3 +883,5 @@ export default class ExamplePlugin extends LumenPlugin {
   }
 }
 ```
+
+
