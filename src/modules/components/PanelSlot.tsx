@@ -1,5 +1,6 @@
+import { useMemo } from 'react';
 import { useModuleStore } from '../store';
-import type { PanelProps, SlotName } from '../types';
+import type { PanelProps, PanelSpec, SlotName } from '../types';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 
 interface PanelSlotProps {
@@ -8,7 +9,20 @@ interface PanelSlotProps {
 }
 
 export function PanelSlot({ slot, panelProps = {} }: PanelSlotProps) {
-  const panels = useModuleStore((s) => s.getPanelsForSlot(slot));
+  const panelMap = useModuleStore((s) => s.panels);
+  const panels = useMemo(() => {
+    const result: PanelSpec[] = [];
+
+    for (const specs of panelMap.values()) {
+      for (const spec of specs) {
+        if (spec.slot === slot) {
+          result.push(spec);
+        }
+      }
+    }
+
+    return result;
+  }, [panelMap, slot]);
 
   if (panels.length === 0) return null;
 

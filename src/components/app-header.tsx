@@ -2,6 +2,7 @@ import { Link, useRouterState } from '@tanstack/react-router';
 import { Monitor, Star, Volume2, Wifi } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { HeaderTrailingSlot } from '@/modules/components/HeaderTrailingSlot';
 import { cn } from '@/lib/utils';
 import { SettingsDialog } from './settings-dialog';
 import { Card } from './ui/card';
@@ -83,10 +84,11 @@ export function AppHeader() {
           )}
         </nav>
 
-        <div className="flex items-center gap-3 w-40 justify-end">
-          <Wifi className="size-4 text-muted-foreground" />
-          <Monitor className="size-4 text-muted-foreground" />
-          <Volume2 className="size-4 text-muted-foreground" />
+        <div className="flex min-w-0 items-center justify-end gap-3 w-56">
+          <HeaderTrailingSlot />
+          <Wifi className="size-4 shrink-0 text-muted-foreground" />
+          <Monitor className="size-4 shrink-0 text-muted-foreground" />
+          <Volume2 className="size-4 shrink-0 text-muted-foreground" />
           <SettingsDialog />
           <Avatar size="sm">
             <AvatarImage src="" alt="User" />
