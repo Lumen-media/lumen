@@ -11,12 +11,25 @@ interface BackgroundMedia {
   name: string;
 }
 
+type PresenterProps = Record<string, unknown>;
+
 function useBackgroundBlobSrc(path?: string): string | undefined {
   const [src, setSrc] = useState<string | undefined>();
 
   useEffect(() => {
-    if (!path) { setSrc(undefined); return; }
-    if (path.startsWith('http') || path.startsWith('#')) { setSrc(path); return; }
+    if (!path) {
+      setSrc(undefined);
+      return;
+    }
+    if (
+      path.startsWith('http') ||
+      path.startsWith('blob:') ||
+      path.startsWith('data:') ||
+      path.startsWith('#')
+    ) {
+      setSrc(path);
+      return;
+    }
 
     let url: string;
     readFile(path)
@@ -26,7 +39,9 @@ function useBackgroundBlobSrc(path?: string): string | undefined {
       })
       .catch(() => setSrc(undefined));
 
-    return () => { if (url) URL.revokeObjectURL(url); };
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
   }, [path]);
 
   return src;
@@ -39,7 +54,9 @@ function PresenterBackground({ media }: { media: BackgroundMedia }) {
   if (!src) return null;
 
   if (media.type === 'video') {
-    return <video src={src} autoPlay loop muted className="absolute inset-0 w-full h-full object-cover" />;
+    return (
+      <video src={src} autoPlay loop muted className="absolute inset-0 h-full w-full object-cover" />
+    );
   }
   return <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />;
 }
@@ -53,7 +70,25 @@ function PresenterDefaultBackground() {
   return <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />;
 }
 
-export function PresenterSlot() {
+function PresenterBackdropLayer({ props }: { props: PresenterProps }) {
+  const background = props?.background as string | undefined;
+  const bg =
+    background === 'media' ? (props?.backgroundMedia as BackgroundMedia | undefined) : undefined;
+
+  if (background === 'default') return <PresenterDefaultBackground />;
+  if (bg) return <PresenterBackground media={bg} />;
+  return null;
+}
+
+export function PresenterBackdrop() {
+  const presenterViewId = useModuleStore((s) => s.presenterViewId);
+  const props = useModuleStore((s) => s.presenterProps) as PresenterProps | undefined;
+
+  if (!presenterViewId || !props) return null;
+  return <PresenterBackdropLayer props={props} />;
+}
+
+export function PresenterSlot({ renderBackdrop = true }: { renderBackdrop?: boolean }) {
   const clearPresenter = useModuleStore((s) => s.clearPresenter);
   const spec = useModuleStore<PanelSpec | null>((s) => {
     if (!s.presenterViewId) return null;
@@ -73,18 +108,15 @@ export function PresenterSlot() {
     }
     return null;
   });
-  const props = useModuleStore((s) => s.presenterProps) as Record<string, unknown>;
+  const props = useModuleStore((s) => s.presenterProps) as PresenterProps;
 
   if (!spec || !moduleId) return null;
 
   const Component = spec.component;
-  const background = props?.background as string | undefined;
-  const bg = background === 'media' ? (props?.backgroundMedia as BackgroundMedia | undefined) : undefined;
 
   return (
     <div className="fixed inset-0 z-50">
-      {background === 'default' && <PresenterDefaultBackground />}
-      {bg && <PresenterBackground media={bg} />}
+      {renderBackdrop && <PresenterBackdropLayer props={props} />}
       <ModuleErrorBoundary moduleId={moduleId} panelId={spec.id}>
         <div data-module-scope={moduleId}>
           <Component {...props} onClose={clearPresenter} />
