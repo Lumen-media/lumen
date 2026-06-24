@@ -8,15 +8,20 @@ interface PanelSlotProps {
   panelProps?: PanelProps;
 }
 
+type SlotPanel = {
+  moduleId: string;
+  spec: PanelSpec;
+};
+
 export function PanelSlot({ slot, panelProps = {} }: PanelSlotProps) {
   const panelMap = useModuleStore((s) => s.panels);
   const panels = useMemo(() => {
-    const result: PanelSpec[] = [];
+    const result: SlotPanel[] = [];
 
-    for (const specs of panelMap.values()) {
+    for (const [moduleId, specs] of panelMap.entries()) {
       for (const spec of specs) {
         if (spec.slot === slot) {
-          result.push(spec);
+          result.push({ moduleId, spec });
         }
       }
     }
@@ -28,14 +33,14 @@ export function PanelSlot({ slot, panelProps = {} }: PanelSlotProps) {
 
   return (
     <>
-      {panels.map((spec) => {
+      {panels.map(({ moduleId, spec }, index) => {
         if (spec.when && !spec.when()) return null;
 
-        const moduleId = spec.id.split('.').slice(0, -1).join('.');
         const Component = spec.component;
+        const panelKey = `${moduleId}:${spec.id}:${index}`;
 
         return (
-          <ModuleErrorBoundary key={spec.id} moduleId={moduleId} panelId={spec.id}>
+          <ModuleErrorBoundary key={panelKey} moduleId={moduleId} panelId={spec.id}>
             <Component {...panelProps} />
           </ModuleErrorBoundary>
         );
