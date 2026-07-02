@@ -1,30 +1,31 @@
 import {
+  closestCenter,
   DndContext,
+  type DragEndEvent,
   KeyboardSensor,
   PointerSensor,
-  closestCenter,
   useSensor,
   useSensors,
-  type DragEndEvent,
 } from '@dnd-kit/core';
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import {
-  SortableContext,
   arrayMove,
+  SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { CheckCircle2, ListX, Tag, X, Zap } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
   ContextMenuGroup,
+  ContextMenuItem,
   ContextMenuLabel,
   ContextMenuSub,
   ContextMenuSubContent,
@@ -43,8 +44,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
 import type { QueueTriggerSpec } from '@/modules/types';
-import { useQueueEntriesStore, type ListEntry, type TriggerInstance } from '@/stores/queue-entries-store';
 import { usePlayerStore } from '@/stores/player-store';
+import {
+  type ListEntry,
+  type TriggerInstance,
+  useQueueEntriesStore,
+} from '@/stores/queue-entries-store';
 import { type QueueItem, useQueueStore } from '@/stores/queue-store';
 
 type TriggerDialog = {
@@ -62,8 +67,16 @@ const TABS: { value: TabValue; label: string }[] = [
 ];
 
 export function AsidePanel() {
-  const { queue, removeFromQueue, markPlayed, togglePlayed, loadFromDb, clearQueue, shuffleQueue, reorderQueue } =
-    useQueueStore();
+  const {
+    queue,
+    removeFromQueue,
+    markPlayed,
+    togglePlayed,
+    loadFromDb,
+    clearQueue,
+    shuffleQueue,
+    reorderQueue,
+  } = useQueueStore();
   const loadFile = usePlayerStore((s) => s.loadFile);
 
   const [activeTab, setActiveTab] = useState<TabValue>('queue');
@@ -183,7 +196,7 @@ function QueueTab({
 
   useEffect(() => {
     syncQueue(queue);
-  }, [queue]);
+  }, [queue, syncQueue]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -220,13 +233,16 @@ function QueueTab({
     if (instanceId) {
       setEntries(
         entries.map((e) =>
-          e.kind === 'trigger' && e.id === instanceId
-            ? { ...e, inst: { ...e.inst, config } }
-            : e
+          e.kind === 'trigger' && e.id === instanceId ? { ...e, inst: { ...e.inst, config } } : e
         )
       );
     } else {
-      const newInst: TriggerInstance = { id: crypto.randomUUID(), triggerId, config, showLabel: false };
+      const newInst: TriggerInstance = {
+        id: crypto.randomUUID(),
+        triggerId,
+        config,
+        showLabel: false,
+      };
       setEntries([...entries, { kind: 'trigger', id: newInst.id, inst: newInst }]);
     }
     setTriggerDialog(null);
@@ -243,7 +259,9 @@ function QueueTab({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const dialogSpec = triggerDialog ? triggerSpecs.find((s) => s.id === triggerDialog.triggerId) : null;
+  const dialogSpec = triggerDialog
+    ? triggerSpecs.find((s) => s.id === triggerDialog.triggerId)
+    : null;
   const ConfigComp = dialogSpec?.ConfigComponent as
     | React.ComponentType<{ value: unknown; onChange: (v: unknown) => void }>
     | undefined;
@@ -264,7 +282,11 @@ function QueueTab({
 
   return (
     <>
-      <ContextMenu onOpenChange={(open) => { if (!open) setContextTargetItem(null); }}>
+      <ContextMenu
+        onOpenChange={(open) => {
+          if (!open) setContextTargetItem(null);
+        }}
+      >
         <ContextMenuTrigger className="flex flex-col h-full flex-1 min-h-0">
           <ScrollArea className="flex-1">
             <DndContext
@@ -427,13 +449,19 @@ function SortableQueueItem({
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+      }}
     >
       <div
         {...attributes}
         {...listeners}
         onContextMenu={onContextMenu}
         onDoubleClick={() => onPlay(item)}
+        role="button"
+        tabIndex={0}
         className={cn(
           'flex items-center rounded-lg touch-none select-none',
           isCurrent
@@ -496,12 +524,18 @@ function SortableTriggerItem({
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+      }}
     >
       <div
         {...attributes}
         {...listeners}
         onDoubleClick={onEdit}
+        role="button"
+        tabIndex={0}
         className="flex items-center rounded-lg touch-none select-none border border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors"
       >
         <div className="flex flex-1 items-center justify-between min-w-0 px-3 py-2">
@@ -517,9 +551,7 @@ function SortableTriggerItem({
                   {spec.label}
                 </span>
               )}
-              {SummaryComp && (
-                <SummaryComp value={inst.config} onEdit={onEdit} />
-              )}
+              {SummaryComp && <SummaryComp value={inst.config} onEdit={onEdit} />}
             </div>
           </div>
           <div className="flex items-center gap-0.5 shrink-0 ml-2">
