@@ -24,8 +24,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useTranslation } from '@/lib/i18n';
 import { useDebounceValue, useEventListener } from 'usehooks-ts';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import {
   normalize,
@@ -693,7 +693,7 @@ function AppView({ app }: { app: ActiveApp }) {
 }
 
 export function QuickShortcutsModal() {
-  const { isOpen, toggle, close, activeApp } = useCommandStore();
+  const { isOpen, toggle, close, activeApp, popApp } = useCommandStore();
 
   useEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -703,7 +703,19 @@ export function QuickShortcutsModal() {
   });
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open, eventDetails) => {
+        if (!open) {
+          if (eventDetails?.reason === 'escape-key' && activeApp) {
+            popApp();
+            eventDetails.cancel();
+          } else {
+            close();
+          }
+        }
+      }}
+    >
       <DialogContent showCloseButton={false} className="overflow-hidden p-0 sm:max-w-[760px]">
         {activeApp ? <AppView app={activeApp} /> : <RootView />}
       </DialogContent>
