@@ -2,14 +2,13 @@ import { createFileRoute } from '@tanstack/react-router';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PresenterBackdrop, PresenterSlot } from '@/modules/components/PresenterSlot';
+import { PresenterSlot } from '@/modules/components/PresenterSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
 import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
 
 import { LyricPresentation } from '@/components/lyric-presentation';
 import { Videoplayer } from '@/components/ui/videoplayer';
-import { usePlayerStore } from '@/stores/player-store';
 
 function StreamOverlay() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -128,8 +127,6 @@ function MediaWindowComponent() {
   const [lyricStartIndex, setLyricStartIndex] = useState(0);
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [streamOverlayActive, setStreamOverlayActive] = useState(false);
-  const currentFilePath = usePlayerStore((s) => s.currentFilePath);
-  const localMediaType = usePlayerStore((s) => s.localMediaType);
 
   const saveCurrentPosition = useCallback(async () => {
     try {
@@ -305,15 +302,8 @@ function MediaWindowComponent() {
     isFullscreen ? null : 1000
   );
 
-  const hostVisualActive =
-    Boolean(imagePath) ||
-    (mode === 'lyric' && Boolean(lyricPath)) ||
-    streamOverlayActive ||
-    (localMediaType === 'video' && Boolean(currentFilePath));
-
   return (
-    <div className="relative h-dvh w-dvw bg-black">
-      {!hostVisualActive && <PresenterBackdrop />}
+    <div className="fixed inset-0 h-dvh w-dvw overflow-hidden bg-black">
       <Videoplayer className="h-full w-full" url="" autoplay muted={false} interactive={false} />
       {imagePath && mode !== 'lyric' && (
         <button
@@ -339,7 +329,7 @@ function MediaWindowComponent() {
           <StreamOverlay />
         </div>
       )}
-      <PresenterSlot renderBackdrop={false} />
+      <PresenterSlot />
     </div>
   );
 }
