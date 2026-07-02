@@ -115,10 +115,10 @@ export function PresenterSlot({ renderBackdrop = true }: { renderBackdrop?: bool
   const Component = spec.component;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 h-dvh w-dvw overflow-hidden bg-transparent isolate">
       {renderBackdrop && <PresenterBackdropLayer props={props} />}
       <ModuleErrorBoundary moduleId={moduleId} panelId={spec.id}>
-        <div data-module-scope={moduleId}>
+        <div data-module-scope={moduleId} className="absolute inset-0 h-full w-full overflow-hidden">
           <Component {...props} onClose={clearPresenter} />
         </div>
       </ModuleErrorBoundary>
