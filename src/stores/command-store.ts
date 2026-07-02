@@ -32,12 +32,12 @@ export const useCommandStore = create<CommandStore>((set) => ({
   commands: [],
   prefixes: [],
 
-  open: (prefilter = '') => set({ isOpen: true, prefilter, activeApp: null }),
-  close: () => set({ isOpen: false, prefilter: '', activeApp: null }),
+  open: (prefilter = '') => set({ isOpen: true, prefilter }),
+  close: () => set({ isOpen: false, prefilter: '' }),
   toggle: () =>
     set((s) =>
       s.isOpen
-        ? { isOpen: false, prefilter: '', activeApp: null }
+        ? { isOpen: false, prefilter: '' }
         : { isOpen: true },
     ),
 
