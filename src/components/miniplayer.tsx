@@ -49,11 +49,19 @@ export function MiniPlayer({ className }: MiniPlayerProps) {
 
   useEffect(() => {
     const handler = async (e: Event) => {
-      const { source, path, action } = (e as CustomEvent<{ source: string; path: string; action: 'play' | 'queue' }>).detail;
+      const { source, path, action } = (
+        e as CustomEvent<{ source: string; path: string; action: 'play' | 'queue' }>
+      ).detail;
 
       if (action === 'play') {
-        if (source === 'lyric') { await player.presentLyric(path); return; }
-        if (source === 'image') { await player.presentImage(path); return; }
+        if (source === 'lyric') {
+          await player.presentLyric(path);
+          return;
+        }
+        if (source === 'image') {
+          await player.presentImage(path);
+          return;
+        }
         await player.loadFile(path);
         return;
       }
@@ -66,9 +74,20 @@ export function MiniPlayer({ className }: MiniPlayerProps) {
           path: hit.path,
           size: 0,
           modifiedAt: new Date(hit.modified_at),
-          extension: hit.path.split('.').pop() ?? '',
+          extension: hit.original_url ? 'url' : (hit.path.split('.').pop() ?? ''),
           duration: hit.duration ?? undefined,
           artist: hit.artist ?? undefined,
+          originalUrl: hit.original_url ?? undefined,
+          thumbnailPath: hit.thumbnail_path ?? undefined,
+          remoteThumbnailUrl: hit.remote_thumbnail_url ?? undefined,
+          downloadStatus:
+            hit.download_status === 'not_downloaded' ||
+            hit.download_status === 'downloaded' ||
+            hit.download_status === 'missing'
+              ? hit.download_status
+              : hit.original_url
+                ? 'not_downloaded'
+                : 'downloaded',
         });
       }
     };

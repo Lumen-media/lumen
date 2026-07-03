@@ -564,6 +564,10 @@ unsub.dispose()
 host.queue.next()
 host.queue.previous()
 host.queue.goTo(2)   // 0-based index
+
+// Add a supported URL to the queue — currently YouTube video URLs only
+await host.queue.addUrl?.({ url: 'https://youtu.be/VIDEO_ID', position: 'end' })
+await host.queue.addUrl?.({ url: 'https://youtu.be/VIDEO_ID', position: 'next' })
 ```
 
 ### `QueueItem`
@@ -582,6 +586,7 @@ host.queue.goTo(2)   // 0-based index
 | `next()` | `void` | Advance to next item |
 | `previous()` | `void` | Go to previous item |
 | `goTo(index)` | `void` | Jump to specific index |
+| `addUrl(input)` | `Promise<void>` | Adds a supported URL to the queue. Currently YouTube video URLs only. Optional until the SDK types catch up. |
 
 > ⚠️ `state()` read and `onChange` work. Write navigation methods (`next`, `previous`, `goTo`) emit via the app event bus.
 
@@ -609,6 +614,20 @@ host.player.play('media-item-id')
 > ⚠️ Methods emit via bus — full read state (`current()`, `state()`, `volume()`) not yet wired.
 
 ---
+
+### URL media
+
+Modules can ask Lumen to own YouTube metadata and thumbnail caching instead of calling YouTube directly:
+
+```ts
+const item = await host.library.addUrl?.({
+  type: 'video',
+  url: 'https://youtu.be/VIDEO_ID',
+  addToQueue: true,
+})
+```
+
+Initial support is intentionally provider-limited: only YouTube URLs are accepted, and they are stored as `video` media with cached thumbnail metadata when available.
 
 ## Domain APIs 🚧
 
