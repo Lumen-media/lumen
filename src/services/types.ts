@@ -1,4 +1,5 @@
 export type MediaType = 'lyrics' | 'video' | 'image' | 'text' | 'audio' | 'files' | 'themes';
+export type DownloadStatus = 'not_downloaded' | 'downloaded' | 'missing';
 
 export interface FileInfo {
   name: string;
@@ -9,6 +10,10 @@ export interface FileInfo {
   duration?: number;
   title?: string;
   artist?: string;
+  originalUrl?: string;
+  thumbnailPath?: string;
+  remoteThumbnailUrl?: string;
+  downloadStatus?: DownloadStatus;
 }
 
 export interface FileUploadResult {

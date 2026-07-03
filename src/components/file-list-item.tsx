@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -39,6 +40,22 @@ interface FileListItemProps {
 
 const THUMBNAIL_TYPES = new Set<MediaType>(['video', 'image']);
 
+function isUrlMedia(file: FileInfo): boolean {
+  return file.extension === 'url' || Boolean(file.originalUrl);
+}
+
+function downloadStatusLabel(file: FileInfo): string | null {
+  if (!isUrlMedia(file)) return null;
+  switch (file.downloadStatus) {
+    case 'downloaded':
+      return 'Downloaded';
+    case 'missing':
+      return 'Missing download';
+    default:
+      return 'Not downloaded';
+  }
+}
+
 function FileThumbnail({ file, mediaType }: { file: FileInfo; mediaType: MediaType }) {
   const Icon = getMediaIcon(mediaType);
   const [thumbSrc, setThumbSrc] = useState<string | null>(null);
@@ -48,11 +65,17 @@ function FileThumbnail({ file, mediaType }: { file: FileInfo; mediaType: MediaTy
     if (!THUMBNAIL_TYPES.has(mediaType)) return;
     let cancelled = false;
     thumbnailService
-      .getThumbnail(file.path)
-      .then((url) => { if (!cancelled) setThumbSrc(url); })
-      .catch(() => { if (!cancelled) setFailed(true); });
-    return () => { cancelled = true; };
-  }, [file.path, mediaType]);
+      .getMediaThumbnail(file)
+      .then((url) => {
+        if (!cancelled) setThumbSrc(url);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file, mediaType]);
 
   if (!THUMBNAIL_TYPES.has(mediaType) || failed) {
     return <Icon className="size-5 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />;
@@ -119,6 +142,9 @@ export function FileListItem({
   isFocused,
 }: FileListItemProps) {
   const { openDeleteDialog } = useDeleteFileStore();
+  const urlMedia = isUrlMedia(file);
+  const statusLabel = downloadStatusLabel(file);
+  const fileSizeLabel = urlMedia ? 'URL' : formatFileSize(file.size);
 
   const handleClick = () => {
     if (onClick) {
@@ -134,6 +160,7 @@ export function FileListItem({
 
   const handleOpenFolder = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (urlMedia) return;
     try {
       const folderPath = file.path.substring(0, file.path.lastIndexOf('\\'));
       await invoke('open_folder', { path: folderPath });
@@ -148,7 +175,7 @@ export function FileListItem({
     openDeleteDialog(file);
   };
 
-  const fileDescription = `${file.name}, ${formatFileSize(file.size)}, modified ${formatDate(file.modifiedAt)}`;
+  const fileDescription = `${file.name}, ${fileSizeLabel}, modified ${formatDate(file.modifiedAt)}`;
 
   return (
     <ContextMenu>
@@ -163,13 +190,23 @@ export function FileListItem({
           <div className="flex items-start gap-3 w-full min-w-0">
             <FileThumbnail file={file} mediaType={mediaType} />
             <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{file.name}</p>
+              <p className="font-medium truncate">{file.title || file.name}</p>
               <div
-                className="flex items-center gap-3 mt-1 text-sm text-muted-foreground"
+                className="flex items-center gap-2 mt-1 text-sm text-muted-foreground"
                 aria-hidden="true"
               >
-                <span>{formatFileSize(file.size)}</span>
-                <span>•</span>
+                {file.originalUrl && (
+                  <Badge variant="secondary" className="h-4 rounded px-1.5 text-[10px]">
+                    YouTube
+                  </Badge>
+                )}
+                {statusLabel && (
+                  <Badge variant="outline" className="h-4 rounded px-1.5 text-[10px]">
+                    {statusLabel}
+                  </Badge>
+                )}
+                {!statusLabel && <span>{fileSizeLabel}</span>}
+                <span>-</span>
                 <span className="truncate">{formatDate(file.modifiedAt)}</span>
               </div>
             </div>
@@ -203,10 +240,12 @@ export function FileListItem({
             <ContextMenuSeparator />
           </>
         )}
-        <ContextMenuItem onClick={handleOpenFolder}>
-          <FolderOpen className="h-4 w-4" aria-hidden="true" />
-          Open folder
-        </ContextMenuItem>
+        {!urlMedia && (
+          <ContextMenuItem onClick={handleOpenFolder}>
+            <FolderOpen className="h-4 w-4" aria-hidden="true" />
+            Open folder
+          </ContextMenuItem>
+        )}
         <ContextMenuItem onClick={handleDeleteClick} variant="destructive">
           <Trash2 className="h-4 w-4" aria-hidden="true" />
           Delete

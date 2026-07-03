@@ -8,6 +8,7 @@ import { thumbnailService } from '@/services/thumbnail-service';
 import { useModuleStore } from '../store';
 import { usePlayerStore } from '@/stores/player-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
+import { useQueueStore } from '@/stores/queue-store';
 import type {
   LibraryHostAPI,
   LyricsHostAPI,
@@ -104,9 +105,9 @@ export function createQueueHostAPI(): QueueHostAPI {
       return globalBus.on('queue:changed', handler);
     },
     next() {
-      const result = useQueueEntriesStore.getState().advanceQueue(
-        usePlayerStore.getState().currentFilePath
-      );
+      const result = useQueueEntriesStore
+        .getState()
+        .advanceQueue(usePlayerStore.getState().currentFilePath);
       if (result.type === 'play') {
         void usePlayerStore.getState().loadFile(result.path);
       }
@@ -120,6 +121,13 @@ export function createQueueHostAPI(): QueueHostAPI {
     registerTrigger(spec) {
       const dispose = useModuleStore.getState().registerQueueTrigger(spec);
       return { dispose };
+    },
+    async addUrl(input) {
+      if (input.position === 'next') {
+        await useQueueStore.getState().playUrlNext(input.url);
+        return;
+      }
+      await useQueueStore.getState().addUrlToQueue(input.url);
     },
   };
 }
@@ -166,6 +174,20 @@ export function createLibraryHostAPI(): LibraryHostAPI {
     },
     async thumbnail(_path, _size) {
       return '';
+    },
+    async addUrl(input) {
+      const file = await mediaDbService.insertUrlMedia(input.url);
+      if (input.playNext) {
+        await useQueueStore.getState().playNext(file);
+      } else if (input.addToQueue) {
+        await useQueueStore.getState().addToQueue(file);
+      }
+      return {
+        id: file.path,
+        path: file.path,
+        name: file.name,
+        type: input.type,
+      };
     },
   };
 }
@@ -243,12 +265,18 @@ listen('module:presenter-ready', () => {
   const { presenterViewId, presenterProps } = useModuleStore.getState();
   if (!presenterViewId) return;
 
-  emit('module:presenter-project', { viewId: presenterViewId, props: presenterProps }).catch(() => {});
+  emit('module:presenter-project', { viewId: presenterViewId, props: presenterProps }).catch(
+    () => {}
+  );
   setTimeout(() => {
-    emit('module:presenter-project', { viewId: presenterViewId, props: presenterProps }).catch(() => {});
+    emit('module:presenter-project', { viewId: presenterViewId, props: presenterProps }).catch(
+      () => {}
+    );
   }, 100);
   setTimeout(() => {
-    emit('module:presenter-project', { viewId: presenterViewId, props: presenterProps }).catch(() => {});
+    emit('module:presenter-project', { viewId: presenterViewId, props: presenterProps }).catch(
+      () => {}
+    );
   }, 400);
 }).catch(() => {});
 
@@ -270,12 +298,14 @@ async function ensureOverlayWindow() {
       };
       listen('module:overlay-ready', () => {
         finish();
-      }).then((unlisten) => {
-        setTimeout(() => {
-          unlisten();
-          finish();
-        }, 500);
-      }).catch(() => finish());
+      })
+        .then((unlisten) => {
+          setTimeout(() => {
+            unlisten();
+            finish();
+          }, 500);
+        })
+        .catch(() => finish());
     });
 
     win = await WebviewWindow.getByLabel('module-overlay-window').catch(() => null);
@@ -301,7 +331,12 @@ export function createPresentationHostAPI(): PresentationHostAPI {
     onStateChange(handler) {
       const onProject = globalBus.on('presentation:project', () => handler('live'));
       const onClear = globalBus.on('presentation:clear', () => handler('idle'));
-      return { dispose() { onProject.dispose(); onClear.dispose(); } };
+      return {
+        dispose() {
+          onProject.dispose();
+          onClear.dispose();
+        },
+      };
     },
     project(viewId, props) {
       const isFirstProject = useModuleStore.getState().presenterViewId === null;
@@ -339,7 +374,12 @@ export function createOverlayHostAPI(): OverlayHostAPI {
     onStateChange(handler) {
       const onProject = globalBus.on('overlay:project', () => handler('live'));
       const onClear = globalBus.on('overlay:clear', () => handler('idle'));
-      return { dispose() { onProject.dispose(); onClear.dispose(); } };
+      return {
+        dispose() {
+          onProject.dispose();
+          onClear.dispose();
+        },
+      };
     },
     project(viewId, props) {
       overlayViewId = viewId;
@@ -365,9 +405,7 @@ export function createOverlayHostAPI(): OverlayHostAPI {
 async function ensureMediaWindow() {
   let win = await WebviewWindow.getByLabel('media-window').catch(() => null);
   if (!win) {
-    await invoke('create_window', { label: 'media-window', title: 'Media Player' }).catch(
-      () => {}
-    );
+    await invoke('create_window', { label: 'media-window', title: 'Media Player' }).catch(() => {});
 
     await new Promise<void>((resolve) => {
       let settled = false;
@@ -378,12 +416,14 @@ async function ensureMediaWindow() {
       };
       listen('module:presenter-ready', () => {
         finish();
-      }).then((unlisten) => {
-        setTimeout(() => {
-          unlisten();
-          finish();
-        }, 500);
-      }).catch(() => finish());
+      })
+        .then((unlisten) => {
+          setTimeout(() => {
+            unlisten();
+            finish();
+          }, 500);
+        })
+        .catch(() => finish());
     });
 
     win = await WebviewWindow.getByLabel('media-window').catch(() => null);
@@ -425,14 +465,14 @@ export function createThemesHostAPI(): ThemesHostAPI {
     defaultBackground() {
       const { profiles, activeProfileId } = useProfileStore.getState();
       const profileBg = profiles.find((p) => p.id === activeProfileId)?.defaultBackground;
-      return profileBg
-        ? { src: profileBg.src, type: profileBg.type, name: profileBg.name }
-        : null;
+      return profileBg ? { src: profileBg.src, type: profileBg.type, name: profileBg.name } : null;
     },
     onDefaultBackgroundChange(handler) {
       let lastSrc: string | null | undefined = undefined;
 
-      const fire = (bg: { src: string; type: 'theme' | 'image' | 'video'; name: string } | null) => {
+      const fire = (
+        bg: { src: string; type: 'theme' | 'image' | 'video'; name: string } | null
+      ) => {
         const src = bg?.src ?? null;
         if (!src || src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:')) {
           handler(bg);
@@ -479,8 +519,3 @@ export function createThemesHostAPI(): ThemesHostAPI {
     },
   };
 }
-
-
-
-
-

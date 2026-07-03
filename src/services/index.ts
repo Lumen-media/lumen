@@ -14,9 +14,11 @@ export type {
 } from './devices-service';
 export { devicesService } from './devices-service';
 
-export type { FileInfo, MediaType } from './types';
+export type { DownloadStatus, FileInfo, MediaType } from './types';
 export { remoteSyncService } from './remote-sync-service';
 export type { PlayerSyncPayload } from './remote-sync-service';
 export type { StreamingConfig, StreamingStatus } from './streaming-service';
 export { streamingService } from './streaming-service';
 export { thumbnailService } from './thumbnail-service';
+export { urlMediaService } from './url-media-service';
+export type { UrlMediaMetadata } from './url-media-service';

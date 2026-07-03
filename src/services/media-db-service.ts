@@ -3,6 +3,7 @@ import Database from '@tauri-apps/plugin-sql';
 import { getAppBasePath, getDbPath } from './app-paths';
 import { extractMetadata } from './metadata-extractor';
 import type { FileInfo, MediaType } from './types';
+import { urlMediaService } from './url-media-service';
 
 interface DbRow {
   id: number;
@@ -15,6 +16,10 @@ interface DbRow {
   duration: number | null;
   artist: string | null;
   content: string | null;
+  original_url: string | null;
+  thumbnail_path: string | null;
+  remote_thumbnail_url: string | null;
+  download_status: string | null;
 }
 
 export interface SearchHit {
@@ -26,7 +31,30 @@ export interface SearchHit {
   duration: number | null;
   modified_at: number;
   rank: number;
+  title?: string | null;
+  original_url?: string | null;
+  thumbnail_path?: string | null;
+  remote_thumbnail_url?: string | null;
+  download_status?: string | null;
 }
+
+type ColumnSpec = {
+  name: string;
+  sql: string;
+};
+
+const MEDIA_FILE_URL_COLUMNS: ColumnSpec[] = [
+  { name: 'original_url', sql: 'ALTER TABLE media_files ADD COLUMN original_url TEXT' },
+  { name: 'thumbnail_path', sql: 'ALTER TABLE media_files ADD COLUMN thumbnail_path TEXT' },
+  {
+    name: 'remote_thumbnail_url',
+    sql: 'ALTER TABLE media_files ADD COLUMN remote_thumbnail_url TEXT',
+  },
+  {
+    name: 'download_status',
+    sql: "ALTER TABLE media_files ADD COLUMN download_status TEXT NOT NULL DEFAULT 'downloaded'",
+  },
+];
 
 class MediaDbService {
   private readyPromise: Promise<Database> | null = null;
@@ -67,10 +95,13 @@ class MediaDbService {
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_mf_type ON media_files (media_type)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_mf_name ON media_files (name COLLATE NOCASE)`);
 
-    const cols = await db.select<{ name: string }[]>('PRAGMA table_info(media_files)');
-    if (!cols.some((c) => c.name === 'content')) {
-      await db.execute(`ALTER TABLE media_files ADD COLUMN content TEXT`);
-    }
+    await this.ensureColumns(db, 'media_files', [
+      { name: 'content', sql: 'ALTER TABLE media_files ADD COLUMN content TEXT' },
+      ...MEDIA_FILE_URL_COLUMNS,
+    ]);
+    await db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_mf_original_url ON media_files (original_url)`
+    );
 
     await db.execute(`
       CREATE TABLE IF NOT EXISTS theme_files (
@@ -88,6 +119,20 @@ class MediaDbService {
     return db;
   }
 
+  private async ensureColumns(
+    db: Database,
+    tableName: string,
+    columns: ColumnSpec[]
+  ): Promise<void> {
+    const existing = await db.select<{ name: string }[]>(`PRAGMA table_info(${tableName})`);
+    const names = new Set(existing.map((column) => column.name));
+    for (const column of columns) {
+      if (!names.has(column.name)) {
+        await db.execute(column.sql);
+      }
+    }
+  }
+
   async initialize(): Promise<void> {
     await this.ready();
   }
@@ -96,7 +141,7 @@ class MediaDbService {
     const db = await this.ready();
 
     const existing = await db.select<{ path: string }[]>(
-      'SELECT path FROM media_files WHERE media_type = $1',
+      `SELECT path FROM media_files WHERE media_type = $1 AND extension != 'url'`,
       [mediaType]
     );
     const existingPaths = new Set(existing.map((r) => r.path));
@@ -110,8 +155,8 @@ class MediaDbService {
         } catch {}
 
         await db.execute(
-          `INSERT OR IGNORE INTO media_files (name, path, size, modified_at, extension, media_type, duration, artist, content)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          `INSERT OR IGNORE INTO media_files (name, path, size, modified_at, extension, media_type, duration, artist, content, download_status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'downloaded')`,
           [
             file.name,
             file.path,
@@ -129,7 +174,7 @@ class MediaDbService {
 
     for (const { path } of existing) {
       if (!fsPaths.has(path)) {
-        await db.execute('DELETE FROM media_files WHERE path = $1', [path]);
+        await db.execute(`DELETE FROM media_files WHERE path = $1 AND extension != 'url'`, [path]);
       }
     }
   }
@@ -157,21 +202,30 @@ class MediaDbService {
     const db = await this.ready();
 
     let metadata: { duration?: number; artist?: string } = {};
-    try {
-      metadata = await extractMetadata(file.path);
-    } catch {}
+    if (file.extension !== 'url') {
+      try {
+        metadata = await extractMetadata(file.path);
+      } catch {}
+    }
 
     await db.execute(
-      `INSERT INTO media_files (name, path, size, modified_at, extension, media_type, duration, artist, content)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO media_files (
+         name, path, size, modified_at, extension, media_type, duration, artist, content,
+         original_url, thumbnail_path, remote_thumbnail_url, download_status
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        ON CONFLICT(path) DO UPDATE SET
-         name        = excluded.name,
-         size        = excluded.size,
-         modified_at = excluded.modified_at,
-         extension   = excluded.extension,
-         duration    = excluded.duration,
-         artist      = excluded.artist,
-         content     = COALESCE(excluded.content, media_files.content)`,
+         name                 = excluded.name,
+         size                 = excluded.size,
+         modified_at          = excluded.modified_at,
+         extension            = excluded.extension,
+         duration             = excluded.duration,
+         artist               = excluded.artist,
+         content              = COALESCE(excluded.content, media_files.content),
+         original_url         = excluded.original_url,
+         thumbnail_path       = COALESCE(excluded.thumbnail_path, media_files.thumbnail_path),
+         remote_thumbnail_url = COALESCE(excluded.remote_thumbnail_url, media_files.remote_thumbnail_url),
+         download_status      = excluded.download_status`,
       [
         file.name,
         file.path,
@@ -179,11 +233,31 @@ class MediaDbService {
         file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
         file.extension,
         mediaType,
-        metadata.duration ?? null,
-        metadata.artist ?? null,
+        metadata.duration ?? file.duration ?? null,
+        file.artist ?? metadata.artist ?? null,
         content ?? null,
+        file.originalUrl ?? null,
+        file.thumbnailPath ?? null,
+        file.remoteThumbnailUrl ?? null,
+        file.downloadStatus ?? (file.extension === 'url' ? 'not_downloaded' : 'downloaded'),
       ]
     );
+  }
+
+  async insertUrlMedia(url: string, opts: { refreshMetadata?: boolean } = {}): Promise<FileInfo> {
+    const parsed = urlMediaService.parseYouTubeUrl(url);
+    if (!parsed) {
+      throw new Error('Only YouTube URLs are supported');
+    }
+
+    if (!opts.refreshMetadata) {
+      const existing = await this.getFileInfoByOriginalUrl(url, parsed.canonicalUrl);
+      if (existing) return existing;
+    }
+
+    const file = await urlMediaService.createYouTubeFileInfo(url);
+    await this.insertFile(file, 'video');
+    return file;
   }
 
   async search(
@@ -230,51 +304,68 @@ class MediaDbService {
        ORDER BY name COLLATE NOCASE LIMIT $${paramIdx}`,
       params
     );
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      path: r.path,
-      media_type: r.media_type as MediaType,
-      artist: r.artist,
-      duration: r.duration,
-      modified_at: r.modified_at,
-      rank: 0,
-    }));
+    return rows.map(rowToSearchHit);
   }
 
   async listByType(mediaType: MediaType, limit = 50): Promise<SearchHit[]> {
     const db = await this.ready();
-    const rows = await db.select<SearchHit[]>(
-      `SELECT id, name, path, media_type, artist, duration, modified_at, 0 AS rank
+    const rows = await db.select<DbRow[]>(
+      `SELECT *
          FROM media_files
         WHERE media_type = $1
         ORDER BY name COLLATE NOCASE
         LIMIT $2`,
       [mediaType, limit]
     );
-    return rows;
+    return rows.map(rowToSearchHit);
   }
 
   async getById(id: number): Promise<SearchHit | null> {
     const db = await this.ready();
-    const rows = await db.select<SearchHit[]>(
-      `SELECT id, name, path, media_type, artist, duration, modified_at, 0 AS rank
+    const rows = await db.select<DbRow[]>(
+      `SELECT *
          FROM media_files
         WHERE id = $1`,
       [id]
     );
-    return rows[0] ?? null;
+    return rows[0] ? rowToSearchHit(rows[0]) : null;
   }
 
   async getByPath(path: string): Promise<SearchHit | null> {
     const db = await this.ready();
-    const rows = await db.select<SearchHit[]>(
-      `SELECT id, name, path, media_type, artist, duration, modified_at, 0 AS rank
+    const rows = await db.select<DbRow[]>(
+      `SELECT *
          FROM media_files
         WHERE path = $1`,
       [path]
     );
-    return rows[0] ?? null;
+    return rows[0] ? rowToSearchHit(rows[0]) : null;
+  }
+
+  async getFileInfoByPath(path: string): Promise<FileInfo | null> {
+    const db = await this.ready();
+    const rows = await db.select<DbRow[]>(
+      `SELECT *
+         FROM media_files
+        WHERE path = $1`,
+      [path]
+    );
+    return rows[0] ? rowToFileInfo(rows[0]) : null;
+  }
+
+  async getFileInfoByOriginalUrl(
+    originalUrl: string,
+    canonicalUrl?: string
+  ): Promise<FileInfo | null> {
+    const db = await this.ready();
+    const rows = await db.select<DbRow[]>(
+      `SELECT *
+         FROM media_files
+        WHERE original_url = $1 OR original_url = $2 OR path = $2
+        LIMIT 1`,
+      [originalUrl, canonicalUrl ?? originalUrl]
+    );
+    return rows[0] ? rowToFileInfo(rows[0]) : null;
   }
 
   async deleteFile(path: string): Promise<void> {
@@ -345,6 +436,10 @@ class MediaDbService {
   }
 }
 
+function isDownloadStatus(value: string | null): value is NonNullable<FileInfo['downloadStatus']> {
+  return value === 'not_downloaded' || value === 'downloaded' || value === 'missing';
+}
+
 function rowToFileInfo(row: DbRow): FileInfo {
   return {
     name: row.name,
@@ -353,13 +448,39 @@ function rowToFileInfo(row: DbRow): FileInfo {
     modifiedAt: new Date(row.modified_at),
     extension: row.extension,
     duration: row.duration ?? undefined,
+    title: row.name,
     artist: row.artist ?? undefined,
+    originalUrl: row.original_url ?? undefined,
+    thumbnailPath: row.thumbnail_path ?? undefined,
+    remoteThumbnailUrl: row.remote_thumbnail_url ?? undefined,
+    downloadStatus: isDownloadStatus(row.download_status)
+      ? row.download_status
+      : row.extension === 'url'
+        ? 'not_downloaded'
+        : 'downloaded',
+  };
+}
+
+function rowToSearchHit(row: DbRow): SearchHit {
+  return {
+    id: row.id,
+    name: row.name,
+    path: row.path,
+    media_type: row.media_type as MediaType,
+    artist: row.artist,
+    duration: row.duration,
+    modified_at: row.modified_at,
+    rank: 0,
+    title: row.name,
+    original_url: row.original_url,
+    thumbnail_path: row.thumbnail_path,
+    remote_thumbnail_url: row.remote_thumbnail_url,
+    download_status: row.download_status,
   };
 }
 
 function escapeLike(s: string): string {
   return s.replace(/#/g, '##').replace(/%/g, '#%').replace(/_/g, '#_');
 }
-
 
 export const mediaDbService = new MediaDbService();

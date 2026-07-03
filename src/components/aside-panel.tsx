@@ -19,6 +19,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { CheckCircle2, ListX, Tag, X, Zap } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -59,6 +60,18 @@ type TriggerDialog = {
 } | null;
 
 type TabValue = 'queue' | 'notes' | 'themes';
+
+function getDownloadStatusLabel(item: QueueItem): string | null {
+  if (item.file.extension !== 'url' && !item.file.originalUrl) return null;
+  switch (item.file.downloadStatus) {
+    case 'downloaded':
+      return 'Downloaded';
+    case 'missing':
+      return 'Missing download';
+    default:
+      return 'Not downloaded';
+  }
+}
 
 const TABS: { value: TabValue; label: string }[] = [
   { value: 'queue', label: 'Queue' },
@@ -445,6 +458,7 @@ function SortableQueueItem({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sortableId,
   });
+  const downloadStatus = getDownloadStatusLabel(item);
 
   return (
     <div
@@ -486,8 +500,20 @@ function SortableQueueItem({
               >
                 {item.file.title || item.file.name}
               </div>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                {item.file.artist || item.file.name.split('.').pop()?.toUpperCase()}
+              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                {item.file.originalUrl && (
+                  <Badge variant="secondary" className="h-4 rounded px-1.5 text-[10px]">
+                    YouTube
+                  </Badge>
+                )}
+                {downloadStatus && (
+                  <Badge variant="outline" className="h-4 rounded px-1.5 text-[10px]">
+                    {downloadStatus}
+                  </Badge>
+                )}
+                <span className="truncate">
+                  {item.file.artist || item.file.name.split('.').pop()?.toUpperCase()}
+                </span>
               </div>
             </div>
           </div>

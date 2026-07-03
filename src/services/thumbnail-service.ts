@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { readFile } from '@tauri-apps/plugin-fs';
+import type { FileInfo } from './types';
 
 const MAX_CONCURRENT = 2;
 
@@ -46,6 +47,33 @@ class ThumbnailService {
     } finally {
       this.releaseSlot();
     }
+  }
+
+  async getMediaThumbnail(file: FileInfo, size = 200): Promise<string> {
+    if (file.extension !== 'url' && !file.originalUrl) {
+      return this.getThumbnail(file.path, size);
+    }
+
+    const key = `${file.path}:${file.thumbnailPath ?? file.remoteThumbnailUrl ?? ''}:${size}`;
+    const cached = this.cache.get(key);
+    if (cached) return cached;
+
+    if (file.thumbnailPath) {
+      const bytes = await readFile(file.thumbnailPath);
+      const blobUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+      this.cache.set(key, blobUrl);
+      return blobUrl;
+    }
+
+    if (file.remoteThumbnailUrl) {
+      const response = await fetch(file.remoteThumbnailUrl);
+      if (!response.ok) throw new Error(`Failed to load remote thumbnail: ${response.status}`);
+      const blobUrl = URL.createObjectURL(await response.blob());
+      this.cache.set(key, blobUrl);
+      return blobUrl;
+    }
+
+    throw new Error('No thumbnail available');
   }
 }
 

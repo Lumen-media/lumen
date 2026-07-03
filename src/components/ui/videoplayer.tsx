@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
 import { cn } from '@/lib/utils';
 import { thumbnailService } from '@/services/thumbnail-service';
+import { urlMediaService } from '@/services/url-media-service';
 import { Slider } from './slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 
@@ -40,25 +41,19 @@ export const Videoplayer = ({
   async function fetchMetadata(
     videoUrl: string
   ): Promise<{ title: string; thumbnail?: string; artist?: string }> {
-    if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
+    if (urlMediaService.parseYouTubeUrl(videoUrl)) {
       try {
-        const u = new URL(videoUrl);
-        if (u.hostname.includes('youtube.com') || u.hostname.includes('youtu.be')) {
-          const res = await fetch(
-            `https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`
-          );
-          if (res.ok) {
-            const data = await res.json();
-            return {
-              title: data.title,
-              thumbnail: data.thumbnail_url,
-              artist: data.author_name ?? undefined,
-            };
-          }
-          return { title: 'YouTube Video' };
-        }
-      } catch {}
+        const data = await urlMediaService.resolveYouTube(videoUrl);
+        return {
+          title: data.title,
+          thumbnail: data.remoteThumbnailUrl,
+          artist: data.artist,
+        };
+      } catch {
+        return { title: 'YouTube Video' };
+      }
     }
+
     const raw = videoUrl.split(/[\\/]/).pop() ?? videoUrl;
     const decoded = decodeURIComponent(raw);
     return { title: decoded.replace(/\.[^.]+$/, '') };
@@ -195,6 +190,19 @@ export const Videoplayer = ({
           URL.revokeObjectURL(currentBlobUrl.current);
           currentBlobUrl.current = null;
         }
+        const parsedUrl = urlMediaService.parseYouTubeUrl(filePath);
+        if (parsedUrl) {
+          if (loadSeqRef.current !== seq) return;
+          currentFilePath.current = parsedUrl.canonicalUrl;
+          pendingSeekTime.current = seekTime > 0 ? seekTime : null;
+          pendingThumbnail.current = null;
+          switchingUrlRef.current = true;
+          setPlayed(0);
+          setActiveUrl(parsedUrl.canonicalUrl);
+          setPlaying(true);
+          return;
+        }
+
         const mimeTypes: Record<string, string> = {
           mp4: 'video/mp4',
           webm: 'video/webm',

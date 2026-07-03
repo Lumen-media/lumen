@@ -231,6 +231,7 @@ export interface QueueHostAPI {
   previous(): void;
   goTo(index: number): void;
   registerTrigger(spec: QueueTriggerSpec): Disposable;
+  addUrl?(input: { url: string; position?: 'end' | 'next' }): Promise<void>;
 }
 
 export type MediaType = 'audio' | 'video' | 'image';
@@ -262,6 +263,12 @@ export interface LibraryHostAPI {
   get(id: string): Promise<MediaItem | null>;
   metadata(path: string): Promise<MediaMetadata>;
   thumbnail(path: string, size?: number): Promise<string>;
+  addUrl?(input: {
+    type: 'video';
+    url: string;
+    addToQueue?: boolean;
+    playNext?: boolean;
+  }): Promise<MediaRef>;
 }
 
 export interface TrackRef {
@@ -314,7 +321,11 @@ export interface ThemesHostAPI {
   list(): ThemeRef[];
   apply(id: string): void;
   defaultBackground(): { src: string; type: 'theme' | 'image' | 'video'; name: string } | null;
-  onDefaultBackgroundChange(handler: (bg: { src: string; thumb?: string; type: 'theme' | 'image' | 'video'; name: string } | null) => void): Disposable;
+  onDefaultBackgroundChange(
+    handler: (
+      bg: { src: string; thumb?: string; type: 'theme' | 'image' | 'video'; name: string } | null
+    ) => void
+  ): Disposable;
 }
 
 export interface FsAPI {
@@ -406,4 +417,3 @@ export interface ModuleRecord {
   errorCount: number;
   source: 'bundled' | 'store' | 'sideload' | 'dev';
 }
-

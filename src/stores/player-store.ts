@@ -4,6 +4,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { create } from 'zustand';
 import { getSetting, saveSetting } from '@/services/db';
 import { remoteSyncService } from '@/services/remote-sync-service';
+import { urlMediaService } from '@/services/url-media-service';
 import { useQueueStore } from '@/stores/queue-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 
@@ -85,8 +86,13 @@ async function waitForMediaWindowReady(timeoutMs = 3000): Promise<void> {
   });
 }
 
+function normalizeMediaSource(source: string): string {
+  return urlMediaService.parseYouTubeUrl(source)?.canonicalUrl ?? source;
+}
+
 function getMediaTypeFromPath(filePath: string | null | undefined): PlayerStore['localMediaType'] {
   if (!filePath) return undefined;
+  if (urlMediaService.parseYouTubeUrl(filePath)) return 'video';
   const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
   const videoExtensions = ['mp4', 'webm', 'mkv', 'avi', 'mov'];
   if (videoExtensions.includes(ext)) {
@@ -220,7 +226,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
 
     const unlistenLoadUrl = listen<{ url: string; time: number }>('load-url', (event) => {
-      const filePath = event.payload.url;
+      const filePath = normalizeMediaSource(event.payload.url);
       const seekTime = Number(event.payload.time) || 0;
       set({
         isPlaying: true,
@@ -412,9 +418,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setIsDragging: (dragging) => set({ isDragging: dragging }),
 
   loadFile: async (filePath: string, seekTime = 0) => {
-    const videoExtensions = ['mp4', 'webm', 'mkv', 'avi', 'mov'];
-    const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
-    const isVideo = videoExtensions.includes(ext);
+    const source = normalizeMediaSource(filePath);
+    const isVideo = getMediaTypeFromPath(source) === 'video';
 
     let win = await getMediaWindow();
     if (!win) {
@@ -434,12 +439,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       await new Promise((r) => setTimeout(r, 50));
     }
 
-    get().sendWs({ event: 'load_url', url: filePath, value: seekTime });
+    get().sendWs({ event: 'load_url', url: source, value: seekTime });
     set({
       isPlaying: true,
       localMediaType: isVideo ? 'video' : 'audio',
       restoredFilePath: null,
-      currentFilePath: filePath,
+      currentFilePath: source,
       currentLyricPath: null,
       currentLyricSlideIndex: 0,
       currentLyricTotalSlides: 0,
@@ -447,7 +452,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       localDuration: seekTime > 0 ? get().localDuration : 0,
     });
 
-    saveSetting('last_media_path', filePath).catch(() => {});
+    saveSetting('last_media_path', source).catch(() => {});
     saveSetting('last_media_type', isVideo ? 'video' : 'audio').catch(() => {});
     saveSetting('last_time', '0').catch(() => {});
     void broadcastPlayerSync(get, 'load_url');
@@ -546,10 +551,7 @@ function nowUnixSeconds() {
   return Math.floor(Date.now() / 1000);
 }
 
-async function broadcastPlayerSync(
-  get: () => PlayerStore,
-  action?: string
-): Promise<void> {
+async function broadcastPlayerSync(get: () => PlayerStore, action?: string): Promise<void> {
   const state = get();
   await remoteSyncService.broadcast(
     {
@@ -575,7 +577,9 @@ async function broadcastPlayerSync(
         active: Boolean(state.currentLyricPath),
         url: state.currentLyricPath ?? undefined,
         slide_index: state.currentLyricPath ? state.currentLyricSlideIndex : undefined,
-        total_slides: state.currentLyricPath ? state.currentLyricTotalSlides || undefined : undefined,
+        total_slides: state.currentLyricPath
+          ? state.currentLyricTotalSlides || undefined
+          : undefined,
       },
       action,
     },
