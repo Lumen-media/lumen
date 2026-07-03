@@ -3,6 +3,7 @@ import { copyFile, exists, readDir, remove, stat } from '@tauri-apps/plugin-fs';
 import { fileInitService } from './file-init-service';
 import { mediaDbService } from './media-db-service';
 import type { FileInfo, MediaType } from './types';
+import { urlMediaService } from './url-media-service';
 
 export interface FileManagementService {
   /**
@@ -47,6 +48,12 @@ export interface FileManagementService {
    * @param mediaType - The media type folder to refresh
    */
   refreshFiles(mediaType: MediaType): Promise<FileInfo[]>;
+
+  /**
+   * Add a supported URL as media without copying a local file.
+   * Currently only YouTube URLs are accepted and they are always video media.
+   */
+  addUrl(mediaType: 'video', url: string): Promise<FileInfo>;
 }
 
 const EXTENSION_MAP: Record<MediaType, string[]> = {
@@ -56,16 +63,26 @@ const EXTENSION_MAP: Record<MediaType, string[]> = {
   text: ['.txt', '.md', '.doc', '.docx', '.pdf'],
   lyrics: ['.txt', '.lrc', '.srt', '.md'],
   themes: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.mp4', '.webm'],
-  files: []
+  files: [],
 };
 
 class FileManagementServiceImpl implements FileManagementService {
+  async addUrl(mediaType: 'video', url: string): Promise<FileInfo> {
+    if (mediaType !== 'video' || !urlMediaService.isSupportedUrl(url)) {
+      throw new Error('Only YouTube video URLs are supported');
+    }
+
+    return mediaDbService.insertUrlMedia(url);
+  }
+
   async listFiles(mediaType: MediaType): Promise<FileInfo[]> {
     try {
       return await mediaDbService.listFiles(mediaType);
     } catch (error) {
       console.error(`Failed to list files for media type ${mediaType}:`, error);
-      throw new Error(`Failed to list files: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to list files: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -100,7 +117,7 @@ class FileManagementServiceImpl implements FileManagementService {
           path: destPath,
           size: fileMetadata.size,
           modifiedAt: fileMetadata.mtime || new Date(),
-          extension: fileExtension
+          extension: fileExtension,
         };
 
         uploadedFiles.push(fileInfo);
@@ -111,13 +128,13 @@ class FileManagementServiceImpl implements FileManagementService {
         console.error(`Failed to upload file "${fileName}":`, error);
         errors.push({
           path: filePath,
-          error: `Failed to copy "${fileName}": ${errorMessage}`
+          error: `Failed to copy "${fileName}": ${errorMessage}`,
         });
       }
     }
 
     if (uploadedFiles.length === 0 && errors.length > 0) {
-      const errorMessages = errors.map(e => e.error).join('; ');
+      const errorMessages = errors.map((e) => e.error).join('; ');
       throw new Error(`Failed to upload files: ${errorMessages}`);
     }
 
@@ -166,7 +183,7 @@ class FileManagementServiceImpl implements FileManagementService {
       const newName = `${baseName} (${counter})${extension}`;
       const newPath = await join(folder, newName);
 
-      if (!await exists(newPath)) {
+      if (!(await exists(newPath))) {
         return newPath;
       }
 
@@ -180,16 +197,19 @@ class FileManagementServiceImpl implements FileManagementService {
 
       const extensions = EXTENSION_MAP[mediaType];
 
-      const filters = mediaType === 'files'
-        ? []
-        : [{
-            name: mediaType,
-            extensions: extensions.map(ext => ext.slice(1))
-          }];
+      const filters =
+        mediaType === 'files'
+          ? []
+          : [
+              {
+                name: mediaType,
+                extensions: extensions.map((ext) => ext.slice(1)),
+              },
+            ];
 
       const selected = await open({
         multiple: true,
-        filters: filters
+        filters: filters,
       });
 
       if (!selected) {
@@ -199,7 +219,9 @@ class FileManagementServiceImpl implements FileManagementService {
       return Array.isArray(selected) ? selected : [selected];
     } catch (error) {
       console.error(`Failed to open file picker for media type ${mediaType}:`, error);
-      throw new Error(`Failed to open file picker: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to open file picker: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 

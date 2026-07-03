@@ -229,9 +229,10 @@ export function ThemeSection() {
             <div className="space-y-1.5">
               <p className="text-sm font-medium">{t('Language')}</p>
               <Select
-                value={activeProfile?.language ?? locale}
+                value={activeProfile?.language ?? locale ?? 'en'}
                 onValueChange={(lang) => {
-                  if (activeProfile) updateProfile(activeProfile.id, { language: lang });
+                  if (activeProfile)
+                    updateProfile(activeProfile.id, { language: lang ?? undefined });
                 }}
               >
                 <SelectTrigger className="w-32">
