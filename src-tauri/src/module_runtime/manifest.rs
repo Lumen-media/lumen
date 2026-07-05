@@ -15,6 +15,13 @@ pub struct ModuleManifest {
     pub homepage: Option<String>,
     pub repository: Option<String>,
     pub license: Option<String>,
+    #[serde(default)]
+    pub permissions: Option<ModulePermissions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModulePermissions {
+    pub network: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,12 +1,15 @@
 pub mod dev_server;
 pub mod install;
 pub mod manifest;
+pub mod net;
 pub mod protocol;
 pub mod registry;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
@@ -18,6 +21,7 @@ use self::install::Installer;
 pub struct ModuleRuntime {
     pub modules_dir: PathBuf,
     pub registry: Arc<Mutex<Registry>>,
+    pub http_client: Client,
 }
 
 impl ModuleRuntime {
@@ -39,9 +43,17 @@ impl ModuleRuntime {
         let registry =
             Registry::open(&db_path).map_err(|e| format!("registry open failed: {e}"))?;
 
+        let http_client = Client::builder()
+            .timeout(Duration::from_secs(60))
+            .redirect(reqwest::redirect::Policy::limited(5))
+            .user_agent("Lumen/0.4.0")
+            .build()
+            .map_err(|e| format!("failed to create HTTP client: {e}"))?;
+
         Ok(Self {
             modules_dir: data_dir,
             registry: Arc::new(Mutex::new(registry)),
+            http_client,
         })
     }
 }

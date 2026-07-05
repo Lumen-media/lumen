@@ -492,27 +492,37 @@ await host.fs.remove('temp/file.tmp');
 
 ---
 
-## `host.net` ✅
+## `host.net` 🚧
 
-Fetch wrapper with error handling. Throws on non-OK responses.
+Generic host-managed HTTP requests for modules. The intended public contract is `request()`, implemented by Lumen through Rust/Tauri. See [module-net-request-api.md](./architecture/module-net-request-api.md).
+
+This requires a matching `@lumen-media/module-sdk` update: `NetAPI` must be added to the SDK `LumenHost`, and `permissions.network` must be added to the SDK manifest schema before modules can depend on it.
 
 ```ts
-// GET — returns parsed JSON
-const data = await host.net.get<{ id: number; title: string }>(
-  'https://api.example.com/items/1'
-);
+const response = await host.net.request<{ items: unknown[] }>({
+  method: 'GET',
+  url: 'https://api.example.com/items',
+  query: { search: 'test', limit: 10 },
+  headers: { Authorization: `Bearer ${token}` },
+  responseType: 'json',
+  timeoutMs: 15_000,
+});
 
-// POST — body automatically serialized as JSON
-const result = await host.net.post<{ ok: boolean }>(
-  'https://api.example.com/items',
-  { title: 'New item', priority: 1 }
-);
+if (!response.ok) {
+  throw new Error(Request failed: );
+}
 
-// Extra fetch options (headers, etc.)
-const protected = await host.net.get('https://api.example.com/private', {
-  headers: { Authorization: 'Bearer token' },
+await host.net.request({
+  method: 'POST',
+  url: 'https://api.example.com/events',
+  body: { type: 'json', value: { kind: 'started' } },
+  responseType: 'none',
 });
 ```
+
+Supported request body modes are planned as `json`, `text`, `bytes`, `form`, and optionally `multipart`. Supported response modes are `json`, `text`, `bytes`, and `none`.
+
+Modules should only request hosts declared in their manifest network permissions once permission enforcement lands.
 
 ---
 
@@ -902,5 +912,4 @@ export default class ExamplePlugin extends LumenPlugin {
   }
 }
 ```
-
 
