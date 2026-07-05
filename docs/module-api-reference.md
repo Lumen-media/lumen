@@ -492,13 +492,14 @@ await host.fs.remove('temp/file.tmp');
 
 ---
 
-## `host.net` 🚧
+## `host.net` ✅
 
-Generic host-managed HTTP requests for modules. The intended public contract is `request()`, implemented by Lumen through Rust/Tauri. See [module-net-request-api.md](./architecture/module-net-request-api.md).
+Generic host-managed HTTP requests for modules. Implemented through Rust/Tauri with `reqwest` — permission checks, timeouts, response size limits, and redirect validation are all enforced by the Lumen host. See [module-net-request-api.md](./architecture/module-net-request-api.md).
 
-This requires a matching `@lumen-media/module-sdk` update: `NetAPI` must be added to the SDK `LumenHost`, and `permissions.network` must be added to the SDK manifest schema before modules can depend on it.
+The primary API is `request()`. Convenience helpers `get()` and `post()` are thin wrappers that throw on non-2xx and return `response.data` directly.
 
 ```ts
+// Primary API — full control
 const response = await host.net.request<{ items: unknown[] }>({
   method: 'GET',
   url: 'https://api.example.com/items',
@@ -509,8 +510,14 @@ const response = await host.net.request<{ items: unknown[] }>({
 });
 
 if (!response.ok) {
-  throw new Error(Request failed: );
+  throw new Error(`Request failed: ${response.status}`);
 }
+
+// Convenience — throws on non-2xx, returns data directly
+const items = await host.net.get!<{ items: unknown[] }>(
+  'https://api.example.com/items',
+  { query: { search: 'test', limit: 10 } },
+);
 
 await host.net.request({
   method: 'POST',
@@ -520,9 +527,73 @@ await host.net.request({
 });
 ```
 
-Supported request body modes are planned as `json`, `text`, `bytes`, `form`, and optionally `multipart`. Supported response modes are `json`, `text`, `bytes`, and `none`.
+### Request body modes
 
-Modules should only request hosts declared in their manifest network permissions once permission enforcement lands.
+| Mode | Type discriminant | Value |
+|---|---|---|
+| JSON | `{ type: 'json', value: unknown }` | Any JSON-serializable value |
+| Text | `{ type: 'text', value: string, contentType?: string }` | Plain text, defaults to `text/plain` |
+| Bytes | `{ type: 'bytes', valueBase64: string, contentType?: string }` | Base64-encoded binary |
+| Form | `{ type: 'form', value: Record<string, string> }` | URL-encoded form |
+| Multipart | `{ type: 'multipart', parts: [...] }` | Not yet supported in v1 |
+
+### Response modes
+
+| Mode | Description |
+|---|---|
+| `json` (default) | Parses body as JSON. Falls back to raw string if parsing fails. |
+| `text` | Returns body as a plain string. |
+| `bytes` | Returns body as a base64-encoded string. |
+| `none` | Returns `null`. Use for fire-and-forget requests. |
+
+### Defaults
+
+- Method: `GET` when body is absent, `POST` when body is present.
+- Response type: `json`.
+- Timeout: 15 seconds (max 60 s).
+- Max response size: 10 MB (hard limit 50 MB).
+- Follow redirects: yes (max 5 hops).
+- Only `https://` URLs allowed. Localhost, private IPs, and link-local addresses are blocked.
+- Forbidden headers: `Host`, `Content-Length`, `Connection`, `Transfer-Encoding`, `Upgrade`, `Proxy-*`, `Sec-*`.
+
+### Manifest permissions
+
+Modules must declare which URLs they can access in their `manifest.json`:
+
+```json
+{
+  "permissions": {
+    "network": [
+      "https://www.googleapis.com/youtube/v3/*",
+      "https://api.github.com/repos/example/*"
+    ]
+  }
+}
+```
+
+Matching rules:
+- Only `https` scheme.
+- Exact host match, or wildcard subdomain (`*.example.com`).
+- Path wildcards at segment boundaries (`/api/*`).
+- Redirect targets are revalidated against the same rules.
+- Queries are not part of the permission pattern.
+- If a module declares no permissions, all `https` URLs are allowed (behaviour may change in the future).
+
+### Error model
+
+`request()` rejects only on host policy violations or network failures. HTTP 4xx/5xx resolve as `response.ok === false`.
+
+```ts
+try {
+  await host.net.request({ url: 'https://api.example.com/data' });
+} catch (err) {
+  // err.code: 'permission_denied' | 'invalid_url' | 'blocked_url'
+  //           | 'timeout' | 'network_error' | 'response_too_large'
+  //           | 'invalid_response' | 'unsupported_body'
+  // err.status?: number
+  // err.url?: string
+}
+```
 
 ---
 
