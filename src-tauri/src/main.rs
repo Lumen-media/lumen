@@ -397,6 +397,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             module_runtime::module_fs_exists,
             module_runtime::module_fs_list,
             module_runtime::module_fs_remove,
+            module_runtime::net::module_net_request,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
