@@ -106,7 +106,7 @@ export async function createPresenterHost(manifest: ModuleManifest): Promise<Lum
     },
 
     fs: createFsAPI(id),
-    net: createNetAPI(),
+    net: createNetAPI(id),
     i18n: createI18nAPI(),
     log: createLoggerAPI(id),
   };

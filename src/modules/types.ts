@@ -336,9 +336,83 @@ export interface FsAPI {
   remove(path: string): Promise<void>;
 }
 
+// ── NetAPI ────────────────────────────────────────────────────────
+
+export type NetMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD';
+export type NetResponseType = 'json' | 'text' | 'bytes' | 'none';
+
+export type NetQueryValue = string | number | boolean | null | undefined;
+
+export type NetRequestBody =
+  | { type: 'json'; value: unknown }
+  | { type: 'text'; value: string; contentType?: string }
+  | { type: 'bytes'; valueBase64: string; contentType?: string }
+  | { type: 'form'; value: Record<string, NetQueryValue> }
+  | {
+      type: 'multipart';
+      parts: Array<
+        | { name: string; type: 'text'; value: string; contentType?: string }
+        | {
+            name: string;
+            type: 'bytes';
+            valueBase64: string;
+            filename?: string;
+            contentType?: string;
+          }
+      >;
+    };
+
+export interface NetRequest {
+  url: string;
+  method?: NetMethod;
+  query?: Record<string, NetQueryValue | NetQueryValue[]>;
+  headers?: Record<string, string>;
+  body?: NetRequestBody;
+  responseType?: NetResponseType;
+  timeoutMs?: number;
+  maxBytes?: number;
+  followRedirects?: boolean;
+}
+
+export interface NetResponse<T = unknown> {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  url: string;
+  redirected: boolean;
+  data: T;
+}
+
+export type NetErrorCode =
+  | 'permission_denied'
+  | 'invalid_url'
+  | 'blocked_url'
+  | 'timeout'
+  | 'network_error'
+  | 'response_too_large'
+  | 'invalid_response'
+  | 'unsupported_body'
+  | 'unsupported_response_type';
+
+export interface NetError extends Error {
+  code: NetErrorCode;
+  status?: number;
+  url?: string;
+}
+
 export interface NetAPI {
-  get<T = unknown>(url: string, opts?: RequestInit): Promise<T>;
-  post<T = unknown>(url: string, body: unknown, opts?: RequestInit): Promise<T>;
+  request<T = unknown>(input: NetRequest): Promise<NetResponse<T>>;
+
+  get?<T = unknown>(
+    url: string,
+    opts?: Omit<NetRequest, 'url' | 'method' | 'body'>,
+  ): Promise<T>;
+  post?<T = unknown>(
+    url: string,
+    body?: NetRequestBody | unknown,
+    opts?: Omit<NetRequest, 'url' | 'method' | 'body'>,
+  ): Promise<T>;
 }
 
 export interface I18nAPI {
@@ -405,6 +479,9 @@ export interface ModuleManifest {
   homepage?: string;
   repository?: string;
   license?: string;
+  permissions?: {
+    network: string[];
+  };
 }
 
 export type ModuleStatus = 'loading' | 'active' | 'faulted' | 'disabled';
