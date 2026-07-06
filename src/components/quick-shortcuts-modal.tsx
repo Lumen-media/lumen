@@ -693,7 +693,6 @@ function AppView({ app }: { app: ActiveApp }) {
 
   useEffect(() => {
     setValue(searchOptions?.initialQuery ?? '');
-    setSearchTrailing(undefined);
   }, [app.commandId, searchOptions?.initialQuery]);
 
   const searchTrailingProps = useMemo<CommanderSearchAccessoryProps>(
