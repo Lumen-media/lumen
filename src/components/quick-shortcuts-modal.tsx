@@ -331,6 +331,12 @@ function PaletteHeader({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder={searchPlaceholder ?? (app ? app.title : (placeholder ?? t('Type a command or search...')))}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            data-1p-ignore="true"
+            data-lpignore="true"
             className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </label>
