@@ -24,13 +24,16 @@ interface MiniPlayerProps {
 }
 
 function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60)
+  if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
+  const totalSeconds = Math.floor(seconds);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60)
     .toString()
     .padStart(2, '0');
-  const s = Math.floor(seconds % 60)
+  const s = Math.floor(totalSeconds % 60)
     .toString()
     .padStart(2, '0');
-  return `${m}:${s}`;
+  return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
 }
 
 export function MiniPlayer({ className }: MiniPlayerProps) {
@@ -115,22 +118,33 @@ export function MiniPlayer({ className }: MiniPlayerProps) {
               )}
             </div>
           )}
-          <Slider
-            min={0}
-            max={player.localDuration}
-            value={[player.localTime]}
-            onValueChange={player.handleSliderChange}
-            onValueCommit={player.handleSliderCommit}
-            onPointerDown={() => player.setIsDragging(true)}
-            trackClassName="bg-muted"
-            rangeClassName="bg-primary"
-            thumbClassName="size-2.5 border-primary bg-primary shadow-none focus-visible:ring-0"
-          />
-          {(player.localTime > 0 || player.localDuration > 0) && (
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{formatTime(player.localTime)}</span>
-              <span>{formatTime(player.localDuration)}</span>
+          {player.isLiveStream ? (
+            <div className="flex h-5 items-center">
+              <span className="inline-flex h-5 items-center gap-1.5 rounded-full bg-red-500/10 px-2 text-[11px] font-semibold leading-none text-red-500">
+                <span className="size-1.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.75)]" />
+                AO VIVO
+              </span>
             </div>
+          ) : (
+            <>
+              <Slider
+                min={0}
+                max={Math.max(player.localDuration, 1)}
+                value={[Math.min(player.localTime, Math.max(player.localDuration, 1))]}
+                onValueChange={player.handleSliderChange}
+                onValueCommit={player.handleSliderCommit}
+                onPointerDown={() => player.setIsDragging(true)}
+                trackClassName="bg-muted"
+                rangeClassName="bg-primary"
+                thumbClassName="size-2.5 border-primary bg-primary shadow-none focus-visible:ring-0"
+              />
+              {(player.localTime > 0 || player.localDuration > 0) && (
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{formatTime(player.localTime)}</span>
+                  <span>{formatTime(player.localDuration)}</span>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
