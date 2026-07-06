@@ -15,6 +15,7 @@ interface PlayerStore {
   localArtist: string;
   localUrl: string | undefined;
   localMediaType: 'audio' | 'video' | 'stream' | undefined;
+  isLiveStream: boolean;
   isLoop: boolean;
   isScreenOpen: boolean;
   volume: number;
@@ -53,6 +54,7 @@ interface PlayerStore {
 let volumeCommitTimeout: ReturnType<typeof setTimeout> | null = null;
 let seekCommitTimeout: ReturnType<typeof setTimeout> | null = null;
 const SOCKET_COMMIT_DEBOUNCE_MS = 150;
+const LIVE_STREAM_MIN_DURATION_SECONDS = 24 * 60 * 60;
 
 async function getMediaWindow() {
   return WebviewWindow.getByLabel('media-window');
@@ -101,6 +103,16 @@ function getMediaTypeFromPath(filePath: string | null | undefined): PlayerStore[
   return 'audio';
 }
 
+function isLiveLikeYouTubeStream(
+  filePath: string | null | undefined,
+  seconds: number,
+  duration: number
+): boolean {
+  if (!filePath || !urlMediaService.parseYouTubeUrl(filePath)) return false;
+  if (!Number.isFinite(seconds) || !Number.isFinite(duration)) return false;
+  return duration >= LIVE_STREAM_MIN_DURATION_SECONDS;
+}
+
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
   localTime: 0,
   localDuration: 0,
@@ -108,6 +120,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   localArtist: '',
   localUrl: undefined,
   localMediaType: undefined,
+  isLiveStream: false,
   isLoop: false,
   isScreenOpen: false,
   volume: 100,
@@ -142,24 +155,32 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       'video-progress',
       (event) => {
         if (get().isDragging) return;
-        set({ localTime: event.payload.seconds });
-        if (event.payload.duration > 0) {
-          set({ localDuration: event.payload.duration });
-          if (Math.abs(event.payload.duration - lastSavedDuration) > 1) {
-            lastSavedDuration = event.payload.duration;
-            saveSetting('last_duration', String(event.payload.duration)).catch(() => {});
+        const seconds = Number(event.payload.seconds) || 0;
+        const duration = Number(event.payload.duration) || 0;
+        const isLiveStream = isLiveLikeYouTubeStream(get().currentFilePath, seconds, duration);
 
-            const filePath = get().currentFilePath;
-            if (filePath) {
-              useQueueStore
-                .getState()
-                .updateMetadata(filePath, { duration: event.payload.duration })
-                .catch(() => {});
+        if (isLiveStream) {
+          set({ localTime: 0, localDuration: 0, isLiveStream: true });
+        } else {
+          set({ localTime: seconds, isLiveStream: false });
+          if (duration > 0) {
+            set({ localDuration: duration });
+            if (Math.abs(duration - lastSavedDuration) > 1) {
+              lastSavedDuration = duration;
+              saveSetting('last_duration', String(duration)).catch(() => {});
+
+              const filePath = get().currentFilePath;
+              if (filePath) {
+                useQueueStore
+                  .getState()
+                  .updateMetadata(filePath, { duration })
+                  .catch(() => {});
+              }
             }
           }
         }
 
-        const nextBucket = Math.floor(event.payload.seconds / 10);
+        const nextBucket = Math.floor(seconds / 10);
         if (get().isPlaying && nextBucket !== lastSyncBucket) {
           lastSyncBucket = nextBucket;
           void broadcastPlayerSync(get, 'interval');
@@ -235,6 +256,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         currentLyricSlideIndex: 0,
         currentLyricTotalSlides: 0,
         localMediaType: getMediaTypeFromPath(filePath),
+        isLiveStream: false,
         localTime: seekTime,
         localDuration: seekTime > 0 ? get().localDuration : 0,
       });
@@ -443,6 +465,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set({
       isPlaying: true,
       localMediaType: isVideo ? 'video' : 'audio',
+      isLiveStream: false,
       restoredFilePath: null,
       currentFilePath: source,
       currentLyricPath: null,
@@ -536,6 +559,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       set({
         restoredFilePath: path,
         localMediaType: (type as 'audio' | 'video') ?? undefined,
+        isLiveStream: false,
         localTitle: title ?? '',
         localArtist: artist ?? '',
         localUrl: undefined,
