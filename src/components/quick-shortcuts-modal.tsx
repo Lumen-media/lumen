@@ -35,6 +35,7 @@ import {
   type SearchScope,
   type SearchSource,
 } from '@/services/search-service';
+import type { CommanderSearchAccessoryProps, CommanderSearchTrailingComponent } from '@/modules/types';
 import { type ActiveApp, useCommandStore } from '@/stores/command-store';
 import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
@@ -280,6 +281,10 @@ function PaletteHeader({
   setInputValue,
   inputId,
   placeholder,
+  searchVisible = true,
+  searchPlaceholder,
+  SearchTrailing,
+  searchTrailingProps,
 }: {
   app?: ActiveApp;
   fullContent: boolean;
@@ -288,6 +293,10 @@ function PaletteHeader({
   setInputValue: (v: string) => void;
   inputId: string;
   placeholder?: string;
+  searchVisible?: boolean;
+  searchPlaceholder?: string;
+  SearchTrailing?: CommanderSearchTrailingComponent;
+  searchTrailingProps?: CommanderSearchAccessoryProps;
 }) {
   const { t } = useTranslation();
   const { popApp } = useCommandStore();
@@ -310,20 +319,24 @@ function PaletteHeader({
         </button>
       )}
 
-      <label
-        htmlFor={inputId}
-        className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 focus-within:border-primary/40"
-      >
-        <Search className="size-4 shrink-0 text-muted-foreground" />
-        <input
-          ref={inputRef}
-          id={inputId}
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          placeholder={app ? app.title : (placeholder ?? t('Type a command or search...'))}
-          className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-      </label>
+      {searchVisible && (
+        <label
+          htmlFor={inputId}
+          className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 focus-within:border-primary/40"
+        >
+          <Search className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            ref={inputRef}
+            id={inputId}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder={searchPlaceholder ?? (app ? app.title : (placeholder ?? t('Type a command or search...')))}
+            className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </label>
+      )}
+
+      {SearchTrailing && searchTrailingProps && <SearchTrailing {...searchTrailingProps} />}
 
       {!app && (
         <Button
@@ -544,6 +557,7 @@ function RootView() {
         commandId: r.commandSpec.id,
         title: r.commandSpec.title,
         component: r.commandSpec.component,
+        search: r.commandSpec.commanderSearch,
       } satisfies ActiveApp);
       return;
     }
@@ -672,7 +686,20 @@ function AppView({ app }: { app: ActiveApp }) {
   const { close, popApp } = useCommandStore();
   const AppComponent = app.component;
   const inputId = useId();
-  const [value, setValue] = useState('');
+  const searchOptions = app.search && typeof app.search === 'object' ? app.search : undefined;
+  const searchVisible = app.search === true || !!searchOptions;
+  const [value, setValue] = useState(searchOptions?.initialQuery ?? '');
+  const [SearchTrailing, setSearchTrailing] = useState<CommanderSearchTrailingComponent>();
+
+  useEffect(() => {
+    setValue(searchOptions?.initialQuery ?? '');
+    setSearchTrailing(undefined);
+  }, [app.commandId, searchOptions?.initialQuery]);
+
+  const searchTrailingProps = useMemo<CommanderSearchAccessoryProps>(
+    () => ({ query: value, setQuery: setValue, close, back: popApp }),
+    [value, close, popApp]
+  );
 
   return (
     <div className="flex flex-col rounded-none bg-transparent">
@@ -683,15 +710,24 @@ function AppView({ app }: { app: ActiveApp }) {
         inputValue={value}
         setInputValue={setValue}
         inputId={inputId}
+        searchVisible={searchVisible}
+        searchPlaceholder={searchOptions?.placeholder}
+        SearchTrailing={SearchTrailing}
+        searchTrailingProps={searchTrailingProps}
       />
       <div className="min-h-[320px] flex-1 overflow-auto px-3 pb-3">
-        <AppComponent onClose={close} onBack={popApp} />
+        <AppComponent
+          onClose={close}
+          onBack={popApp}
+          query={value}
+          setQuery={setValue}
+          setSearchTrailing={setSearchTrailing}
+        />
       </div>
       <CommanderFooter showBack />
     </div>
   );
 }
-
 export function QuickShortcutsModal() {
   const { isOpen, toggle, close, activeApp, popApp } = useCommandStore();
 
