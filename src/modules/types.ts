@@ -24,9 +24,26 @@ export interface PanelSpec {
   when?: () => boolean;
 }
 
+export interface CommanderSearchAccessoryProps {
+  query: string;
+  setQuery: (query: string) => void;
+  close: () => void;
+  back: () => void;
+}
+
+export type CommanderSearchTrailingComponent = React.ComponentType<CommanderSearchAccessoryProps>;
+
+export interface CommanderSearchOptions {
+  placeholder?: string;
+  initialQuery?: string;
+}
+
 export interface CommanderAppProps {
   onClose: () => void;
   onBack: () => void;
+  query?: string;
+  setQuery?: (query: string) => void;
+  setSearchTrailing?: React.Dispatch<React.SetStateAction<CommanderSearchTrailingComponent | undefined>>;
 }
 
 export interface CommandSpec {
@@ -39,6 +56,7 @@ export interface CommandSpec {
   type?: 'action' | 'app';
   run?: (args?: unknown) => unknown;
   component?: React.ComponentType<CommanderAppProps>;
+  commanderSearch?: boolean | CommanderSearchOptions;
 }
 
 export interface PanelsAPI {
@@ -52,6 +70,7 @@ export interface PrefixResult {
   badge?: string;
   run?: () => void;
   component?: React.ComponentType<CommanderAppProps>;
+  commanderSearch?: boolean | CommanderSearchOptions;
 }
 
 export interface PrefixSpec {

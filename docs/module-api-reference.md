@@ -177,6 +177,7 @@ host.commands.invoke('my-module.search', { query: 'test' });
 | `type` | `'action' \| 'app'` | | Defaults to `'action'` |
 | `run` | `(args?: unknown) => unknown` | ✓ for `'action'` | Executed on select |
 | `component` | `React.ComponentType<CommanderAppProps>` | ✓ for `'app'` | Sub-UI rendered in palette |
+| `commanderSearch` | `boolean \| CommanderSearchOptions` | | Shows the commander search input inside the app view and passes its query to `component` |
 
 ### `CommanderAppProps`
 
@@ -184,6 +185,45 @@ host.commands.invoke('my-module.search', { query: 'test' });
 |---|---|---|
 | `onClose` | `() => void` | Closes the palette entirely |
 | `onBack` | `() => void` | Returns to the palette root list |
+| `query` | `string` | Current value of the commander search input, when `commanderSearch` is enabled |
+| `setQuery` | `(query: string) => void` | Updates the commander search input from the app component |
+| `setSearchTrailing` | `(component?: CommanderSearchTrailingComponent) => void` | Registers an optional component rendered to the right of the search input |
+
+
+### Commander app search
+
+App commands do not show a search input by default. Enable it with `commanderSearch` when the app should use the commander's own input instead of rendering a second search field.
+
+```tsx
+import { type CommanderAppProps } from '@lumen/module-sdk';
+
+function SearchApp({ query = '', setSearchTrailing }: CommanderAppProps) {
+  React.useEffect(() => {
+    if (!setSearchTrailing) return;
+
+    setSearchTrailing(() => function SearchActions() {
+      return <button aria-label="Settings">⚙</button>;
+    });
+
+    return () => setSearchTrailing(undefined);
+  }, [setSearchTrailing]);
+
+  return <Results query={query} />;
+}
+
+host.commands.add({
+  id: 'my-module.search',
+  title: 'Search External Service',
+  type: 'app',
+  commanderSearch: {
+    placeholder: 'Search external service...',
+    initialQuery: '',
+  },
+  component: SearchApp,
+});
+```
+
+`commanderSearch: true` uses the default app title as the placeholder. Passing an object lets you set `placeholder` and `initialQuery`. Prefix results can also set `commanderSearch`, which is useful when the prefix handler opens an app with the typed prefix query already filled.
 
 ### Prefix search
 
@@ -245,6 +285,7 @@ While a module prefix is active the filter tabs are hidden and results appear un
 | `badge` | `string` | | Override the badge label (defaults to prefix `title`) |
 | `run` | `() => void` | | Called on Enter — closes palette |
 | `component` | `React.ComponentType<CommanderAppProps>` | | Opens as an app screen inside the palette |
+| `commanderSearch` | `boolean \| CommanderSearchOptions` | | Shows the commander search input in the opened app screen |
 
 ### Built-in scope prefixes
 

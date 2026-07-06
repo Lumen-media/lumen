@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import type { CommanderAppProps, CommandSpec, PrefixSpec } from '@/modules/types';
+import type { CommanderAppProps, CommanderSearchOptions, CommandSpec, PrefixSpec } from '@/modules/types';
 import type React from 'react';
 
 export interface ActiveApp {
   commandId: string;
   title: string;
   component: React.ComponentType<CommanderAppProps>;
+  search?: boolean | CommanderSearchOptions;
 }
 
 interface CommandStore {

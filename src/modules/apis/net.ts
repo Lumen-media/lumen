@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { NetAPI, NetRequest, NetResponse, NetError, NetQueryValue } from '../types';
+import type { NetAPI, NetRequest, NetRequestBody, NetResponse, NetError, NetQueryValue } from '../types';
 
 function normalizeQueryValue(v: NetQueryValue | NetQueryValue[]): string[] {
   if (Array.isArray(v)) return v.map(String);
