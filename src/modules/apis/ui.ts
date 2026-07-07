@@ -12,13 +12,15 @@ export function setBackgroundPickerOpener(fn: BgPickerOpener) {
 
 export function createUIAPI(openCommandPaletteFn: (prefilter?: string) => void): UIAPI {
   return {
-    notify({ title, message, level = 'info' }) {
-      if (level === 'error') {
-        toast.error(message, { description: title });
-      } else if (level === 'warn') {
-        toast.warning(message, { description: title });
-      } else {
-        toast.info(message, { description: title });
+    notify({ title, message, level = 'info', ...rest }) {
+      const opts = { description: title, ...rest };
+      switch (level) {
+        case 'error': toast.error(message, opts); break;
+        case 'warn': toast.warning(message, opts); break;
+        case 'success': toast.success(message, opts); break;
+        case 'loading': toast.loading(message, opts); break;
+        case 'custom': toast.custom(message, opts); break;
+        default: toast.info(message, opts);
       }
     },
 
