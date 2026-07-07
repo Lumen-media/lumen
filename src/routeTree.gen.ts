@@ -59,13 +59,13 @@ const LayoutEditRoute = LayoutEditRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof LayoutIndexRoute
   '/media-window': typeof MediaWindowRoute
   '/module-overlay-window': typeof ModuleOverlayWindowRoute
   '/edit': typeof LayoutEditRoute
   '/live': typeof LayoutLiveRoute
   '/presentation': typeof LayoutPresentationRoute
   '/settings': typeof LayoutSettingsRoute
-  '/': typeof LayoutIndexRoute
 }
 export interface FileRoutesByTo {
   '/media-window': typeof MediaWindowRoute
@@ -90,13 +90,13 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/'
     | '/media-window'
     | '/module-overlay-window'
     | '/edit'
     | '/live'
     | '/presentation'
     | '/settings'
-    | '/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/media-window'
@@ -143,7 +143,7 @@ declare module '@tanstack/react-router' {
     '/_layout': {
       id: '/_layout'
       path: ''
-      fullPath: ''
+      fullPath: '/'
       preLoaderRoute: typeof LayoutRouteImport
       parentRoute: typeof rootRouteImport
     }
