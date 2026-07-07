@@ -213,7 +213,9 @@ export function createPlayerHostAPI(): PlayerHostAPI {
       return 'idle';
     },
     play(track) {
-      globalBus.emit('player:play', { track });
+      if (!track) return;
+      const path = typeof track === 'string' ? track : track.path;
+      if (path) void usePlayerStore.getState().loadFile(path);
     },
     pause() {
       globalBus.emit('player:pause');
