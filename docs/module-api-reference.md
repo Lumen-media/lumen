@@ -188,6 +188,7 @@ host.commands.invoke('my-module.search', { query: 'test' });
 | `query` | `string` | Current value of the commander search input, when `commanderSearch` is enabled |
 | `setQuery` | `(query: string) => void` | Updates the commander search input from the app component |
 | `setSearchTrailing` | `(component?: CommanderSearchTrailingComponent) => void` | Registers an optional component rendered to the right of the search input |
+| `setBackHandler` | `(handler?: CommanderBackHandler) => void` | Registers an optional back override used by the commander header and `Escape` before the app is closed |
 
 
 ### Commander app search
@@ -225,6 +226,28 @@ host.commands.add({
 
 `commanderSearch: true` uses the default app title as the placeholder. Passing an object lets you set `placeholder` and `initialQuery`. Prefix results can also set `commanderSearch`, which is useful when the prefix handler opens an app with the typed prefix query already filled.
 
+### Commander app back handling
+
+Apps can optionally override the commander back action without leaving the app. Register a `setBackHandler` callback that returns `true` when it handled the back action internally. If it returns `false`, `undefined`, or no handler is registered, the commander falls back to the default app exit behavior.
+
+```tsx
+function SearchApp({ setBackHandler }: CommanderAppProps) {
+  const [view, setView] = React.useState<'search' | 'settings'>('search');
+
+  React.useEffect(() => {
+    if (!setBackHandler) return;
+
+    setBackHandler(() => {
+      if (view === 'settings') {
+        setView('search');
+        return true;
+      }
+    });
+
+    return () => setBackHandler(undefined);
+  }, [setBackHandler, view]);
+}
+```
 ### Prefix search
 
 Registers a keyword prefix that intercepts typed queries in the palette. When the user types `bible foo`, the query `foo` is routed to your handler instead of running the normal search.
@@ -1024,4 +1047,6 @@ export default class ExamplePlugin extends LumenPlugin {
   }
 }
 ```
+
+
 

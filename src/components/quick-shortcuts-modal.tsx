@@ -16,8 +16,11 @@ import {
 } from 'lucide-react';
 import {
   type ComponentType,
+  type Dispatch,
   Fragment,
   type KeyboardEvent,
+  type SetStateAction,
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -27,6 +30,11 @@ import {
 import { useDebounceValue, useEventListener } from 'usehooks-ts';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import type {
+  CommanderBackHandler,
+  CommanderSearchAccessoryProps,
+  CommanderSearchTrailingComponent,
+} from '@/modules/types';
 import {
   normalize,
   search as runSearch,
@@ -35,7 +43,6 @@ import {
   type SearchScope,
   type SearchSource,
 } from '@/services/search-service';
-import type { CommanderSearchAccessoryProps, CommanderSearchTrailingComponent } from '@/modules/types';
 import { type ActiveApp, useCommandStore } from '@/stores/command-store';
 import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
@@ -285,6 +292,7 @@ function PaletteHeader({
   searchPlaceholder,
   SearchTrailing,
   searchTrailingProps,
+  onBack,
 }: {
   app?: ActiveApp;
   fullContent: boolean;
@@ -297,9 +305,9 @@ function PaletteHeader({
   searchPlaceholder?: string;
   SearchTrailing?: CommanderSearchTrailingComponent;
   searchTrailingProps?: CommanderSearchAccessoryProps;
+  onBack?: () => void;
 }) {
   const { t } = useTranslation();
-  const { popApp } = useCommandStore();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -311,7 +319,7 @@ function PaletteHeader({
       {app && (
         <button
           type="button"
-          onClick={popApp}
+          onClick={onBack}
           aria-label={t('Back')}
           className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/30 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
         >
@@ -330,7 +338,10 @@ function PaletteHeader({
             id={inputId}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={searchPlaceholder ?? (app ? app.title : (placeholder ?? t('Type a command or search...')))}
+            placeholder={
+              searchPlaceholder ??
+              (app ? app.title : (placeholder ?? t('Type a command or search...')))
+            }
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="none"
@@ -688,7 +699,15 @@ function RootView() {
   );
 }
 
-function AppView({ app }: { app: ActiveApp }) {
+function AppView({
+  app,
+  onBackAction,
+  setBackHandler,
+}: {
+  app: ActiveApp;
+  onBackAction: () => Promise<void>;
+  setBackHandler: Dispatch<SetStateAction<CommanderBackHandler | undefined>>;
+}) {
   const { close, popApp } = useCommandStore();
   const AppComponent = app.component;
   const inputId = useId();
@@ -699,11 +718,18 @@ function AppView({ app }: { app: ActiveApp }) {
 
   useEffect(() => {
     setValue(searchOptions?.initialQuery ?? '');
-  }, [app.commandId, searchOptions?.initialQuery]);
+  }, [searchOptions?.initialQuery]);
+
+  useEffect(() => {
+    return () => {
+      setSearchTrailing(undefined);
+      setBackHandler(undefined);
+    };
+  }, [setBackHandler]);
 
   const searchTrailingProps = useMemo<CommanderSearchAccessoryProps>(
-    () => ({ query: value, setQuery: setValue, close, back: popApp }),
-    [value, close, popApp]
+    () => ({ query: value, setQuery: setValue, close, back: () => void onBackAction() }),
+    [value, close, onBackAction]
   );
 
   return (
@@ -719,22 +745,41 @@ function AppView({ app }: { app: ActiveApp }) {
         searchPlaceholder={searchOptions?.placeholder}
         SearchTrailing={SearchTrailing}
         searchTrailingProps={searchTrailingProps}
+        onBack={() => void onBackAction()}
       />
       <div className="min-h-[320px] flex-1 overflow-auto px-3 pb-3">
         <AppComponent
           onClose={close}
-          onBack={popApp}
+          onBack={() => void onBackAction()}
           query={value}
           setQuery={setValue}
           setSearchTrailing={setSearchTrailing}
+          setBackHandler={setBackHandler}
         />
       </div>
       <CommanderFooter showBack />
     </div>
   );
 }
+
 export function QuickShortcutsModal() {
   const { isOpen, toggle, close, activeApp, popApp } = useCommandStore();
+  const [appBackHandler, setAppBackHandler] = useState<CommanderBackHandler>();
+
+  const handleActiveAppBack = useCallback(async () => {
+    const handled = await appBackHandler?.();
+    if (handled) {
+      return;
+    }
+
+    popApp();
+  }, [appBackHandler, popApp]);
+
+  useEffect(() => {
+    if (!activeApp) {
+      setAppBackHandler(undefined);
+    }
+  }, [activeApp]);
 
   useEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -749,8 +794,8 @@ export function QuickShortcutsModal() {
       onOpenChange={(open, eventDetails) => {
         if (!open) {
           if (eventDetails?.reason === 'escape-key' && activeApp) {
-            popApp();
             eventDetails.cancel();
+            void handleActiveAppBack();
           } else {
             close();
           }
@@ -758,9 +803,18 @@ export function QuickShortcutsModal() {
       }}
     >
       <DialogContent showCloseButton={false} className="overflow-hidden p-0 sm:max-w-[760px]">
-        {activeApp ? <AppView app={activeApp} /> : <RootView />}
+        {activeApp ? (
+          <AppView
+            app={activeApp}
+            onBackAction={handleActiveAppBack}
+            setBackHandler={setAppBackHandler}
+          />
+        ) : (
+          <RootView />
+        )}
       </DialogContent>
     </Dialog>
   );
 }
+
 

@@ -33,6 +33,8 @@ export interface CommanderSearchAccessoryProps {
 
 export type CommanderSearchTrailingComponent = React.ComponentType<CommanderSearchAccessoryProps>;
 
+export type CommanderBackHandler = () => boolean | undefined | Promise<boolean | undefined>;
+
 export interface CommanderSearchOptions {
   placeholder?: string;
   initialQuery?: string;
@@ -43,7 +45,10 @@ export interface CommanderAppProps {
   onBack: () => void;
   query?: string;
   setQuery?: (query: string) => void;
-  setSearchTrailing?: React.Dispatch<React.SetStateAction<CommanderSearchTrailingComponent | undefined>>;
+  setSearchTrailing?: React.Dispatch<
+    React.SetStateAction<CommanderSearchTrailingComponent | undefined>
+  >;
+  setBackHandler?: React.Dispatch<React.SetStateAction<CommanderBackHandler | undefined>>;
 }
 
 export interface CommandSpec {
@@ -423,14 +428,11 @@ export interface NetError extends Error {
 export interface NetAPI {
   request<T = unknown>(input: NetRequest): Promise<NetResponse<T>>;
 
-  get?<T = unknown>(
-    url: string,
-    opts?: Omit<NetRequest, 'url' | 'method' | 'body'>,
-  ): Promise<T>;
+  get?<T = unknown>(url: string, opts?: Omit<NetRequest, 'url' | 'method' | 'body'>): Promise<T>;
   post?<T = unknown>(
     url: string,
     body?: NetRequestBody | unknown,
-    opts?: Omit<NetRequest, 'url' | 'method' | 'body'>,
+    opts?: Omit<NetRequest, 'url' | 'method' | 'body'>
   ): Promise<T>;
 }
 
