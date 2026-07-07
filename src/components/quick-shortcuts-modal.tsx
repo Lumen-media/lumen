@@ -175,7 +175,7 @@ function ResultRow({
 }) {
   const { t } = useTranslation();
   const theme = SOURCE_THEME[result.source];
-  const Icon = theme.icon;
+  const Icon = result.commandSpec?.icon ?? theme.icon;
 
   return (
     <button
@@ -763,3 +763,4 @@ export function QuickShortcutsModal() {
     </Dialog>
   );
 }
+
