@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { AppHeader } from '@/components/app-header';
 import { AsidePanel } from '@/components/aside-panel';
@@ -13,6 +14,15 @@ export const Route = createFileRoute('/_layout')({
 });
 
 function LayoutComponent() {
+  const [savedLayout, setSavedLayout] = React.useState<Record<string, number> | undefined>(() => {
+    try {
+      const saved = localStorage.getItem('main-layout-panels');
+      return saved ? JSON.parse(saved) : undefined;
+    } catch {
+      return undefined;
+    }
+  });
+
   return (
     <main className="h-dvh flex flex-col">
       <TitleBar />
@@ -20,11 +30,15 @@ function LayoutComponent() {
       <AppHeader />
 
       <ResizablePanelGroup
-        direction="horizontal"
-        autoSaveId="main-layout-panels"
+        orientation="horizontal"
+        defaultLayout={savedLayout}
+        onLayoutChanged={(layout) => {
+          localStorage.setItem('main-layout-panels', JSON.stringify(layout));
+          setSavedLayout(layout);
+        }}
         className="flex-1 overflow-hidden"
       >
-        <ResizablePanel minSize={18} defaultSize={25}>
+        <ResizablePanel id="media" minSize={18} defaultSize={25}>
           <ErrorBoundary>
             <MediaPanel />
           </ErrorBoundary>
@@ -32,7 +46,7 @@ function LayoutComponent() {
 
         <ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
-        <ResizablePanel minSize={50}>
+        <ResizablePanel id="content" minSize={50}>
           <Card className="w-full h-full gap-3">
             <Outlet />
             <MiniPlayer />
@@ -41,7 +55,7 @@ function LayoutComponent() {
 
         <ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
-        <ResizablePanel minSize={18} defaultSize={25}>
+        <ResizablePanel id="aside" minSize={18} defaultSize={25}>
           <AsidePanel />
         </ResizablePanel>
       </ResizablePanelGroup>
