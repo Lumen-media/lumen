@@ -19,7 +19,7 @@ export function createUIAPI(openCommandPaletteFn: (prefilter?: string) => void):
         case 'warn': toast.warning(message, opts); break;
         case 'success': toast.success(message, opts); break;
         case 'loading': toast.loading(message, opts); break;
-        case 'custom': toast.custom(message, opts); break;
+        case 'custom': toast(message, opts); break;
         default: toast.info(message, opts);
       }
     },
