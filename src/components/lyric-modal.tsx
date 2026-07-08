@@ -1,11 +1,11 @@
 import { useForm } from '@tanstack/react-form';
-import { useTranslation } from '@/lib/i18n';
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, ImagePlus, Palette } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
+import { useTranslation } from '@/lib/i18n';
 import { type LyricData, lyricService } from '@/services/lyric-service';
 import { thumbnailService } from '@/services/thumbnail-service';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
@@ -114,10 +114,15 @@ function SlidePreview({
       return;
     }
     let cancelled = false;
-    thumbnailService.getThumbnail(effectiveBg, 800)
-      .then((url) => { if (!cancelled) setBgSrc(url); })
+    thumbnailService
+      .getThumbnail(effectiveBg, 800)
+      .then((url) => {
+        if (!cancelled) setBgSrc(url);
+      })
       .catch(() => setBgSrc(undefined));
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [effectiveBg]);
 
   return (
@@ -136,9 +141,8 @@ function SlidePreview({
       <button
         type="button"
         onClick={onSetBackground}
-        className={`absolute top-2 right-2 p-1 rounded transition-colors z-10 ${
-          background ? 'bg-primary/80 hover:bg-primary/80' : 'bg-white/10 hover:bg-white/20'
-        }`}
+        className={`absolute top-2 right-2 p-1 rounded transition-colors z-10 ${background ? 'bg-primary/80 hover:bg-primary/80' : 'bg-white/10 hover:bg-white/20'
+          }`}
         title={background ? 'Change slide background' : 'Set slide background'}
       >
         <ImagePlus className="size-3.5 text-white" />
@@ -254,7 +258,7 @@ export const LyricModal = () => {
         toast.error(t('Failed to load lyric file'));
       })
       .finally(() => setLoadingFile(false));
-  }, [isOpen, filePath, form.reset, form.setFieldValue]);
+  }, [isOpen, filePath, form.reset, form.setFieldValue, t]);
 
   const fontOptions = fonts.map((f) => ({ label: f, value: f }));
 
