@@ -45,7 +45,7 @@ export function createLyricsHostAPI(): LyricsHostAPI {
       const numId = Number(id);
       if (!Number.isFinite(numId)) return null;
       const hit = await mediaDbService.getById(numId);
-      if (!hit || hit.media_type !== 'lyrics') return null;
+      if (hit?.media_type !== 'lyrics') return null;
       const data = await lyricService.load(hit.path);
       return {
         id,
@@ -470,7 +470,7 @@ export function createThemesHostAPI(): ThemesHostAPI {
       return profileBg ? { src: profileBg.src, type: profileBg.type, name: profileBg.name } : null;
     },
     onDefaultBackgroundChange(handler) {
-      let lastSrc: string | null | undefined = undefined;
+      let lastSrc: string | null | undefined ;
 
       const fire = (
         bg: { src: string; type: 'theme' | 'image' | 'video'; name: string } | null

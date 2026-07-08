@@ -38,7 +38,7 @@ function StreamOverlay() {
 
     pc.ontrack = (event) => {
       if (event.track.kind === 'video') {
-        videoStream.getVideoTracks().forEach((t) => videoStream.removeTrack(t));
+        videoStream.getVideoTracks().forEach((t) => { videoStream.removeTrack(t); });
         videoStream.addTrack(event.track);
         attachVideo();
         if (event.track.muted) event.track.onunmute = () => attachVideo();
@@ -150,7 +150,7 @@ function MediaWindowComponent() {
 
   const debouncedSavePosition = useDebounceCallback(saveCurrentPosition, 500);
 
-  const setDecorations = async (decorated: boolean) => {
+  const setDecorations = useCallback(async (decorated: boolean) => {
     try {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
       const window = getCurrentWebviewWindow();
@@ -160,9 +160,9 @@ function MediaWindowComponent() {
     } catch (error) {
       console.error('Failed to set window decorations:', error);
     }
-  };
+  }, []);
 
-  const toggleFullscreen = async () => {
+  const toggleFullscreen = useCallback(async () => {
     try {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
       const window = getCurrentWebviewWindow();
@@ -182,9 +182,9 @@ function MediaWindowComponent() {
     } catch (error) {
       console.error('Failed to toggle fullscreen:', error);
     }
-  };
+  }, [setDecorations, saveCurrentPosition]);
 
-  const closeWindow = async () => {
+  const closeWindow = useCallback(async () => {
     try {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
       const window = getCurrentWebviewWindow();
@@ -196,7 +196,7 @@ function MediaWindowComponent() {
     } catch (error) {
       console.error('Failed to close window:', error);
     }
-  };
+  }, [saveCurrentPosition]);
 
   const ensureDefaultWindowMode = useCallback(async () => {
     try {
@@ -211,7 +211,7 @@ function MediaWindowComponent() {
     } catch (error) {
       console.error('Failed to enforce media window defaults:', error);
     }
-  }, []);
+  }, [setDecorations]);
 
   useEffect(() => {
     void ensureDefaultWindowMode();

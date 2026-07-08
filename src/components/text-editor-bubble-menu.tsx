@@ -34,9 +34,9 @@ function TextEditorBubbleMenu({
       )}
       {...props}
     >
-      {items.map((item, index) => (
+      {items.map((item) => (
         <button
-          key={index}
+          key={String(item.children)}
           type="button"
           onClick={item.action}
           className={cn(

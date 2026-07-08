@@ -32,6 +32,7 @@ export function DevicePermissionsSection() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: t is stable in practice
   useEffect(() => {
     let mounted = true;
     let unlistenRegistered: (() => void) | null = null;

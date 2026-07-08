@@ -26,7 +26,7 @@ export function DeleteFileAlert({ onDelete }: DeleteFileAlertProps) {
 
     setIsDeleting(true);
     try {
-      if (file.extension === 'url' || Boolean(file.originalUrl)) {
+      if (file.extension === 'url' || file.originalUrl) {
         await mediaDbService.deleteFile(file.path);
       } else {
         await remove(file.path);

@@ -3,7 +3,7 @@
 import { useTranslation } from '@/lib/i18n';
 import { Loader2, QrCode, RefreshCw } from 'lucide-react';
 import QRCode from 'qrcode';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { RegistrationTokenPayload, RemoteAccessSettings } from '@/services';
 import { devicesService } from '@/services';
 import { Button } from '../ui/button';
@@ -27,6 +27,23 @@ export function GeneralAccessSection() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: t is stable in practice
+  const refreshQrCode = useCallback(async () => {
+    if (!settings.remote_enabled) return;
+
+    try {
+      setRefreshingQr(true);
+      setError(null);
+      const token = await devicesService.generateRegistrationToken();
+      setRegistration(token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('Unable to refresh QR code.'));
+    } finally {
+      setRefreshingQr(false);
+    }
+  }, [settings.remote_enabled]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: t is stable in practice
   useEffect(() => {
     let mounted = true;
     let unlistenAuthenticated: (() => void) | null = null;
@@ -75,7 +92,7 @@ export function GeneralAccessSection() {
       mounted = false;
       unlistenAuthenticated?.();
     };
-  }, [settings.remote_enabled]);
+  }, [settings.remote_enabled, refreshQrCode]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -85,6 +102,7 @@ export function GeneralAccessSection() {
     return () => window.clearInterval(interval);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: t is stable in practice
   useEffect(() => {
     let cancelled = false;
 
@@ -141,7 +159,7 @@ export function GeneralAccessSection() {
     if (expiresIn === 0) {
       refreshQrCode().catch(() => {});
     }
-  }, [expiresIn, loading, refreshingQr, registration, settings.remote_enabled]);
+  }, [expiresIn, loading, refreshingQr, registration, settings.remote_enabled, refreshQrCode]);
 
   async function persistSettings(
     nextSettings: RemoteAccessSettings,
@@ -169,21 +187,6 @@ export function GeneralAccessSection() {
       setError(err instanceof Error ? err.message : t('Unable to save remote access settings.'));
     } finally {
       setSavingKey(null);
-    }
-  }
-
-  async function refreshQrCode() {
-    if (!settings.remote_enabled) return;
-
-    try {
-      setRefreshingQr(true);
-      setError(null);
-      const token = await devicesService.generateRegistrationToken();
-      setRegistration(token);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('Unable to refresh QR code.'));
-    } finally {
-      setRefreshingQr(false);
     }
   }
 
