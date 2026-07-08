@@ -24,13 +24,6 @@ export type VideoplayerProps = {
   interactive?: boolean;
 };
 
-type stateTypes = {
-  loaded: number;
-  loadedSeconds: number;
-  played: number;
-  playedSeconds: number;
-};
-
 export const Videoplayer = ({
   className,
   url,
@@ -58,7 +51,7 @@ export const Videoplayer = ({
     const decoded = decodeURIComponent(raw);
     return { title: decoded.replace(/\.[^.]+$/, '') };
   }
-  const playerRef = useRef<ReactPlayer>(null);
+  const playerRef = useRef<HTMLVideoElement>(null);
   const currentBlobUrl = useRef<string | null>(null);
   const currentFilePath = useRef<string | null>(null);
   const pendingThumbnail = useRef<string | null>(null);
@@ -74,7 +67,6 @@ export const Videoplayer = ({
   const [volume, setVolume] = useState(1);
   const [mutedState, setMutedState] = useState(muted);
   const [played, setPlayed] = useState(0);
-  const [_loaded, setLoaded] = useState(0);
   const [isLooping, setIsLooping] = useState(false);
   const [activeUrl, setActiveUrl] = useState(url ?? '');
 
@@ -101,15 +93,16 @@ export const Videoplayer = ({
     setMutedState((prevMuted) => !prevMuted);
   }, []);
 
-  const handleProgress = (state: stateTypes) => {
-    setPlayed(state.played);
-    setLoaded(state.loaded);
+  const handleTimeUpdate = () => {
+    if (!playerRef.current) return;
+    const duration = playerRef.current.duration || 1;
+    setPlayed(playerRef.current.currentTime / duration);
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(
         JSON.stringify({
           event: 'progress',
-          value: state.playedSeconds,
-          duration: playerRef.current?.getDuration() ?? 0,
+          value: playerRef.current.currentTime,
+          duration,
         })
       );
     }
@@ -119,7 +112,7 @@ export const Videoplayer = ({
     if (!playerRef.current) {
       return;
     }
-    playerRef.current.seekTo(value);
+    playerRef.current.currentTime = value * playerRef.current.duration;
     setPlayed(value);
   };
 
@@ -167,8 +160,8 @@ export const Videoplayer = ({
         if (!mounted) return;
         const seconds = event.payload as number;
         if (playerRef.current) {
-          playerRef.current.seekTo(seconds, 'seconds');
-          setPlayed(seconds / (playerRef.current.getDuration() || 1));
+          playerRef.current.currentTime = seconds;
+          setPlayed(seconds / (playerRef.current.duration || 1));
         }
       }),
       listen('video-loop', (event) => {
@@ -179,7 +172,7 @@ export const Videoplayer = ({
         if (!mounted) return;
         setPlaying(false);
         if (playerRef.current) {
-          playerRef.current.seekTo(0, 'seconds');
+          playerRef.current.currentTime = 0;
           setPlayed(0);
         }
       }),
@@ -237,13 +230,17 @@ export const Videoplayer = ({
       if (mounted) {
         registered.push(...fns);
       } else {
-        fns.forEach((f) => f());
+        fns.forEach((f) => {
+          f();
+        });
       }
     });
 
     return () => {
       mounted = false;
-      registered.forEach((f) => f());
+      registered.forEach((f) => {
+        f();
+      });
     };
   }, [handleMute, handlePlayPause]);
 
@@ -260,14 +257,14 @@ export const Videoplayer = ({
       <ReactPlayer
         key={activeUrl}
         ref={playerRef}
-        url={activeUrl}
+        src={activeUrl}
         playing={playing}
         volume={volume}
         muted={mutedState}
         onReady={async () => {
           switchingUrlRef.current = false;
           if (pendingSeekTime.current !== null && pendingSeekTime.current > 0) {
-            playerRef.current?.seekTo(pendingSeekTime.current, 'seconds');
+            if (playerRef.current) playerRef.current.currentTime = pendingSeekTime.current;
             pendingSeekTime.current = null;
           }
           if (ws?.readyState === WebSocket.OPEN) {
@@ -284,7 +281,7 @@ export const Videoplayer = ({
             );
           }
         }}
-        onProgress={handleProgress}
+        onTimeUpdate={handleTimeUpdate}
         onEnded={() => {
           if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ event: 'stop' }));
@@ -363,8 +360,8 @@ export const Videoplayer = ({
             />
           </div>
           <p className="text-gray-200 flex items-center gap-2 ml-3 text-[0.75rem]">
-            <span>{formatTime(playerRef.current?.getCurrentTime() || 0)}</span>/
-            <span>{formatTime(playerRef.current?.getDuration() || 0)}</span>
+            <span>{formatTime(playerRef.current?.currentTime || 0)}</span>/
+            <span>{formatTime(playerRef.current?.duration || 0)}</span>
           </p>
         </div>
       </div>
