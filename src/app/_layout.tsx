@@ -38,7 +38,7 @@ function LayoutComponent() {
         }}
         className="flex-1 overflow-hidden"
       >
-        <ResizablePanel id="media" minSize={18} defaultSize={25}>
+        <ResizablePanel id="media" minSize="18%" defaultSize="25%">
           <ErrorBoundary>
             <MediaPanel />
           </ErrorBoundary>
@@ -46,7 +46,7 @@ function LayoutComponent() {
 
         <ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
-        <ResizablePanel id="content" minSize={50}>
+        <ResizablePanel id="content" minSize="50%">
           <Card className="w-full h-full gap-3">
             <Outlet />
             <MiniPlayer />
@@ -55,7 +55,7 @@ function LayoutComponent() {
 
         <ResizableHandle className="bg-transparent mx-1.5 w-0" />
 
-        <ResizablePanel id="aside" minSize={18} defaultSize={25}>
+        <ResizablePanel id="aside" minSize="18%" defaultSize="25%">
           <AsidePanel />
         </ResizablePanel>
       </ResizablePanelGroup>
