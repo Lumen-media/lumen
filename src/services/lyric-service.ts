@@ -52,7 +52,7 @@ function serializeLyric(data: LyricData): string {
     }
   }
 
-  return lines.join('\n').trim() + '\n';
+  return `${lines.join('\n').trim()}\n`;
 }
 
 function parseFrontmatter(content: string): { metadata: Partial<LyricMetadata>; body: string } {

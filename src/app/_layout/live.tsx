@@ -164,7 +164,7 @@ function RouteComponent() {
         const previewVideoStream = previewVideoStreamRef.current;
         previewVideoStream
           .getVideoTracks()
-          .forEach((track) => previewVideoStream.removeTrack(track));
+          .forEach((track) => { previewVideoStream.removeTrack(track); });
         previewVideoStream.addTrack(event.track);
 
         const attachVideoTrack = () => {
@@ -183,7 +183,7 @@ function RouteComponent() {
         const previewAudioStream = previewAudioStreamRef.current;
         previewAudioStream
           .getAudioTracks()
-          .forEach((track) => previewAudioStream.removeTrack(track));
+          .forEach((track) => { previewAudioStream.removeTrack(track); });
         previewAudioStream.addTrack(event.track);
 
         const attachAudioTrack = () => {

@@ -321,6 +321,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
     gap: GAP,
   });
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: t is stable in practice
   const searchUnsplash = useCallback(async (query: string, page: number) => {
     setUnsplashLoading(true);
     try {
@@ -346,6 +347,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
 
   const [debouncedQuery] = useDebounceValue(searchQuery, 400);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: searchUnsplash is stable (empty deps)
   useEffect(() => {
     if (!debouncedQuery.trim()) {
       setUnsplashResults([]);
@@ -354,7 +356,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
       return;
     }
     searchUnsplash(debouncedQuery, 1);
-  }, [debouncedQuery, searchUnsplash]);
+  }, [debouncedQuery]);
 
   const handleDownload = async (photo: UnsplashPhoto) => {
     if (downloading.has(photo.id)) return;

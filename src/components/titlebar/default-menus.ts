@@ -114,5 +114,5 @@ const DEFAULT_MENUS: MenuDef[] = [
 
 export function registerDefaultMenus() {
   const { registerMenu } = useMenuRegistry.getState();
-  DEFAULT_MENUS.forEach((menu, index) => registerMenu(menu, index * 10));
+  DEFAULT_MENUS.forEach((menu, index) => { registerMenu(menu, index * 10); });
 }
