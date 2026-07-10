@@ -399,12 +399,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if let Some(window) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();
+                let window_clone = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
                         let _ = app_handle
                             .save_window_state(StateFlags::all() & !StateFlags::DECORATIONS);
-                        let _ = window.hide();
+                        let _ = window_clone.hide();
                     }
                 });
             }
