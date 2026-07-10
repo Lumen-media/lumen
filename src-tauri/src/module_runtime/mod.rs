@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use manifest::ModuleManifest;
 use registry::Registry;
@@ -119,11 +119,15 @@ pub fn module_install(
         "sideload"
     };
 
-    Ok(InstalledModule {
+    let installed = InstalledModule {
         manifest,
         source: source.into(),
         enabled: true,
-    })
+    };
+
+    let _ = app.emit("module:installed", &installed);
+
+    Ok(installed)
 }
 
 #[tauri::command]
@@ -155,7 +159,11 @@ pub fn module_enable(app: AppHandle, id: String) -> Result<(), String> {
 pub fn module_disable(app: AppHandle, id: String) -> Result<(), String> {
     let runtime = app.state::<ModuleRuntime>();
     let reg = runtime.registry.lock().map_err(|e| e.to_string())?;
-    reg.set_enabled(&id, false).map_err(|e| e.to_string())
+    reg.set_enabled(&id, false).map_err(|e| e.to_string())?;
+
+    let _ = app.emit("module:disabled", &id);
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -171,7 +179,11 @@ pub fn module_uninstall(app: AppHandle, id: String) -> Result<(), String> {
         }
     }
 
-    reg.remove(&id).map_err(|e| e.to_string())
+    reg.remove(&id).map_err(|e| e.to_string())?;
+
+    let _ = app.emit("module:uninstalled", &id);
+
+    Ok(())
 }
 
 #[tauri::command]
