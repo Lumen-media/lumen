@@ -22,21 +22,7 @@ No new crates needed. Tauri v2 has built-in tray support behind this feature fla
 
 ### 2. `src-tauri/tauri.conf.json`
 
-Add a `trayIcon` section pointing to an icon file:
-
-```json
-{
-  "app": {
-    "trayIcon": {
-      "iconPath": "icons/icon.ico",
-      "iconAsTemplate": true
-    },
-    "windows": [...]
-  }
-}
-```
-
-The icon already exists at `src-tauri/icons/icon.ico` (used for the app bundle). On macOS, `iconAsTemplate: true` enables automatic dark/light mode adaptation.
+No changes needed. The tray icon is created entirely in Rust code. Do **not** add a `trayIcon` section to the config, as Tauri would create a default tray automatically and conflict with the code-created one, resulting in two tray icons (one functional with menu, one dead icon with no behavior).
 
 ### 3. `src-tauri/src/main.rs`
 
@@ -148,7 +134,7 @@ The only frontend consideration: if the main window should show a badge or indic
 
 | Action | Result |
 |--------|--------|
-| User clicks X (close) on main window | Window hides to tray. App continues running. |
+| User clicks X (close) on main window | Window hides to tray silently. No confirmation dialog. App continues running. |
 | User clicks tray icon | Main window shows and focuses. |
 | User right-clicks tray icon → "Show Lumen" | Main window shows and focuses. |
 | User right-clicks tray icon → "Quit" | App exits completely. |
@@ -157,11 +143,20 @@ The only frontend consideration: if the main window should show a badge or indic
 | Media playback triggered remotely | Works normally, WebSocket server active. |
 | Secondary window already open | Stays open and functional even if main window is hidden. |
 
-## Future Improvements (Post-MVP)
+## Current Limitations
 
-- **Close confirmation dialog**: Instead of silently hiding to tray on X, show a dialog (React custom dialog or a separate Tauri window styled as a native dialog) with "Fechar / Segundo plano / Cancelar".
-- **"Minimize to tray on close" setting**: User preference toggle.
-- **Tray tooltip**: Show "Now Playing" or connected device count on hover.
+- **No close confirmation dialog**: Clicking X hides to tray silently. The user may not realize the app is still running. A dialog with "Fechar / Segundo plano / Cancelar" is needed.
+- **No "minimize to tray on close" setting**: The behavior is hardcoded. Should be a user preference.
+
+## Next Step — Close Confirmation Dialog
+
+The current behavior hides to tray without asking. The next step is to show a dialog before hiding. Options ranked by desktop feel:
+
+1. **Separate Tauri window** (recommended) — Uma `WebviewWindow` pequena, sem decorações, centralizada, estilizada pra parecer um dialog nativo do Windows. Oferece "Fechar app" / "Segundo plano" / "Cancelar".
+2. **React dialog** — Dentro da main window. Mais simples, mas visual de web app.
+3. **`tauri-plugin-dialog`** — Nativo do Windows, mas botões limitados (só Ok/Cancel).
+
+## Future Improvements (Post-MVP)
 
 ## Future Extensions (Out of Scope)
 
