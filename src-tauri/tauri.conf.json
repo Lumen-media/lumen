@@ -10,6 +10,10 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "trayIcon": {
+      "iconPath": "icons/icon.ico",
+      "iconAsTemplate": true
+    },
     "windows": [
       {
         "label": "main",
