@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { createHost } from './host';
 import { useModuleStore } from './store';
 import type { Disposable, LumenPlugin, ModuleManifest } from './types';
@@ -82,6 +83,51 @@ export async function bootModules() {
     });
     await loadModule(manifest);
   }
+
+  startModuleEventListeners();
+}
+
+let eventListenersStarted = false;
+
+function startModuleEventListeners() {
+  if (eventListenersStarted) return;
+  eventListenersStarted = true;
+
+  listen<{ manifest: ModuleManifest; source: string; enabled: boolean }>('module:installed', (event) => {
+    const { manifest, source } = event.payload;
+    const store = useModuleStore.getState();
+    if (store.modules.has(manifest.id)) return;
+    store.registerModule({
+      manifest,
+      status: 'loading',
+      errorCount: 0,
+      source: source as 'bundled' | 'store' | 'sideload' | 'dev',
+    });
+    loadModule(manifest);
+  });
+
+  listen<string>('module:reload', (event) => {
+    reloadModule(event.payload);
+  });
+
+  listen<string>('module:uninstalled', (event) => {
+    const id = event.payload;
+    const entry = loaded.get(id);
+    if (entry) {
+      unloadModule(id).then(() => {
+        useModuleStore.getState().removeModule(id);
+      });
+    } else {
+      useModuleStore.getState().removeModule(id);
+    }
+  });
+
+  listen<string>('module:disabled', (event) => {
+    const id = event.payload;
+    unloadModule(id).then(() => {
+      useModuleStore.getState().setStatus(id, 'disabled');
+    });
+  });
 }
 
 export async function loadModule(manifest: ModuleManifest) {
