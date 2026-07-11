@@ -102,7 +102,7 @@ export function lumenHostModules(): Plugin {
     },
 
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
+      server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith('/__modules/')) return next();
         const urlPath = req.url.slice('/__modules/'.length).split('?')[0];
         const [moduleId, ...fileParts] = urlPath.split('/');
@@ -117,21 +117,36 @@ export function lumenHostModules(): Plugin {
           .map(dir => path.join(dir, moduleId, fileRelative))
           .find(p => fs.existsSync(p));
 
+        if (filePath) {
+          try {
+            const content = fs.readFileSync(filePath);
+            const ext = path.extname(fileRelative);
+            const mime = ext === '.js' || ext === '.mjs' ? 'application/javascript'
+              : ext === '.css' ? 'text/css'
+              : ext === '.json' ? 'application/json'
+              : 'application/octet-stream';
+            res.setHeader('Content-Type', mime);
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.statusCode = 200;
+            res.end(content);
+            return;
+          } catch {
+            // fall through to dev server
+          }
+        }
+
         try {
-          if (!filePath) throw new Error('not found');
-          const content = fs.readFileSync(filePath);
-          const ext = path.extname(fileRelative);
-          const mime = ext === '.js' || ext === '.mjs' ? 'application/javascript'
-            : ext === '.css' ? 'text/css'
-            : ext === '.json' ? 'application/json'
-            : 'application/octet-stream';
-          res.setHeader('Content-Type', mime);
+          const devRes = await fetch(`http://127.0.0.1:5179/module-files/${moduleId}/${fileRelative}`);
+          if (!devRes.ok) throw new Error('not found');
+          const content = Buffer.from(await devRes.arrayBuffer());
+          const contentType = devRes.headers.get('content-type') || 'application/octet-stream';
+          res.setHeader('Content-Type', contentType);
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.statusCode = 200;
           res.end(content);
         } catch {
           res.statusCode = 404;
-          res.end(`module file not found: ${filePath ?? 'undefined'}`);
+          res.end(`module file not found: ${moduleId}/${fileRelative}`);
         }
       });
 
