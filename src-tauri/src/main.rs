@@ -331,12 +331,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .expect("failed to initialize module runtime");
             app.manage(runtime);
 
-            if cfg!(debug_assertions) {
-                let app_handle = app.handle().clone();
-                async_runtime::spawn(async move {
-                    start_dev_server(app_handle).await;
-                });
-            }
+            let app_handle = app.handle().clone();
+            async_runtime::spawn(async move {
+                start_dev_server(app_handle).await;
+            });
 
             devices::ensure_remote_access_ready(&app.handle()).map_err(|e| e.to_string())?;
             let streaming_state = streaming::initialize_streaming_state(&app.handle())?;
