@@ -13,6 +13,7 @@ use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, async_runtime};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use tokio::net::TcpListener;
 
@@ -400,12 +401,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(window) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();
                 let window_clone = window.clone();
+
+                let locale = tauri_plugin_os::locale().unwrap_or_default();
+                let is_portuguese = locale.starts_with("pt");
+
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
-                        let _ = app_handle
-                            .save_window_state(StateFlags::all() & !StateFlags::DECORATIONS);
-                        let _ = window_clone.hide();
+
+                        let (message, keep_btn, close_btn) = if is_portuguese {
+                            ("Deseja manter o Lumen em segundo plano?", "Manter em segundo plano", "Fechar")
+                        } else {
+                            ("Keep Lumen running in the background?", "Keep in background", "Close")
+                        };
+
+                        let app = app_handle.clone();
+                        let win = window_clone.clone();
+
+                        app_handle
+                            .dialog()
+                            .message(message)
+                            .buttons(MessageDialogButtons::OkCancelCustom(
+                                keep_btn.into(),
+                                close_btn.into(),
+                            ))
+                            .title("Lumen")
+                            .show(move |keep_in_background| {
+                                if keep_in_background {
+                                    let _ = app.save_window_state(
+                                        StateFlags::all() & !StateFlags::DECORATIONS,
+                                    );
+                                    let _ = win.hide();
+                                } else {
+                                    app.exit(0);
+                                }
+                            });
                     }
                 });
             }
