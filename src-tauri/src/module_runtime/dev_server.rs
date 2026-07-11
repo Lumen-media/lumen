@@ -43,7 +43,7 @@ pub async fn start_dev_server(app: AppHandle) {
         .route("/modules/{id}/reload", post(reload_module))
         .route("/modules/{id}/disable", post(disable_module))
         .route("/modules/{id}", delete(uninstall_module))
-        .route("/module-files/{id}/{*file}", get(serve_module_file))
+        .route("/module-files/*path", get(serve_module_file))
         .with_state(Arc::new(state));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], DEV_SERVER_PORT));
@@ -140,9 +140,13 @@ async fn uninstall_module(
 
 async fn serve_module_file(
     State(state): State<Arc<AppState>>,
-    Path((id, file)): Path<(String, String)>,
+    Path(path): Path<String>,
 ) -> Response {
     use tauri::Manager;
+    let (id, file) = match path.split_once('/') {
+        Some(pair) => (pair.0.to_string(), pair.1.to_string()),
+        None => return (StatusCode::BAD_REQUEST, "expected path: {module_id}/{file}").into_response(),
+    };
     let runtime = state.app.state::<ModuleRuntime>();
     let entry = runtime.registry.lock().ok()
         .and_then(|reg| reg.get(&id).ok().flatten());
