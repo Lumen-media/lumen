@@ -1,23 +1,10 @@
 import { create } from 'zustand';
+import en from '@/locales/en/translation.json';
+import pt from '@/locales/pt/translation.json';
 
 const translations: Record<string, Record<string, string>> = {
-  en: {},
-  'pt-BR': {
-    Language: 'Idioma',
-    'Color Mode': 'Modo de Cor',
-    'Accent Color': 'Cor de Destaque',
-    'Default Background': 'Plano de Fundo Padrão',
-    'Add background': 'Adicionar plano de fundo',
-    'Workspace': 'Espaço de Trabalho',
-    'Appearance Settings': 'Aparência',
-    'Theme & Profiles': 'Temas e Perfis',
-    'New Profile': 'Novo Perfil',
-    'Developer Mode': 'Modo Desenvolvedor',
-    'Enable advanced options for module development and debugging.': 'Habilita opções avançadas para desenvolvimento e depuração de módulos.',
-    'Advanced': 'Avançado',
-    'Modules': 'Módulos',
-    'About': 'Sobre',
-  },
+  en: en as Record<string, string>,
+  'pt-BR': pt as Record<string, string>,
 };
 
 interface I18nState {
