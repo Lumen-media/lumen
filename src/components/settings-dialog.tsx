@@ -1,6 +1,5 @@
 'use client';
 
-import { useTranslation } from '@/lib/i18n';
 import {
   ChevronDown,
   Info,
@@ -15,8 +14,8 @@ import {
   Wifi,
 } from 'lucide-react';
 import { useState } from 'react';
-
 import { useAppVersion } from '@/hooks/use-app-version';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useProfileStore } from '@/stores/profile-store';
 import { type SettingsSection, useSettingsStore } from '@/stores/settings-store';
@@ -32,7 +31,10 @@ import { Dialog, DialogClose, DialogContent, DialogTrigger } from './ui/dialog';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 
-const SECTION_TITLES: Record<SettingsSection, { label: string; title: string; description?: string }> = {
+const SECTION_TITLES: Record<
+  SettingsSection,
+  { label: string; title: string; description?: string }
+> = {
   theme: { label: 'Application settings', title: 'Configure themes, devices and transmission' },
   remote_general: { label: 'Remote Access', title: 'General Access' },
   remote_permissions: { label: 'Remote Access', title: 'Device Permissions' },

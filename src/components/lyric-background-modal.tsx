@@ -1,7 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { join } from '@tauri-apps/api/path';
 import { exists, mkdir, readDir, remove, stat, writeFile } from '@tauri-apps/plugin-fs';
-import { t, useTranslation } from '@/lib/i18n';
 import {
   CheckIcon,
   DownloadIcon,
@@ -22,6 +21,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { useDebounceValue } from 'usehooks-ts';
+import { t, useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { getThemesPath } from '@/services/app-paths';
 import { mediaDbService } from '@/services/media-db-service';
@@ -154,16 +154,18 @@ interface MediaThumbnailProps {
   onDelete?: () => void;
 }
 
-
 function MediaThumbnail({ file, selected, onClick, onDelete }: MediaThumbnailProps) {
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    thumbnailService.getThumbnail(file.path).then((url) => {
-      if (!cancelled) setDisplaySrc(url);
-    }).catch(() => { });
+    thumbnailService
+      .getThumbnail(file.path)
+      .then((url) => {
+        if (!cancelled) setDisplaySrc(url);
+      })
+      .catch(() => { });
 
     return () => {
       cancelled = true;
@@ -437,7 +439,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-[56.25rem] p-0 gap-0 overflow-hidden">
+      <DialogContent className="sm:max-w-225 p-0 gap-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-0">
           <DialogTitle className="text-base font-semibold">Select Media</DialogTitle>
         </DialogHeader>
@@ -480,10 +482,10 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
 
           <TabsContent
             value="themes"
-            className="px-6 py-4 flex flex-col gap-3 min-h-[25rem] h-[40dvh]"
+            className="px-6 py-4 flex flex-col gap-3 min-h-100 h-[40dvh]"
           >
             {themes.length === 0 ? (
-              <Empty className="min-h-[25rem] h-[40dvh]">
+              <Empty className="min-h-100 h-[40dvh]">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
                     <ImageIcon />
@@ -497,7 +499,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
             ) : (
               <ScrollArea
                 ref={themesScrollRef}
-                className="min-h-[25rem] h-[40dvh]"
+                className="min-h-100 h-[40dvh]"
                 viewportClassName="pt-1 px-1.5"
               >
                 <div
@@ -546,15 +548,15 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
             </div>
             <ScrollArea
               ref={unsplashScrollRef}
-              className="min-h-[22rem] h-[34dvh]"
+              className="min-h-88 h-[34dvh]"
               viewportClassName="pt-1 px-1.5"
             >
               {unsplashLoading && unsplashResults.length === 0 ? (
-                <div className="flex items-center justify-center min-h-[20rem]">
+                <div className="flex items-center justify-center min-h-80">
                   <ImageLoader className="mx-auto" />
                 </div>
               ) : hasSearched && unsplashResults.length === 0 ? (
-                <Empty className="h-full min-h-[20rem]">
+                <Empty className="h-full min-h-80">
                   <EmptyHeader>
                     <EmptyMedia variant="icon">
                       <ImageIcon />
@@ -594,7 +596,11 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
                                 }
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter' || e.key === ' ')
-                                    setSelected({ type: 'image', src: photo.urls.raw, name: label });
+                                    setSelected({
+                                      type: 'image',
+                                      src: photo.urls.raw,
+                                      name: label,
+                                    });
                                 }}
                                 className={cn(
                                   'group relative aspect-video rounded-lg overflow-hidden transition-all focus-visible:outline-none cursor-pointer',
@@ -653,7 +659,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
           </TabsContent>
 
           {/* <TabsContent value="video" className="px-6 py-4">
-            <ScrollArea className="min-h-[25rem] h-[40dvh]">
+            <ScrollArea className="min-h-100 h-[40dvh]">
               {loading ? (
                 <LoadingGrid />
               ) : videos.length === 0 ? (

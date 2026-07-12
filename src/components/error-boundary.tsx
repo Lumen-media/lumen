@@ -1,7 +1,7 @@
-import React, { Component, type ReactNode } from 'react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { AlertTriangle } from 'lucide-react';
+import React, { Component, type ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -59,9 +59,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 {this.state.error.message}
               </p>
             </div>
-            <Button onClick={this.handleRetry}>
-              Try Again
-            </Button>
+            <Button onClick={this.handleRetry}>Try Again</Button>
           </div>
         </Card>
       );

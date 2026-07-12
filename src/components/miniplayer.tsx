@@ -85,8 +85,8 @@ export function MiniPlayer({ className }: MiniPlayerProps) {
           remoteThumbnailUrl: hit.remote_thumbnail_url ?? undefined,
           downloadStatus:
             hit.download_status === 'not_downloaded' ||
-            hit.download_status === 'downloaded' ||
-            hit.download_status === 'missing'
+              hit.download_status === 'downloaded' ||
+              hit.download_status === 'missing'
               ? hit.download_status
               : hit.original_url
                 ? 'not_downloaded'
