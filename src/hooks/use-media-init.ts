@@ -16,7 +16,7 @@ export function useMediaInit(): UseMediaInitResult {
     async function initialize() {
       try {
         const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
-        
+
         if (!isTauri) {
           setState({ isInitialized: true, error: null });
           return;

@@ -35,7 +35,7 @@ type TextEditorToolbarProps = ComponentProps<'div'> & {
 function useEditorState(editorRef: RefObject<TextEditorRef | null>) {
   const subscribe = (callback: () => void) => {
     const editor = editorRef.current?.editor;
-    if (!editor) return () => {};
+    if (!editor) return () => { };
     editor.on('transaction', callback);
     editor.on('selectionUpdate', callback);
     return () => {

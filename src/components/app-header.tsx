@@ -2,8 +2,8 @@ import { Link, useRouterState } from '@tanstack/react-router';
 import { Monitor, Star, Volume2, Wifi } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { HeaderTrailingSlot } from '@/modules/components/HeaderTrailingSlot';
 import { cn } from '@/lib/utils';
+import { HeaderTrailingSlot } from '@/modules/components/HeaderTrailingSlot';
 import { SettingsDialog } from './settings-dialog';
 import { Card } from './ui/card';
 
