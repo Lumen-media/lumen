@@ -21,6 +21,7 @@ function TextEditorBubbleMenu({
   ...props
 }: TextEditorBubbleMenuProps) {
   const editor = editorRef.current?.editor;
+  // TODO: Resolve bubble menu style and functionality
 
   if (!editor) return null;
 

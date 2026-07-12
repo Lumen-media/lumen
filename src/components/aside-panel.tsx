@@ -16,9 +16,35 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { CheckCircle2, ListX, Tag, X, Zap } from 'lucide-react';
+import {
+  BoldIcon,
+  CheckCircle2,
+  CodeIcon,
+  Heading1Icon,
+  Heading2Icon,
+  Heading3Icon,
+  ItalicIcon,
+  ListIcon,
+  ListOrderedIcon,
+  ListX,
+  QuoteIcon,
+  StrikethroughIcon,
+  Tag,
+  UnderlineIcon,
+  X,
+  Zap,
+} from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
+import { TextEditor, type TextEditorRef } from '@/components/text-editor';
+import { type BubbleMenuItem, TextEditorBubbleMenu } from '@/components/text-editor-bubble-menu';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -165,9 +191,7 @@ export function AsidePanel() {
         </TabsContent>
 
         <TabsContent value="notes" className="flex-1 overflow-hidden mt-0">
-          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Coming soon
-          </div>
+          <NotesTab />
         </TabsContent>
 
         <TabsContent value="themes" className="flex-1 overflow-hidden mt-0">
@@ -522,6 +546,100 @@ function SortableQueueItem({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function useEditorState(editorRef: RefObject<TextEditorRef | null>) {
+  const subscribe = useCallback(
+    (callback: () => void) => {
+      const editor = editorRef.current?.editor;
+      if (!editor) return () => { };
+      editor.on('transaction', callback);
+      editor.on('selectionUpdate', callback);
+      return () => {
+        editor.off('transaction', callback);
+        editor.off('selectionUpdate', callback);
+      };
+    },
+    [editorRef]
+  );
+
+  return useSyncExternalStore(
+    subscribe,
+    () => editorRef.current?.editor?.state ?? null,
+    () => null
+  );
+}
+
+function NotesTab() {
+  const editorRef = useRef<TextEditorRef | null>(null);
+  useEditorState(editorRef);
+  const editor = editorRef.current?.editor;
+
+  const items: BubbleMenuItem[] = [
+    {
+      children: <BoldIcon />,
+      action: () => editor?.chain().focus().toggleBold().run(),
+      active: editor?.isActive('bold'),
+    },
+    {
+      children: <ItalicIcon />,
+      action: () => editor?.chain().focus().toggleItalic().run(),
+      active: editor?.isActive('italic'),
+    },
+    {
+      children: <UnderlineIcon />,
+      action: () => editor?.chain().focus().toggleUnderline().run(),
+      active: editor?.isActive('underline'),
+    },
+    {
+      children: <StrikethroughIcon />,
+      action: () => editor?.chain().focus().toggleStrike().run(),
+      active: editor?.isActive('strike'),
+    },
+    {
+      children: <CodeIcon />,
+      action: () => editor?.chain().focus().toggleCode().run(),
+      active: editor?.isActive('code'),
+    },
+    {
+      children: <Heading1Icon />,
+      action: () => editor?.chain().focus().toggleHeading({ level: 1 }).run(),
+      active: editor?.isActive('heading', { level: 1 }),
+    },
+    {
+      children: <Heading2Icon />,
+      action: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(),
+      active: editor?.isActive('heading', { level: 2 }),
+    },
+    {
+      children: <Heading3Icon />,
+      action: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(),
+      active: editor?.isActive('heading', { level: 3 }),
+    },
+    {
+      children: <ListIcon />,
+      action: () => editor?.chain().focus().toggleBulletList().run(),
+      active: editor?.isActive('bulletList'),
+    },
+    {
+      children: <ListOrderedIcon />,
+      action: () => editor?.chain().focus().toggleOrderedList().run(),
+      active: editor?.isActive('orderedList'),
+    },
+    {
+      children: <QuoteIcon />,
+      action: () => editor?.chain().focus().toggleBlockquote().run(),
+      active: editor?.isActive('blockquote'),
+    },
+  ];
+
+  return (
+    <div className="relative size-full">
+      <TextEditor ref={editorRef} placeholder="Write your notes here...">
+        <TextEditorBubbleMenu editorRef={editorRef} items={items} />
+      </TextEditor>
     </div>
   );
 }
