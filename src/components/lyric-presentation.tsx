@@ -132,7 +132,7 @@ export function LyricPresentation({ filePath, startIndex = 0 }: { filePath: stri
       alignment: lyricData.metadata.alignment || 'center',
       background,
       active: true,
-    }).catch(() => {});
+    }).catch(() => { });
 
     invoke('push_stream_slide', {
       update: {
@@ -145,7 +145,7 @@ export function LyricPresentation({ filePath, startIndex = 0 }: { filePath: stri
         total_slides: lyricData.slides.length,
         active: true,
       },
-    }).catch(() => {});
+    }).catch(() => { });
   }, [currentSlide, filePath, lyricData, profileBackground]);
 
   const totalSlides = lyricData?.slides.length ?? 0;
@@ -252,13 +252,13 @@ export function LyricPresentation({ filePath, startIndex = 0 }: { filePath: stri
         <img
           src={slideBgSrc}
           alt=""
-          className="absolute inset-0 z-[1] w-full h-full object-cover"
+          className="absolute inset-0 z-1 w-full h-full object-cover"
           aria-hidden
         />
       )}
 
       <div
-        className="absolute inset-0 z-[2] flex items-center justify-center overflow-hidden p-[5%]"
+        className="absolute inset-0 z-2 flex items-center justify-center overflow-hidden p-[5%]"
         style={{
           opacity: textVisible ? 1 : 0,
           transition: `opacity ${fadeMs}ms ease`,

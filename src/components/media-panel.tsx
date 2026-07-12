@@ -12,7 +12,6 @@ import {
   Video,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslation } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { DeleteFileAlert } from '@/components/delete-file-alert';
 import { FileListItem } from '@/components/file-list-item';
@@ -20,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAnnounce } from '@/hooks/use-announce';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { type FileInfo, fileInitService, fileManagementService, type MediaType } from '@/services';
 import { useLyricEditStore } from '@/stores/lyric-edit-store';

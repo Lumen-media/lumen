@@ -525,12 +525,12 @@ function RootView() {
     if (results.activePrefix) {
       return results.commands.length
         ? [
-            {
-              key: 'commands' as SearchScope,
-              heading: results.activePrefix.title,
-              results: results.commands,
-            },
-          ]
+          {
+            key: 'commands' as SearchScope,
+            heading: results.activePrefix.title,
+            results: results.commands,
+          },
+        ]
         : [];
     }
     const g: Array<{ key: SearchScope; heading: string; results: SearchResult[] }> = [];
@@ -737,7 +737,7 @@ function AppView({
       <PaletteHeader
         app={app}
         fullContent={false}
-        setFullContent={() => {}}
+        setFullContent={() => { }}
         inputValue={value}
         setInputValue={setValue}
         inputId={inputId}
