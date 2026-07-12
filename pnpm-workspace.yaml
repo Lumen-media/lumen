@@ -3,3 +3,7 @@ allowBuilds:
   '@parcel/watcher': false
   '@swc/core': false
   esbuild: true
+
+overrides:
+  prosemirror-model: 1.25.10
+  prosemirror-view: 1.42.0
