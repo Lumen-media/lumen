@@ -124,10 +124,10 @@ export function createQueueHostAPI(): QueueHostAPI {
     },
     async addUrl(input) {
       if (input.position === 'next') {
-        await useQueueStore.getState().playUrlNext(input.url);
+        await useQueueStore.getState().playUrlNext(input.url, input.duration);
         return;
       }
-      await useQueueStore.getState().addUrlToQueue(input.url);
+      await useQueueStore.getState().addUrlToQueue(input.url, input.duration);
     },
   };
 }
@@ -176,7 +176,7 @@ export function createLibraryHostAPI(): LibraryHostAPI {
       return '';
     },
     async addUrl(input) {
-      const file = await mediaDbService.insertUrlMedia(input.url);
+      const file = await mediaDbService.insertUrlMedia(input.url, { duration: input.duration });
       if (input.playNext) {
         await useQueueStore.getState().playNext(file);
       } else if (input.addToQueue) {
