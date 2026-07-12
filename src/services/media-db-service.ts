@@ -244,7 +244,10 @@ class MediaDbService {
     );
   }
 
-  async insertUrlMedia(url: string, opts: { refreshMetadata?: boolean } = {}): Promise<FileInfo> {
+  async insertUrlMedia(
+    url: string,
+    opts: { refreshMetadata?: boolean; duration?: number } = {}
+  ): Promise<FileInfo> {
     const parsed = urlMediaService.parseYouTubeUrl(url);
     if (!parsed) {
       throw new Error('Only YouTube URLs are supported');
@@ -255,7 +258,7 @@ class MediaDbService {
       if (existing) return existing;
     }
 
-    const file = await urlMediaService.createYouTubeFileInfo(url);
+    const file = await urlMediaService.createYouTubeFileInfo(url, opts.duration);
     await this.insertFile(file, 'video');
     return file;
   }

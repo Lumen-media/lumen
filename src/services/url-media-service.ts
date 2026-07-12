@@ -93,7 +93,7 @@ class UrlMediaService {
     };
   }
 
-  async createYouTubeFileInfo(url: string): Promise<FileInfo> {
+  async createYouTubeFileInfo(url: string, duration?: number): Promise<FileInfo> {
     const metadata = await this.resolveYouTube(url);
     return {
       name: metadata.title,
@@ -103,6 +103,7 @@ class UrlMediaService {
       extension: 'url',
       title: metadata.title,
       artist: metadata.artist,
+      duration,
       originalUrl: metadata.originalUrl,
       thumbnailPath: metadata.thumbnailPath,
       remoteThumbnailUrl: metadata.remoteThumbnailUrl,

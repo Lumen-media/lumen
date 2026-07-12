@@ -15,8 +15,8 @@ interface QueueStore {
   loadFromDb: () => Promise<void>;
   addToQueue: (file: FileInfo) => Promise<void>;
   playNext: (file: FileInfo) => Promise<void>;
-  addUrlToQueue: (url: string) => Promise<void>;
-  playUrlNext: (url: string) => Promise<void>;
+  addUrlToQueue: (url: string, duration?: number) => Promise<void>;
+  playUrlNext: (url: string, duration?: number) => Promise<void>;
   removeFromQueue: (id: number) => Promise<void>;
   markPlayed: (id: number) => Promise<void>;
   togglePlayed: (id: number) => Promise<void>;
@@ -66,8 +66,8 @@ export const useQueueStore = create<QueueStore>((set) => ({
     set((s) => ({ queue: [{ id, file, played: false }, ...s.queue] }));
   },
 
-  addUrlToQueue: async (url) => {
-    const file = await urlMediaService.createYouTubeFileInfo(url);
+  addUrlToQueue: async (url, duration) => {
+    const file = await urlMediaService.createYouTubeFileInfo(url, duration);
     const already = await queueDbService.exists(file.path);
     if (already) {
       toast.info('Already in queue', { description: file.name });
@@ -78,8 +78,8 @@ export const useQueueStore = create<QueueStore>((set) => ({
     set((s) => ({ queue: [...s.queue, { id, file, played: false }] }));
   },
 
-  playUrlNext: async (url) => {
-    const file = await urlMediaService.createYouTubeFileInfo(url);
+  playUrlNext: async (url, duration) => {
+    const file = await urlMediaService.createYouTubeFileInfo(url, duration);
     const already = await queueDbService.exists(file.path);
     if (already) {
       toast.info('Already in queue', { description: file.name });
