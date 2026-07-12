@@ -1,6 +1,11 @@
-import { create } from 'zustand';
-import type { CommanderAppProps, CommanderSearchOptions, CommandSpec, PrefixSpec } from '@/modules/types';
 import type React from 'react';
+import { create } from 'zustand';
+import type {
+  CommanderAppProps,
+  CommanderSearchOptions,
+  CommandSpec,
+  PrefixSpec,
+} from '@/modules/types';
 
 export interface ActiveApp {
   commandId: string;
@@ -12,6 +17,7 @@ export interface ActiveApp {
 interface CommandStore {
   isOpen: boolean;
   prefilter: string;
+  fullContent: boolean;
   activeApp: ActiveApp | null;
   commands: CommandSpec[];
   prefixes: PrefixSpec[];
@@ -20,30 +26,47 @@ interface CommandStore {
   toggle: () => void;
   pushApp: (app: ActiveApp) => void;
   popApp: () => void;
+  setFullContent: (v: boolean) => void;
   _register: (spec: CommandSpec) => void;
   _unregister: (id: string) => void;
   _registerPrefix: (spec: PrefixSpec) => void;
   _unregisterPrefix: (prefix: string) => void;
 }
 
+function loadFullContent(): boolean {
+  try {
+    return localStorage.getItem('lumen-full-content') === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveFullContent(v: boolean): void {
+  try {
+    localStorage.setItem('lumen-full-content', String(v));
+  } catch {
+    // localStorage unavailable
+  }
+}
+
 export const useCommandStore = create<CommandStore>((set) => ({
   isOpen: false,
   prefilter: '',
+  fullContent: loadFullContent(),
   activeApp: null,
   commands: [],
   prefixes: [],
 
   open: (prefilter = '') => set({ isOpen: true, prefilter }),
   close: () => set({ isOpen: false, prefilter: '' }),
-  toggle: () =>
-    set((s) =>
-      s.isOpen
-        ? { isOpen: false, prefilter: '' }
-        : { isOpen: true },
-    ),
+  toggle: () => set((s) => (s.isOpen ? { isOpen: false, prefilter: '' } : { isOpen: true })),
 
   pushApp: (app) => set({ activeApp: app }),
   popApp: () => set({ activeApp: null }),
+  setFullContent: (v) => {
+    saveFullContent(v);
+    set({ fullContent: v });
+  },
 
   _register: (spec) =>
     set((s) => ({
@@ -51,8 +74,7 @@ export const useCommandStore = create<CommandStore>((set) => ({
         ? s.commands.map((c) => (c.id === spec.id ? spec : c))
         : [...s.commands, spec],
     })),
-  _unregister: (id) =>
-    set((s) => ({ commands: s.commands.filter((c) => c.id !== id) })),
+  _unregister: (id) => set((s) => ({ commands: s.commands.filter((c) => c.id !== id) })),
 
   _registerPrefix: (spec) =>
     set((s) => ({
