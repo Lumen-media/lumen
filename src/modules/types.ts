@@ -255,7 +255,7 @@ export interface QueueHostAPI {
   previous(): void;
   goTo(index: number): void;
   registerTrigger(spec: QueueTriggerSpec): Disposable;
-  addUrl?(input: { url: string; position?: 'end' | 'next' }): Promise<void>;
+  addUrl?(input: { url: string; position?: 'end' | 'next'; duration?: number }): Promise<void>;
 }
 
 export type MediaType = 'audio' | 'video' | 'image';
@@ -292,6 +292,7 @@ export interface LibraryHostAPI {
     url: string;
     addToQueue?: boolean;
     playNext?: boolean;
+    duration?: number;
   }): Promise<MediaRef>;
 }
 
