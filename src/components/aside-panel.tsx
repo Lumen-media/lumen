@@ -76,7 +76,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
@@ -134,24 +134,10 @@ export function AsidePanel() {
   const loadFile = usePlayerStore((s) => s.loadFile);
 
   const [activeTab, setActiveTab] = useState<TabValue>('queue');
-  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
-  const [ready, setReady] = useState(false);
-  const navRef = useRef<HTMLDivElement>(null);
-  const triggerRefs = useRef<Map<TabValue, HTMLButtonElement>>(new Map());
 
   useEffect(() => {
     loadFromDb();
   }, [loadFromDb]);
-
-  useEffect(() => {
-    const activeBtn = triggerRefs.current.get(activeTab);
-    const nav = navRef.current;
-    if (!activeBtn || !nav) return;
-    const navRect = nav.getBoundingClientRect();
-    const btnRect = activeBtn.getBoundingClientRect();
-    setIndicatorStyle({ left: btnRect.left - navRect.left, width: btnRect.width });
-    setReady(true);
-  }, [activeTab]);
 
   return (
     <Card className="flex flex-col w-full h-full overflow-hidden">
@@ -160,7 +146,7 @@ export function AsidePanel() {
         onValueChange={(v) => setActiveTab(v as TabValue)}
         className="flex flex-col h-full"
       >
-        <div ref={navRef} className="relative border-b border-border shrink-0">
+        <div className="relative border-b border-border shrink-0">
           <TabsList
             variant="line"
             className="w-full justify-between rounded-none border-none px-2 h-10"
@@ -169,25 +155,13 @@ export function AsidePanel() {
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                ref={(el: HTMLButtonElement | null) => {
-                  if (el) triggerRefs.current.set(tab.value, el);
-                }}
                 className="flex-none px-4 after:hidden"
               >
                 {tab.label}
               </TabsTrigger>
             ))}
+            <TabsIndicator className="bg-primary" />
           </TabsList>
-          {ready && (
-            <span
-              className="absolute bottom-0 h-0.5 bg-primary rounded-full"
-              style={{
-                left: indicatorStyle.left,
-                width: indicatorStyle.width,
-                transition: 'left 250ms ease, width 250ms ease',
-              }}
-            />
-          )}
         </div>
 
         <TabsContent value="queue" className="flex-1 overflow-hidden mt-0">

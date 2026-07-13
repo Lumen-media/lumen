@@ -1,6 +1,7 @@
 import { Link, useRouterState } from '@tanstack/react-router';
+import { animate } from 'animejs';
 import { CheckIcon, Monitor, Smartphone, Star, Volume2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -53,24 +54,65 @@ export function AppHeader() {
     return match ? match.to : '/';
   })();
 
-  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
-  const [ready, setReady] = useState(false);
   const navRef = useRef<HTMLElement>(null);
+  const indicatorRef = useRef<HTMLSpanElement>(null);
+  const animationRef = useRef<ReturnType<typeof animate> | null>(null);
+  const readyRef = useRef(false);
   const buttonRefs = useRef<Map<TabTo, HTMLAnchorElement>>(new Map());
 
   useEffect(() => {
-    const activeBtn = buttonRefs.current.get(activeTab);
+    const indicator = indicatorRef.current;
     const nav = navRef.current;
-    if (!activeBtn || !nav) return;
+    if (!indicator || !nav) return;
 
-    const navRect = nav.getBoundingClientRect();
-    const btnRect = activeBtn.getBoundingClientRect();
+    let frame = 0;
 
-    setIndicatorStyle({
-      left: btnRect.left - navRect.left,
-      width: btnRect.width,
+    const updateIndicator = () => {
+      const activeBtn = buttonRefs.current.get(activeTab);
+      if (!activeBtn) return;
+
+      const navRect = nav.getBoundingClientRect();
+      const btnRect = activeBtn.getBoundingClientRect();
+      const left = btnRect.left - navRect.left;
+      const width = btnRect.width;
+
+      if (!readyRef.current) {
+        animationRef.current?.cancel();
+        indicator.style.opacity = '1';
+        indicator.style.left = `${left}px`;
+        indicator.style.width = `${width}px`;
+        readyRef.current = true;
+        return;
+      }
+
+      animationRef.current?.cancel();
+      animationRef.current = animate(indicator, {
+        left: `${left}px`,
+        width: `${width}px`,
+        opacity: 1,
+        duration: 250,
+        ease: 'outCubic',
+      });
+    };
+
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(updateIndicator);
+    };
+
+    const resizeObserver = new ResizeObserver(() => scheduleUpdate());
+    resizeObserver.observe(nav);
+    buttonRefs.current.forEach((button) => {
+      resizeObserver.observe(button);
     });
-    setReady(true);
+
+    scheduleUpdate();
+
+    return () => {
+      cancelAnimationFrame(frame);
+      animationRef.current?.cancel();
+      resizeObserver.disconnect();
+    };
   }, [activeTab]);
 
   return (
@@ -100,16 +142,11 @@ export function AppHeader() {
             </Link>
           ))}
 
-          {ready && (
-            <span
-              className="absolute bottom-0 h-0.5 bg-primary rounded-full"
-              style={{
-                left: indicatorStyle.left,
-                width: indicatorStyle.width,
-                transition: 'left 250ms ease, width 250ms ease',
-              }}
-            />
-          )}
+          <span
+            ref={indicatorRef}
+            className="absolute bottom-0 h-0.5 rounded-full bg-primary"
+            style={{ opacity: 0, left: 0, width: 0 }}
+          />
         </nav>
 
         <div className="flex min-w-0 items-center justify-end gap-3 w-56">

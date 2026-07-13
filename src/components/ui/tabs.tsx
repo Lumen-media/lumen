@@ -1,8 +1,9 @@
 'use client';
 
 import { Tabs as TabsPrimitive } from '@base-ui/react/tabs';
+import { animate } from 'animejs';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -65,31 +66,99 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
 
 function TabsIndicator({ className }: { className?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
-  const [style, setStyle] = useState({ left: 0, width: 0 });
-  const [ready, setReady] = useState(false);
+  const animationRef = useRef<ReturnType<typeof animate> | null>(null);
+  const readyRef = useRef(false);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
+    let frame = 0;
+    let observedElements = new Set<Element>();
+
     const update = () => {
-      const parent = el.parentElement;
-      if (!parent) return;
-      const active = parent.querySelector<HTMLElement>('[data-slot="tabs-trigger"][data-active]');
+      const list = el.parentElement;
+      if (!list) return;
+
+      const active = list.querySelector<HTMLElement>('[data-slot="tabs-trigger"][data-active]');
       if (!active) return;
-      const parentRect = parent.getBoundingClientRect();
+
+      const anchor = el.offsetParent instanceof HTMLElement ? el.offsetParent : list;
+      const anchorRect = anchor.getBoundingClientRect();
       const activeRect = active.getBoundingClientRect();
-      setStyle({ left: activeRect.left - parentRect.left, width: activeRect.width });
-      setReady(true);
+      const left = activeRect.left - anchorRect.left;
+      const width = activeRect.width;
+
+      if (!readyRef.current) {
+        animationRef.current?.cancel();
+        el.style.opacity = '1';
+        el.style.left = `${left}px`;
+        el.style.width = `${width}px`;
+        readyRef.current = true;
+        return;
+      }
+
+      animationRef.current?.cancel();
+      animationRef.current = animate(el, {
+        left: `${left}px`,
+        width: `${width}px`,
+        opacity: 1,
+        duration: 250,
+        ease: 'outCubic',
+      });
     };
 
-    update();
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(update);
+    };
 
-    const observer = new MutationObserver(update);
-    const parent = el.parentElement;
-    if (parent) observer.observe(parent, { subtree: true, attributeFilter: ['data-active'] });
+    const resizeObserver = new ResizeObserver(() => scheduleUpdate());
 
-    return () => observer.disconnect();
+    const observeLayoutElements = () => {
+      const list = el.parentElement;
+      if (!list) return;
+
+      const nextObserved = new Set<Element>([list]);
+      if (el.offsetParent) nextObserved.add(el.offsetParent);
+
+      list.querySelectorAll<HTMLElement>('[data-slot="tabs-trigger"]').forEach((trigger) => {
+        nextObserved.add(trigger);
+      });
+
+      observedElements.forEach((element) => {
+        if (!nextObserved.has(element)) resizeObserver.unobserve(element);
+      });
+
+      nextObserved.forEach((element) => {
+        if (!observedElements.has(element)) resizeObserver.observe(element);
+      });
+
+      observedElements = nextObserved;
+    };
+
+    observeLayoutElements();
+    scheduleUpdate();
+
+    const observer = new MutationObserver(() => {
+      observeLayoutElements();
+      scheduleUpdate();
+    });
+    const list = el.parentElement;
+    if (list) {
+      observer.observe(list, {
+        childList: true,
+        subtree: true,
+        attributeFilter: ['data-active'],
+      });
+    }
+
+    return () => {
+      cancelAnimationFrame(frame);
+      animationRef.current?.cancel();
+      observer.disconnect();
+      resizeObserver.disconnect();
+    };
   }, []);
 
   return (
@@ -97,10 +166,9 @@ function TabsIndicator({ className }: { className?: string }) {
       ref={ref}
       className={cn('absolute bottom-0 h-0.5 rounded-full', className)}
       style={{
-        opacity: ready ? 1 : 0,
-        left: style.left,
-        width: style.width,
-        transition: 'left 250ms ease, width 250ms ease',
+        opacity: 0,
+        left: 0,
+        width: 0,
       }}
     />
   );
