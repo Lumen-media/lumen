@@ -82,7 +82,7 @@ export const SettingsDialog = () => {
         showCloseButton={false}
         className="w-full p-0 gap-0 sm:max-w-[60dvw] h-full max-h-[70dvh] flex"
       >
-        <Card className="w-56 shrink-0 p-0 border-0 rounded-l-xl rounded-r-none gap-0">
+        <Card className="w-56 shrink-0 p-0 border-0 rounded-none rounded-l-xl gap-0">
           <CardHeader className="p-3 flex-row items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="size-4 text-primary" />
