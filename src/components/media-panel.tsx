@@ -41,9 +41,39 @@ export function MediaPanel() {
   const { t } = useTranslation();
   const player = usePlayerStore();
   const { addToQueue, playNext } = useQueueStore();
-  const loadLyricPreview = useLyricEditStore((s) => s.loadLyric);
   const openLyricModal = useLyricModalStore((s) => s.open);
   const [activeMedia, setActiveMedia] = useState<MediaType | null>(null);
+
+  const handleFileDoubleClick = useCallback((file: FileInfo) => {
+    if (activeMedia === 'audio' || activeMedia === 'video') {
+      player.loadFile(file.path);
+    }
+    if (activeMedia === 'lyrics') {
+      player.presentLyric(file.path);
+    }
+    if (activeMedia === 'image') {
+      player.presentImage(file.path);
+    }
+  }, [activeMedia, player]);
+
+  const handleFileEdit = useCallback((file: FileInfo) => {
+    if (activeMedia === 'lyrics') {
+      openLyricModal(file.path);
+    }
+  }, [activeMedia, openLyricModal]);
+
+  const handlePlayNext = useCallback((file: FileInfo) => {
+    if (activeMedia === 'video') {
+      playNext(file);
+    }
+  }, [activeMedia, playNext]);
+
+  const handleAddToQueue = useCallback((file: FileInfo) => {
+    if (activeMedia === 'video') {
+      addToQueue(file);
+    }
+  }, [activeMedia, addToQueue]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -76,8 +106,14 @@ export function MediaPanel() {
     count: files.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 80,
-    overscan: 10,
+    overscan: 6,
+    measureElement: (el) => el.getBoundingClientRect().height,
+    getItemKey: (index) => files[index]?.path ?? index,
   });
+
+  useEffect(() => {
+    virtualizer.measure();
+  }, [virtualizer]);
 
   const loadFiles = useCallback(
     async (mediaType: MediaType) => {
@@ -119,12 +155,6 @@ export function MediaPanel() {
       case 'ArrowUp':
         e.preventDefault();
         setFocusedIndex((prev) => (prev > 0 ? prev - 1 : -1));
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (focusedIndex >= 0) {
-          console.log('File clicked:', files[focusedIndex].name);
-        }
         break;
       case 'Delete':
         e.preventDefault();
@@ -353,6 +383,7 @@ export function MediaPanel() {
                     {virtualizer.getVirtualItems().map((virtualItem) => (
                       <div
                         key={virtualItem.key}
+                        ref={virtualizer.measureElement}
                         data-index={virtualItem.index}
                         style={{
                           position: 'absolute',
@@ -369,23 +400,13 @@ export function MediaPanel() {
                             isFocused={virtualItem.index === focusedIndex}
                             onClick={(file) => {
                               if (activeMedia === 'lyrics') {
-                                loadLyricPreview(file.path);
+                                useLyricEditStore.getState().loadLyric(file.path);
                               }
                             }}
-                            onDoubleClick={
-                              activeMedia === 'audio' || activeMedia === 'video'
-                                ? (file) => player.loadFile(file.path)
-                                : activeMedia === 'lyrics'
-                                  ? (file) => player.presentLyric(file.path)
-                                  : undefined
-                            }
-                            onEdit={
-                              activeMedia === 'lyrics'
-                                ? (file) => openLyricModal(file.path)
-                                : undefined
-                            }
-                            onPlayNext={activeMedia === 'video' ? playNext : undefined}
-                            onAddToQueue={activeMedia === 'video' ? addToQueue : undefined}
+                            onDoubleClick={handleFileDoubleClick}
+                            onEdit={handleFileEdit}
+                            onPlayNext={handlePlayNext}
+                            onAddToQueue={handleAddToQueue}
                           />
                         </div>
                       </div>
