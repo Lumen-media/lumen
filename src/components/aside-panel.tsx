@@ -349,7 +349,7 @@ function QueueTab({
                 items={entries.map((e) => e.id)}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="px-4 py-3 space-y-1">
+                <div className="py-3 space-y-1">
                   {entries.map((entry) => {
                     if (entry.kind === 'item') {
                       const isCurrent = entry.item.file.path === currentFilePath;
