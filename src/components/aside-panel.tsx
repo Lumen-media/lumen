@@ -19,13 +19,16 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   BoldIcon,
   CheckCircle2,
+  CheckIcon,
   Heading1Icon,
   Heading2Icon,
   Heading3Icon,
+  ImageIcon,
   ItalicIcon,
   ListIcon,
   ListOrderedIcon,
   ListX,
+  Loader2,
   QuoteIcon,
   StrikethroughIcon,
   Tag,
@@ -65,13 +68,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
 import type { QueueTriggerSpec } from '@/modules/types';
+import { mediaDbService } from '@/services/media-db-service';
 import { notesService } from '@/services/notes-service';
+import { thumbnailService } from '@/services/thumbnail-service';
+import type { FileInfo } from '@/services/types';
 import { usePlayerStore } from '@/stores/player-store';
 import { useProfileStore } from '@/stores/profile-store';
 import {
@@ -197,9 +210,7 @@ export function AsidePanel() {
         </TabsContent>
 
         <TabsContent value="themes" className="flex-1 overflow-hidden mt-0">
-          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Coming soon
-          </div>
+          <ThemesTab />
         </TabsContent>
       </Tabs>
     </Card>
@@ -663,6 +674,118 @@ function NotesTab() {
         <TextEditorBubbleMenu editorRef={editorRef} items={items} />
       </TextEditor>
     </div>
+  );
+}
+
+function ThemesTab() {
+  const profiles = useProfileStore((s) => s.profiles);
+  const activeProfileId = useProfileStore((s) => s.activeProfileId);
+  const updateProfile = useProfileStore((s) => s.updateProfile);
+  const activeProfile = profiles.find((p) => p.id === activeProfileId);
+
+  const [themes, setThemes] = useState<FileInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    mediaDbService
+      .listThemes()
+      .then(setThemes)
+      .catch(() => setThemes([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="size-full overflow-hidden">
+      {loading ? (
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="size-5 text-muted-foreground animate-spin" />
+        </div>
+      ) : themes.length === 0 ? (
+        <Empty className="h-full">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ImageIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t('No themes yet')}</EmptyTitle>
+            <EmptyDescription>
+              {t('Add images or videos to the themes folder in settings.')}
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : (
+        <ScrollArea className="h-full">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2 p-3">
+            {themes.map((file) => (
+              <ThemeThumbnail
+                key={file.path}
+                file={file}
+                isActive={activeProfile?.defaultBackground?.src === file.path}
+                onClick={() => {
+                  if (activeProfileId) {
+                    updateProfile(activeProfileId, {
+                      defaultBackground: { type: 'theme', src: file.path, name: file.name },
+                    });
+                  }
+                }}
+              />
+            ))}
+          </div>
+        </ScrollArea>
+      )}
+    </div>
+  );
+}
+
+function ThemeThumbnail({
+  file,
+  isActive,
+  onClick,
+}: {
+  file: FileInfo;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  const [displaySrc, setDisplaySrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    thumbnailService
+      .getThumbnail(file.path)
+      .then((url) => {
+        if (!cancelled) setDisplaySrc(url);
+      })
+      .catch(() => { });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.path]);
+
+  return (
+    <button
+      type="button"
+      tabIndex={0}
+      onClick={onClick}
+      className={cn(
+        'relative group aspect-video rounded-lg overflow-hidden transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer',
+        isActive ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'hover:opacity-90'
+      )}
+    >
+      {displaySrc ? (
+        <img src={displaySrc} alt={file.name} className="size-full object-cover" />
+      ) : (
+        <div className="size-full bg-card animate-pulse opacity-70 flex items-center justify-center">
+          <Loader2 className="size-4 text-muted-foreground animate-spin" />
+        </div>
+      )}
+      {isActive && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+          <div className="rounded-full bg-black/60 p-1.5">
+            <CheckIcon className="size-4 text-white" />
+          </div>
+        </div>
+      )}
+    </button>
   );
 }
 
