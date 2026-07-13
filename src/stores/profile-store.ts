@@ -106,7 +106,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
 
   removeProfile: async (id) => {
     const { profiles, activeProfileId } = get();
-    if (profiles.length <= 1) return;
+    if (id === 'default' || profiles.length <= 1) return;
     await deleteProfileFile(id);
     const remaining = profiles.filter((p) => p.id !== id);
     let newActiveId = activeProfileId;
