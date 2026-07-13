@@ -1,6 +1,7 @@
 import { BubbleMenu } from '@tiptap/react/menus';
 import type { ComponentProps, ReactNode, RefObject } from 'react';
 import type { TextEditorRef } from '@/components/text-editor';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 
 export type BubbleMenuItem = {
@@ -21,9 +22,12 @@ function TextEditorBubbleMenu({
   ...props
 }: TextEditorBubbleMenuProps) {
   const editor = editorRef.current?.editor;
-  // TODO: Resolve bubble menu style and functionality
 
   if (!editor) return null;
+
+  const pressedValues = items
+    .map((item, idx) => (item.active ? String(idx) : null))
+    .filter((v): v is string => v !== null);
 
   return (
     <BubbleMenu
@@ -35,19 +39,24 @@ function TextEditorBubbleMenu({
       )}
       {...props}
     >
-      {items.map((item) => (
-        <button
-          key={String(item.children)}
-          type="button"
-          onClick={item.action}
-          className={cn(
-            'inline-flex size-7 items-center justify-center rounded-md text-sm transition-colors hover:bg-muted',
-            item.active && 'bg-muted text-foreground'
-          )}
-        >
-          {item.children}
-        </button>
-      ))}
+      <ToggleGroup
+        className="gap-1"
+        variant="secondary"
+        size="sm"
+        value={pressedValues}
+        onValueChange={() => { }}
+      >
+        {items.map((item, idx) => (
+          <ToggleGroupItem
+            className="rounded"
+            key={idx}
+            value={String(idx)}
+            onPressedChange={() => item.action()}
+          >
+            {item.children}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
     </BubbleMenu>
   );
 }

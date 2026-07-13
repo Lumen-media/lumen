@@ -19,7 +19,6 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   BoldIcon,
   CheckCircle2,
-  CodeIcon,
   Heading1Icon,
   Heading2Icon,
   Heading3Icon,
@@ -597,11 +596,6 @@ function NotesTab() {
       children: <StrikethroughIcon />,
       action: () => editor?.chain().focus().toggleStrike().run(),
       active: editor?.isActive('strike'),
-    },
-    {
-      children: <CodeIcon />,
-      action: () => editor?.chain().focus().toggleCode().run(),
-      active: editor?.isActive('code'),
     },
     {
       children: <Heading1Icon />,
