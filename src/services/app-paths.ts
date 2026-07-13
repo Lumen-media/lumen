@@ -34,6 +34,11 @@ export async function getProfilesPath(): Promise<string> {
   return join(base, 'config', 'profiles');
 }
 
+export async function getNotesPath(): Promise<string> {
+  const base = await getAppBasePath();
+  return join(base, 'files', 'notes');
+}
+
 export async function getDbPath(): Promise<string> {
   const base = await getAppBasePath();
   const dbFile = await join(base, 'lumen.db');
