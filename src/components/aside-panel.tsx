@@ -517,7 +517,7 @@ function SortableQueueItem({
           'flex items-center rounded-lg touch-none select-none',
           isCurrent
             ? 'border border-primary/40 bg-primary/5'
-            : 'hover:bg-accent/50 transition-colors'
+            : 'hover:bg-accent/70 transition-colors'
         )}
       >
         <div className="flex flex-1 items-center justify-between min-w-0 px-3 py-2">
