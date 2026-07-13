@@ -1,14 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
+import { LyricPresentation } from '@/components/lyric-presentation';
+import { Videoplayer } from '@/components/ui/videoplayer';
 import { PresenterSlot } from '@/modules/components/PresenterSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
-import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
-
-import { LyricPresentation } from '@/components/lyric-presentation';
-import { Videoplayer } from '@/components/ui/videoplayer';
 
 function StreamOverlay() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -29,7 +29,7 @@ function StreamOverlay() {
         return;
       }
       if (video.srcObject !== videoStream) video.srcObject = videoStream;
-      video.play().catch(() => {});
+      video.play().catch(() => { });
     };
 
     const send = (payload: Record<string, unknown>) => {
@@ -38,7 +38,9 @@ function StreamOverlay() {
 
     pc.ontrack = (event) => {
       if (event.track.kind === 'video') {
-        videoStream.getVideoTracks().forEach((t) => { videoStream.removeTrack(t); });
+        videoStream.getVideoTracks().forEach((t) => {
+          videoStream.removeTrack(t);
+        });
         videoStream.addTrack(event.track);
         attachVideo();
         if (event.track.muted) event.track.onunmute = () => attachVideo();
@@ -92,7 +94,7 @@ function StreamOverlay() {
         ) {
           await pc.addIceCandidate(payload.candidate);
         }
-      } catch {}
+      } catch { }
     };
 
     return () => {
@@ -109,7 +111,7 @@ function StreamOverlay() {
       ref={videoRef}
       autoPlay
       playsInline
-      className="absolute inset-0 h-full w-full object-contain bg-black [transform:translateZ(0)]"
+      className="absolute inset-0 h-full w-full object-contain bg-black transform-[translateZ(0)]"
     >
       <track kind="captions" />
     </video>
@@ -126,7 +128,25 @@ function MediaWindowComponent() {
   const [lyricPath, setLyricPath] = useState('');
   const [lyricStartIndex, setLyricStartIndex] = useState(0);
   const [imagePath, setImagePath] = useState<string | null>(null);
+  const [imageSrc, setImageSrc] = useState<string | undefined>();
   const [streamOverlayActive, setStreamOverlayActive] = useState(false);
+
+  useEffect(() => {
+    if (!imagePath) {
+      setImageSrc(undefined);
+      return;
+    }
+    let url: string;
+    readFile(imagePath)
+      .then((bytes) => {
+        url = URL.createObjectURL(new Blob([bytes]));
+        setImageSrc(url);
+      })
+      .catch(() => setImageSrc(undefined));
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [imagePath]);
 
   const saveCurrentPosition = useCallback(async () => {
     try {
@@ -218,20 +238,23 @@ function MediaWindowComponent() {
   }, [ensureDefaultWindowMode]);
 
   useEffect(() => {
-    emit('media-window-ready').catch(() => {});
-    const onUnload = () => emit('module:presenter-window-closed').catch(() => {});
+    emit('media-window-ready').catch(() => { });
+    const onUnload = () => emit('module:presenter-window-closed').catch(() => { });
     window.addEventListener('beforeunload', onUnload);
     return () => window.removeEventListener('beforeunload', onUnload);
   }, []);
 
   useEffect(() => {
     bootPresenterModules()
-      .then(() => emit('module:presenter-ready').catch(() => {}))
+      .then(() => emit('module:presenter-ready').catch(() => { }))
       .catch(console.error);
 
-    const unlistenProject = listen<{ viewId: string; props: unknown }>('module:presenter-project', (e) => {
-      useModuleStore.getState().projectPanel(e.payload.viewId, e.payload.props);
-    });
+    const unlistenProject = listen<{ viewId: string; props: unknown }>(
+      'module:presenter-project',
+      (e) => {
+        useModuleStore.getState().projectPanel(e.payload.viewId, e.payload.props);
+      }
+    );
     const unlistenClear = listen('module:presenter-clear', () => {
       useModuleStore.getState().clearPresenter();
     });
@@ -274,7 +297,7 @@ function MediaWindowComponent() {
 
     const unlistenLoadUrl = listen('load-url', () => {
       setMode('video');
-      invoke('push_stream_blank').catch(() => {});
+      invoke('push_stream_blank').catch(() => { });
     });
 
     const unlistenLoadImage = listen<{ url: string }>('load-image', (event) => {
@@ -305,19 +328,10 @@ function MediaWindowComponent() {
   return (
     <div className="fixed inset-0 h-dvh w-dvw overflow-hidden bg-black">
       <Videoplayer className="h-full w-full" url="" autoplay muted={false} interactive={false} />
-      {imagePath && mode !== 'lyric' && (
-        <button
-          type="button"
-          aria-label="Close image"
-          className="absolute inset-0 z-10 flex items-center justify-center bg-black cursor-pointer"
-          onClick={() => setImagePath(null)}
-        >
-          <img
-            src={`asset://localhost/${imagePath.replace(/\\/g, '/')}`}
-            alt=""
-            className="max-h-full max-w-full object-contain"
-          />
-        </button>
+      {imageSrc && mode !== 'lyric' && (
+        <div className="absolute inset-0 z-10 w-dvw h-dvh bg-black">
+          <img src={imageSrc} alt="" className="w-full h-full object-contain" />
+        </div>
       )}
       {mode === 'lyric' && lyricPath && (
         <div className="absolute inset-0 z-10">
@@ -325,7 +339,7 @@ function MediaWindowComponent() {
         </div>
       )}
       {streamOverlayActive && (
-        <div className="absolute inset-0 z-[9999] [transform:translateZ(0)]">
+        <div className="absolute inset-0 z-9999 transform-[translateZ(0)]">
           <StreamOverlay />
         </div>
       )}
