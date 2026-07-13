@@ -1,11 +1,11 @@
 'use client';
 
 import { readFile } from '@tauri-apps/plugin-fs';
-import { useTranslation } from '@/lib/i18n';
 import { ImagePlus, X } from 'lucide-react';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { useBoolean, useOnClickOutside } from 'usehooks-ts';
 import { useTheme } from '@/hooks/use-theme';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { Profile } from '@/services/profile-service';
 import { useProfileStore } from '@/stores/profile-store';
@@ -48,7 +48,7 @@ function BackgroundPreview({ background }: { background: Profile['defaultBackgro
 
   if (!background) {
     return (
-      <div className="size-full bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900" />
+      <div className="size-full bg-linear-to-br from-slate-700 via-slate-800 to-slate-900" />
     );
   }
 
@@ -148,15 +148,15 @@ export function ThemeSection() {
                 >
                   {profile.name}
                 </Button>
-                {profiles.length > 1 && (
+                {profile.id !== 'default' && profiles.length > 1 && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       removeProfile(profile.id);
                     }}
-                    className="absolute -top-1 -right-1 hidden group-hover:flex size-4 rounded-full bg-destructive text-destructive-foreground items-center justify-center"
+                    className="absolute p-0 -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity size-3 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-sm"
                   >
-                    <X className="size-2.5" />
+                    <X className="size-3" />
                   </button>
                 )}
               </div>
