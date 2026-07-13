@@ -126,7 +126,7 @@ const TextEditor = forwardRef<TextEditorRef, TextEditorProps>(
         {children}
         <EditorContent
           editor={editor}
-          className="prose prose-sm flex-1 h-full w-full dark:prose-invert max-w-none size-full [&_.tiptap]:size-full [&_.tiptap]:p-4 [&_.tiptap_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.tiptap_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.tiptap_p.is-editor-empty:first-child::before]:float-left [&_.tiptap_p.is-editor-empty:first-child::before]:h-0 [&_.tiptap_p.is-editor-empty:first-child::before]:pointer-events-none"
+          className="prose prose-sm dark:prose-invert max-w-none flex-1 h-full w-full size-full [&_.tiptap]:size-full [&_.tiptap]:p-4 [&_.tiptap_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.tiptap_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.tiptap_p.is-editor-empty:first-child::before]:float-left [&_.tiptap_p.is-editor-empty:first-child::before]:h-0 [&_.tiptap_p.is-editor-empty:first-child::before]:pointer-events-none [&_h1]:text-xl [&_h1]:font-bold [&_h2]:text-lg [&_h2]:font-bold [&_h3]:text-2lg [&_h3]:font-bold [&_h4]:text-lg [&_h4]:font-semibold [&_h5]:text-base [&_h5]:font-semibold [&_h6]:text-sm [&_h6]:font-semibold [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6"
         />
       </div>
     );
