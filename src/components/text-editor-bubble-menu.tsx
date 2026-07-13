@@ -48,7 +48,8 @@ function TextEditorBubbleMenu({
       >
         {items.map((item, idx) => (
           <ToggleGroupItem
-            className="rounded"
+            size="sm"
+            className="rounded h-6 min-h-6"
             key={idx}
             value={String(idx)}
             onPressedChange={() => item.action()}
