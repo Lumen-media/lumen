@@ -67,10 +67,13 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
 import type { QueueTriggerSpec } from '@/modules/types';
+import { notesService } from '@/services/notes-service';
 import { usePlayerStore } from '@/stores/player-store';
+import { useProfileStore } from '@/stores/profile-store';
 import {
   type ListEntry,
   type TriggerInstance,
@@ -99,9 +102,9 @@ function getDownloadStatusLabel(item: QueueItem): string | null {
 }
 
 const TABS: { value: TabValue; label: string }[] = [
-  { value: 'queue', label: 'Queue' },
-  { value: 'notes', label: 'Notes' },
-  { value: 'themes', label: 'Themes' },
+  { value: 'queue', label: t('Queue') },
+  { value: 'notes', label: t('Notes') },
+  { value: 'themes', label: t('Themes') },
 ];
 
 export function AsidePanel() {
@@ -189,7 +192,7 @@ export function AsidePanel() {
           />
         </TabsContent>
 
-        <TabsContent value="notes" className="flex-1 overflow-hidden mt-0">
+        <TabsContent value="notes" className="flex-1 mt-0">
           <NotesTab />
         </TabsContent>
 
@@ -576,6 +579,25 @@ function NotesTab() {
   useEditorState(editorRef);
   const editor = editorRef.current?.editor;
 
+  const activeProfileId = useProfileStore((s) => s.activeProfileId);
+  const [defaultValue, setDefaultValue] = useState('');
+
+  useEffect(() => {
+    if (!activeProfileId) return;
+    notesService.loadNotes(activeProfileId).then((content) => {
+      setDefaultValue(content);
+      editorRef.current?.setMarkdown(content);
+    });
+  }, [activeProfileId]);
+
+  const handleChange = useCallback(
+    (md: string) => {
+      if (!activeProfileId) return;
+      notesService.saveNotes(activeProfileId, md);
+    },
+    [activeProfileId]
+  );
+
   const items: BubbleMenuItem[] = [
     {
       children: <BoldIcon />,
@@ -631,7 +653,13 @@ function NotesTab() {
 
   return (
     <div className="relative size-full">
-      <TextEditor ref={editorRef} placeholder="Write your notes here...">
+      <TextEditor
+        ref={editorRef}
+        defaultValue={defaultValue}
+        onChange={handleChange}
+        debounce={500}
+        placeholder={t('Write your notes here...')}
+      >
         <TextEditorBubbleMenu editorRef={editorRef} items={items} />
       </TextEditor>
     </div>
