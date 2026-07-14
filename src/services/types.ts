@@ -2,6 +2,7 @@ export type MediaType = 'lyrics' | 'video' | 'image' | 'text' | 'audio' | 'files
 export type DownloadStatus = 'not_downloaded' | 'downloaded' | 'missing';
 
 export interface FileInfo {
+  id?: number;
   name: string;
   path: string;
   size: number;

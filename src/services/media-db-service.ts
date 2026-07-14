@@ -411,6 +411,7 @@ class MediaDbService {
       'SELECT * FROM theme_files ORDER BY name COLLATE NOCASE'
     );
     return rows.map((row) => ({
+      id: row.id,
       name: row.name,
       path: row.path,
       size: row.size,
@@ -445,6 +446,7 @@ function isDownloadStatus(value: string | null): value is NonNullable<FileInfo['
 
 function rowToFileInfo(row: DbRow): FileInfo {
   return {
+    id: row.id,
     name: row.name,
     path: row.path,
     size: row.size,
