@@ -21,6 +21,12 @@ struct WindowState {
     positions: Mutex<HashMap<String, (i32, i32)>>,
 }
 
+const MEDIA_WINDOW_LABEL: &str = "media-window";
+const MEDIA_WINDOW_MIN_WIDTH: f64 = 1050.0;
+const MEDIA_WINDOW_MIN_HEIGHT: f64 = 650.0;
+const MEDIA_WINDOW_INITIAL_WIDTH: f64 = 1280.0;
+const MEDIA_WINDOW_INITIAL_HEIGHT: f64 = 720.0;
+
 #[tauri::command]
 fn get_exe_dir() -> Result<String, String> {
     std::env::current_exe()
@@ -111,17 +117,24 @@ async fn create_window(
         }
     };
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let mut builder = tauri::WebviewWindowBuilder::new(
         &app_handle,
         &label,
         tauri::WebviewUrl::App(route.unwrap_or_else(|| "/media-window".to_string()).into()),
     )
     .title(&title)
     .decorations(false)
-    .fullscreen(true)
-    .visible(false)
-    .build()
-    .map_err(|e| format!("Failed to create window: {}", e))?;
+    .visible(false);
+
+    if label == MEDIA_WINDOW_LABEL {
+        builder = builder
+            .inner_size(MEDIA_WINDOW_INITIAL_WIDTH, MEDIA_WINDOW_INITIAL_HEIGHT)
+            .min_inner_size(MEDIA_WINDOW_MIN_WIDTH, MEDIA_WINDOW_MIN_HEIGHT);
+    }
+
+    let window = builder
+        .build()
+        .map_err(|e| format!("Failed to create window: {}", e))?;
 
     window
         .set_position(tauri::Position::Physical(target_position))

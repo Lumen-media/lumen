@@ -31,11 +31,16 @@ function ModuleOverlayWindow() {
   const toggleFullscreen = useCallback(async () => {
     try {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-      const window = getCurrentWebviewWindow();
-      const nextFullscreen = !(await window.isFullscreen());
+      const appWindow = getCurrentWebviewWindow();
+      const nextFullscreen = !(await appWindow.isFullscreen());
 
-      await window.setFullscreen(nextFullscreen);
-      await setDecorations(!nextFullscreen);
+      if (nextFullscreen) {
+        await setDecorations(false);
+        await appWindow.setFullscreen(true);
+      } else {
+        await appWindow.setFullscreen(false);
+        await setDecorations(true);
+      }
     } catch (error) {
       console.error('Failed to toggle overlay fullscreen:', error);
     }
