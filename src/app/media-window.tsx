@@ -118,6 +118,10 @@ function StreamOverlay() {
   );
 }
 
+const FULLSCREEN_SIZE_TOLERANCE = 2;
+
+const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 export const Route = createFileRoute('/media-window')({
   component: MediaWindowComponent,
 });
@@ -185,19 +189,22 @@ function MediaWindowComponent() {
   const toggleFullscreen = useCallback(async () => {
     try {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-      const window = getCurrentWebviewWindow();
+      const appWindow = getCurrentWebviewWindow();
 
-      if (window) {
-        const isCurrentlyFullscreen = await window.isFullscreen();
+      if (appWindow) {
+        const isCurrentlyFullscreen = await appWindow.isFullscreen();
         const next = !isCurrentlyFullscreen;
 
-        await window.setFullscreen(next);
-        await setDecorations(!next);
-        setIsFullscreen(next);
-
-        if (!next) {
+        if (next) {
+          await setDecorations(false);
+          await appWindow.setFullscreen(true);
+        } else {
+          await appWindow.setFullscreen(false);
+          await setDecorations(true);
           await saveCurrentPosition();
         }
+
+        setIsFullscreen(next);
       }
     } catch (error) {
       console.error('Failed to toggle fullscreen:', error);
@@ -220,12 +227,32 @@ function MediaWindowComponent() {
 
   const ensureDefaultWindowMode = useCallback(async () => {
     try {
-      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-      const window = getCurrentWebviewWindow();
+      const [{ getCurrentWebviewWindow }, { currentMonitor }] = await Promise.all([
+        import('@tauri-apps/api/webviewWindow'),
+        import('@tauri-apps/api/window'),
+      ]);
+      const appWindow = getCurrentWebviewWindow();
 
-      if (window) {
-        await window.setFullscreen(true);
+      if (appWindow) {
+        const [fullscreen, size, monitor] = await Promise.all([
+          appWindow.isFullscreen(),
+          appWindow.innerSize().catch(() => null),
+          currentMonitor().catch(() => null),
+        ]);
+        const hasFullscreenBounds =
+          !size ||
+          !monitor ||
+          (Math.abs(size.width - monitor.size.width) <= FULLSCREEN_SIZE_TOLERANCE &&
+            Math.abs(size.height - monitor.size.height) <= FULLSCREEN_SIZE_TOLERANCE);
+
         await setDecorations(false);
+
+        if (fullscreen && !hasFullscreenBounds) {
+          await appWindow.setFullscreen(false);
+          await delay(80);
+        }
+
+        await appWindow.setFullscreen(true);
         setIsFullscreen(true);
       }
     } catch (error) {
@@ -238,10 +265,26 @@ function MediaWindowComponent() {
   }, [ensureDefaultWindowMode]);
 
   useEffect(() => {
-    emit('media-window-ready').catch(() => { });
-    const onUnload = () => emit('module:presenter-window-closed').catch(() => { });
-    window.addEventListener('beforeunload', onUnload);
-    return () => window.removeEventListener('beforeunload', onUnload);
+    let detachCloseListener: (() => void) | undefined;
+
+    const notifyPresenterClosed = () => {
+      emit('module:presenter-window-closed').catch(() => { });
+    };
+
+    import('@tauri-apps/api/window')
+      .then(({ getCurrentWindow }) => getCurrentWindow().onCloseRequested(notifyPresenterClosed))
+      .then((unlisten) => {
+        detachCloseListener = unlisten;
+      })
+      .catch((error) => {
+        console.error('Failed to bind media window close listener:', error);
+      });
+
+    window.addEventListener('beforeunload', notifyPresenterClosed);
+    return () => {
+      detachCloseListener?.();
+      window.removeEventListener('beforeunload', notifyPresenterClosed);
+    };
   }, []);
 
   useEffect(() => {
@@ -308,6 +351,14 @@ function MediaWindowComponent() {
     const unlistenStreamOverlay = listen<{ active: boolean }>('stream-overlay-toggle', (event) => {
       setStreamOverlayActive(event.payload.active);
     });
+
+    Promise.all([
+      unlistenLyric,
+      unlistenStartSlide,
+      unlistenLoadUrl,
+      unlistenLoadImage,
+      unlistenStreamOverlay,
+    ]).then(() => emit('media-window-ready').catch(() => { }));
 
     return () => {
       unlistenLyric.then((f) => f());
