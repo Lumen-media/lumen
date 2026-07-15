@@ -7,6 +7,7 @@ import { remoteSyncService } from '@/services/remote-sync-service';
 import { urlMediaService } from '@/services/url-media-service';
 import { useQueueStore } from '@/stores/queue-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
+import { useModuleStore } from '@/modules/store';
 
 interface PlayerStore {
   localTime: number;
@@ -394,7 +395,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   handleToggleScreen: async () => {
-    const { localMediaType } = get();
+    const { localMediaType, isScreenOpen } = get();
 
     const existing = await getMediaWindow();
     if (!existing) {
@@ -408,13 +409,25 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return;
     }
 
-    const visible = await existing.isVisible();
-    if (visible) {
-      await existing.hide();
-      set({ isScreenOpen: false });
+    if (isScreenOpen) {
+      const { currentLyricPath, currentImagePath } = get();
+      const hasPresenter = useModuleStore.getState().presenterViewId !== null;
+      const hasOtherContent = currentLyricPath || currentImagePath || hasPresenter;
+
+      if (hasOtherContent) {
+        invoke('push_stream_blank').catch(() => {});
+        set({ isScreenOpen: false });
+      } else {
+        await existing.hide();
+        set({ isScreenOpen: false });
+      }
     } else {
       if (localMediaType !== 'video') return;
       await existing.show();
+      const { currentFilePath, localTime } = get();
+      if (currentFilePath) {
+        get().sendWs({ event: 'load_url', url: currentFilePath, value: localTime });
+      }
       set({ isScreenOpen: true });
     }
   },
