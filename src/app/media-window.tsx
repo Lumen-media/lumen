@@ -269,6 +269,7 @@ function MediaWindowComponent() {
 
     const notifyPresenterClosed = () => {
       emit('module:presenter-window-closed').catch(() => { });
+      emit('stage-backdrop-change', { active: false, source: null, mediaType: null, id: null, name: null }).catch(() => { });
     };
 
     import('@tauri-apps/api/window')
@@ -300,6 +301,7 @@ function MediaWindowComponent() {
     );
     const unlistenClear = listen('module:presenter-clear', () => {
       useModuleStore.getState().clearPresenter();
+      emit('stage-backdrop-change', { active: false, source: null, mediaType: null, id: null, name: null }).catch(() => { });
     });
 
     return () => {
@@ -332,6 +334,7 @@ function MediaWindowComponent() {
       setMode('lyric');
       setLyricPath(event.payload.url);
       setImagePath(null);
+      emit('stage-backdrop-change', { active: true, source: 'lyrics', mediaType: 'lyrics' }).catch(() => { });
     });
 
     const unlistenStartSlide = listen<{ startIndex: number }>('lyric-start-slide', (event) => {
@@ -341,11 +344,13 @@ function MediaWindowComponent() {
     const unlistenLoadUrl = listen('load-url', () => {
       setMode('video');
       invoke('push_stream_blank').catch(() => { });
+      emit('stage-backdrop-change', { active: true, source: 'player', mediaType: 'video' }).catch(() => { });
     });
 
     const unlistenLoadImage = listen<{ url: string }>('load-image', (event) => {
       setImagePath(event.payload.url);
       setMode('video');
+      emit('stage-backdrop-change', { active: true, source: 'media', mediaType: 'image' }).catch(() => { });
     });
 
     const unlistenStreamOverlay = listen<{ active: boolean }>('stream-overlay-toggle', (event) => {

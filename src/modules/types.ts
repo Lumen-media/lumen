@@ -318,6 +318,14 @@ export interface FontsAPI {
   list(): Promise<string[]>;
 }
 
+export interface StageBackdropChangeDetail {
+  active: boolean;
+  source: 'player' | 'lyrics' | 'media' | 'scene' | 'unknown' | null;
+  mediaType: 'image' | 'video' | 'lyrics' | 'color' | 'unknown' | null;
+  id?: string | null;
+  name?: string | null;
+}
+
 export interface PresentationHostAPI {
   state(): 'idle' | 'live';
   onStateChange(handler: (state: 'idle' | 'live') => void): Disposable;
