@@ -54,6 +54,7 @@ interface PlayerStore {
 
 let volumeCommitTimeout: ReturnType<typeof setTimeout> | null = null;
 let seekCommitTimeout: ReturnType<typeof setTimeout> | null = null;
+let pendingMute = false;
 const SOCKET_COMMIT_DEBOUNCE_MS = 150;
 const LIVE_STREAM_MIN_DURATION_SECONDS = 24 * 60 * 60;
 
@@ -230,6 +231,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
 
     const unlistenMute = listen('mute', () => {
+      if (pendingMute) {
+        pendingMute = false;
+        return;
+      }
       const current = get();
       set({ isMuted: !current.isMuted });
     });
@@ -387,10 +392,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   handleMuteToggle: () => {
-    const { isMuted, volume, sendWs } = get();
-    const next = !isMuted;
-    set({ isMuted: next });
-    sendWs({ event: 'set_volume', value: next ? 0 : volume });
+    const { isMuted, sendWs } = get();
+    pendingMute = true;
+    set({ isMuted: !isMuted });
+    sendWs({ event: 'mute' });
     void broadcastPlayerSync(get, 'mute');
   },
 
