@@ -362,6 +362,8 @@ export function createPresentationHostAPI(): PresentationHostAPI {
       emit('module:presenter-clear').catch(() => {});
       if (openedByModule) {
         openedByModule = false;
+        const { currentFilePath, currentLyricPath, currentImagePath } = usePlayerStore.getState();
+        if (currentFilePath || currentLyricPath || currentImagePath) return;
         WebviewWindow.getByLabel('media-window')
           .then((w) => w?.close())
           .catch(() => {});
