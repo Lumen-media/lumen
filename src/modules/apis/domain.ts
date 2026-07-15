@@ -19,6 +19,7 @@ import type {
   PresentationHostAPI,
   OverlayHostAPI,
   QueueHostAPI,
+  StageBackdropChangeDetail,
   ThemesHostAPI,
 } from '../types';
 import { globalBus } from './bus';
@@ -241,6 +242,10 @@ export function createPlayerHostAPI(): PlayerHostAPI {
 listen('module:presenter-window-closed', () => {
   useModuleStore.getState().clearPresenter();
   globalBus.emit('presentation:clear');
+}).catch(() => {});
+
+listen<StageBackdropChangeDetail>('stage-backdrop-change', (event) => {
+  globalBus.emit('stage:backdrop-change', event.payload);
 }).catch(() => {});
 
 listen('module:overlay-window-closed', () => {
@@ -489,7 +494,7 @@ export function createThemesHostAPI(): ThemesHostAPI {
             if (!bg) {
               handler(null);
               return;
-            }
+}
 
             handler({ ...bg, src: blobUrl, ...(thumb ? { thumb } : {}) });
           })
@@ -521,3 +526,5 @@ export function createThemesHostAPI(): ThemesHostAPI {
     },
   };
 }
+
+
