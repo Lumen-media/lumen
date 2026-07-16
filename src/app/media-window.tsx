@@ -313,8 +313,6 @@ function MediaWindowComponent() {
 
       if (appWindow) {
         await setDecorations(false);
-        await appWindow.show();
-        await appWindow.setFullscreen(true);
         setIsFullscreen(true);
       }
     } catch (error) {
