@@ -5,8 +5,9 @@ import { readFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
 import { LyricPresentation } from '@/components/lyric-presentation';
-import { useProfiles } from '@/hooks/use-profiles';
 import { Videoplayer } from '@/components/ui/videoplayer';
+import { useProfiles } from '@/hooks/use-profiles';
+import { cn } from '@/lib/utils';
 import { PresenterSlot } from '@/modules/components/PresenterSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
@@ -121,10 +122,6 @@ function StreamOverlay() {
   );
 }
 
-const FULLSCREEN_SIZE_TOLERANCE = 2;
-
-const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
-
 function useMediaImageSrc(path?: string | null) {
   const [src, setSrc] = useState<string | undefined>();
 
@@ -205,7 +202,7 @@ function MediaWindowComponent() {
       wallpaper: useProfileWallpaper,
       hideLyrics,
       blackout: isBlackoutActive,
-    }).catch(() => {});
+    }).catch(() => { });
   }, [hideLyrics, isBlackoutActive, useProfileWallpaper]);
 
   const clearPresentedContent = useCallback(() => {
@@ -216,15 +213,15 @@ function MediaWindowComponent() {
     setImageSrc(undefined);
     resetPresenterDisplayModes();
     useModuleStore.getState().clearPresenter();
-    invoke('push_stream_blank').catch(() => {});
-    emit('module:presenter-clear').catch(() => {});
+    invoke('push_stream_blank').catch(() => { });
+    emit('module:presenter-clear').catch(() => { });
     emit('stage-backdrop-change', {
       active: false,
       source: null,
       mediaType: null,
       id: null,
       name: null,
-    }).catch(() => {});
+    }).catch(() => { });
   }, [resetPresenterDisplayModes]);
 
   const saveCurrentPosition = useCallback(async () => {
@@ -311,31 +308,12 @@ function MediaWindowComponent() {
 
   const ensureDefaultWindowMode = useCallback(async () => {
     try {
-      const [{ getCurrentWebviewWindow }, { currentMonitor }] = await Promise.all([
-        import('@tauri-apps/api/webviewWindow'),
-        import('@tauri-apps/api/window'),
-      ]);
+      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
       const appWindow = getCurrentWebviewWindow();
 
       if (appWindow) {
-        const [fullscreen, size, monitor] = await Promise.all([
-          appWindow.isFullscreen(),
-          appWindow.innerSize().catch(() => null),
-          currentMonitor().catch(() => null),
-        ]);
-        const hasFullscreenBounds =
-          !size ||
-          !monitor ||
-          (Math.abs(size.width - monitor.size.width) <= FULLSCREEN_SIZE_TOLERANCE &&
-            Math.abs(size.height - monitor.size.height) <= FULLSCREEN_SIZE_TOLERANCE);
-
         await setDecorations(false);
-
-        if (fullscreen && !hasFullscreenBounds) {
-          await appWindow.setFullscreen(false);
-          await delay(80);
-        }
-
+        await appWindow.show();
         await appWindow.setFullscreen(true);
         setIsFullscreen(true);
       }
@@ -353,7 +331,13 @@ function MediaWindowComponent() {
 
     const notifyPresenterClosed = () => {
       emit('module:presenter-window-closed').catch(() => { });
-      emit('stage-backdrop-change', { active: false, source: null, mediaType: null, id: null, name: null }).catch(() => { });
+      emit('stage-backdrop-change', {
+        active: false,
+        source: null,
+        mediaType: null,
+        id: null,
+        name: null,
+      }).catch(() => { });
     };
 
     import('@tauri-apps/api/window')
@@ -385,7 +369,13 @@ function MediaWindowComponent() {
     );
     const unlistenClear = listen('module:presenter-clear', () => {
       useModuleStore.getState().clearPresenter();
-      emit('stage-backdrop-change', { active: false, source: null, mediaType: null, id: null, name: null }).catch(() => { });
+      emit('stage-backdrop-change', {
+        active: false,
+        source: null,
+        mediaType: null,
+        id: null,
+        name: null,
+      }).catch(() => { });
     });
 
     return () => {
@@ -419,7 +409,7 @@ function MediaWindowComponent() {
         event.preventDefault();
         setIsBlackoutActive((active) => {
           const next = !active;
-          if (next) invoke('push_stream_blank').catch(() => {});
+          if (next) invoke('push_stream_blank').catch(() => { });
           return next;
         });
       }
@@ -447,7 +437,9 @@ function MediaWindowComponent() {
       setMode('lyric');
       setLyricPath(event.payload.url);
       setImagePath(null);
-      emit('stage-backdrop-change', { active: true, source: 'lyrics', mediaType: 'lyrics' }).catch(() => { });
+      emit('stage-backdrop-change', { active: true, source: 'lyrics', mediaType: 'lyrics' }).catch(
+        () => { }
+      );
     });
 
     const unlistenStartSlide = listen<{ startIndex: number }>('lyric-start-slide', (event) => {
@@ -458,14 +450,18 @@ function MediaWindowComponent() {
       resetPresenterDisplayModes();
       setMode('video');
       invoke('push_stream_blank').catch(() => { });
-      emit('stage-backdrop-change', { active: true, source: 'player', mediaType: 'video' }).catch(() => { });
+      emit('stage-backdrop-change', { active: true, source: 'player', mediaType: 'video' }).catch(
+        () => { }
+      );
     });
 
     const unlistenLoadImage = listen<{ url: string }>('load-image', (event) => {
       resetPresenterDisplayModes();
       setImagePath(event.payload.url);
       setMode('video');
-      emit('stage-backdrop-change', { active: true, source: 'media', mediaType: 'image' }).catch(() => { });
+      emit('stage-backdrop-change', { active: true, source: 'media', mediaType: 'image' }).catch(
+        () => { }
+      );
     });
 
     const unlistenStreamOverlay = listen<{ active: boolean }>('stream-overlay-toggle', (event) => {
@@ -475,7 +471,7 @@ function MediaWindowComponent() {
     const unlistenBlackout = listen('presenter:blackout-toggle', () => {
       setIsBlackoutActive((active) => {
         const next = !active;
-        if (next) invoke('push_stream_blank').catch(() => {});
+        if (next) invoke('push_stream_blank').catch(() => { });
         return next;
       });
     });
@@ -550,18 +546,20 @@ function MediaWindowComponent() {
       )}
       <PresenterSlot />
       <div
-        className={`absolute inset-0 z-[10000] h-full w-full bg-black transition-opacity duration-300 ease-out ${
+        className={cn(
+          'absolute inset-0 z-10000 h-full w-full bg-black transition-opacity duration-300 ease-out',
           useProfileWallpaper ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
+        )}
       >
         {profileBackgroundSrc && (
           <img src={profileBackgroundSrc} alt="" className="h-full w-full object-cover" />
         )}
       </div>
       <div
-        className={`absolute inset-0 z-[10001] h-full w-full bg-black transition-opacity duration-300 ease-out ${
+        className={cn(
+          'absolute inset-0 z-10000 h-full w-full bg-black transition-opacity duration-300 ease-out',
           isBlackoutActive ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
+        )}
       />
     </div>
   );

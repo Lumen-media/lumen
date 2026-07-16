@@ -140,10 +140,6 @@ async fn create_window(
         .set_position(tauri::Position::Physical(target_position))
         .map_err(|e| format!("Failed to set window position: {}", e))?;
 
-    window
-        .set_fullscreen(true)
-        .map_err(|e| format!("Failed to set fullscreen: {}", e))?;
-
     {
         let mut positions = window_state.positions.lock().unwrap();
         positions.insert(label.clone(), (target_position.x, target_position.y));
