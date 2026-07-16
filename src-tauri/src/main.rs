@@ -325,7 +325,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_fs::init())
         .plugin(
             tauri_plugin_window_state::Builder::new()
-                .with_state_flags(StateFlags::all() & !StateFlags::DECORATIONS)
+                .with_state_flags(StateFlags::all() & !StateFlags::DECORATIONS & !StateFlags::VISIBLE)
                 .build(),
         )
         .plugin(tauri_plugin_log::Builder::new().build())
@@ -436,7 +436,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             .show(move |keep_in_background| {
                                 if keep_in_background {
                                     let _ = app.save_window_state(
-                                        StateFlags::all() & !StateFlags::DECORATIONS,
+                                        StateFlags::all() & !StateFlags::DECORATIONS & !StateFlags::VISIBLE,
                                     );
                                     let _ = win.hide();
                                 } else {

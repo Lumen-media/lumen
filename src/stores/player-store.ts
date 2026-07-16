@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { create } from 'zustand';
 import { getSetting, saveSetting } from '@/services/db';
@@ -57,6 +58,53 @@ let seekCommitTimeout: ReturnType<typeof setTimeout> | null = null;
 let pendingMute = false;
 const SOCKET_COMMIT_DEBOUNCE_MS = 150;
 const LIVE_STREAM_MIN_DURATION_SECONDS = 24 * 60 * 60;
+
+let audioElement: HTMLAudioElement | null = null;
+let audioBlobUrl: string | null = null;
+
+function getAudioPlayer(): HTMLAudioElement {
+  if (!audioElement) {
+    audioElement = new Audio();
+    audioElement.addEventListener('timeupdate', () => {
+      const store = usePlayerStore.getState();
+      if (store.isDragging) return;
+      if (audioElement && audioElement.duration) {
+        store.sendWs({
+          event: 'progress',
+          value: audioElement.currentTime,
+          duration: audioElement.duration,
+        });
+      }
+    });
+    audioElement.addEventListener('ended', () => {
+      usePlayerStore.getState().handleStop();
+    });
+  }
+  return audioElement;
+}
+
+async function playAudio(source: string, seekTime: number): Promise<void> {
+  const audio = getAudioPlayer();
+  audio.pause();
+  audio.src = '';
+  if (audioBlobUrl) {
+    URL.revokeObjectURL(audioBlobUrl);
+    audioBlobUrl = null;
+  }
+
+  if (seekTime > 0) {
+    const blobUrl = URL.createObjectURL(new Blob([await readFile(source)]));
+    audioBlobUrl = blobUrl;
+    audio.src = blobUrl;
+    audio.currentTime = seekTime;
+  } else {
+    const blobUrl = URL.createObjectURL(new Blob([await readFile(source)]));
+    audioBlobUrl = blobUrl;
+    audio.src = blobUrl;
+  }
+
+  await audio.play();
+}
 
 async function getMediaWindow() {
   return WebviewWindow.getByLabel('media-window');
@@ -314,7 +362,21 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   handlePlayPause: async () => {
-    const { sendWs, isPlaying, restoredFilePath, localTime } = get();
+    const { sendWs, isPlaying, restoredFilePath, localTime, localMediaType } = get();
+
+    if (localMediaType === 'audio' && audioElement) {
+      if (audioElement.paused) {
+        await audioElement.play();
+        set({ isPlaying: true });
+        sendWs({ event: 'play_pause' });
+      } else {
+        audioElement.pause();
+        set({ isPlaying: false });
+        sendWs({ event: 'play_pause' });
+      }
+      void broadcastPlayerSync(get, 'play_pause');
+      return;
+    }
 
     if (restoredFilePath) {
       const seekTime = get().localTime;
@@ -340,7 +402,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   handleStop: async () => {
-    const { sendWs } = get();
+    const { sendWs, localMediaType } = get();
+
+    if (localMediaType === 'audio' && audioElement) {
+      audioElement.pause();
+      audioElement.currentTime = 0;
+    }
+
     sendWs({ event: 'stop' });
     set({ localTime: 0, isPlaying: false });
     saveSetting('last_time', '0').catch(() => {});
@@ -382,6 +450,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   handleVolumeCommit: (value) => {
     const v = value[0] ?? get().volume;
     set({ volume: v });
+    if (audioElement) {
+      audioElement.volume = v / 100;
+    }
     if (volumeCommitTimeout) {
       clearTimeout(volumeCommitTimeout);
     }
@@ -397,6 +468,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const { isMuted, sendWs } = get();
     pendingMute = true;
     set({ isMuted: !isMuted });
+    if (audioElement) {
+      audioElement.muted = !isMuted;
+    }
     sendWs({ event: 'mute' });
     void broadcastPlayerSync(get, 'mute');
   },
@@ -410,7 +484,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       try {
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
         const win = await getMediaWindow();
-        await win?.show();
+        if (win) {
+          await win.show();
+          await win.setFullscreen(true);
+        }
         set({ isScreenOpen: true });
       } catch {}
       return;
@@ -447,6 +524,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   handleSliderCommit: (value) => {
     const newTime = value[0] ?? get().localTime;
     set({ localTime: newTime, isDragging: false });
+
+    const { localMediaType } = get();
+    if (localMediaType === 'audio' && audioElement) {
+      audioElement.currentTime = newTime;
+    }
+
     if (seekCommitTimeout) {
       clearTimeout(seekCommitTimeout);
     }
@@ -462,6 +545,40 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   loadFile: async (filePath: string, seekTime = 0) => {
     const source = normalizeMediaSource(filePath);
     const isVideo = getMediaTypeFromPath(source) === 'video';
+
+    if (!isVideo) {
+      try {
+        await playAudio(source, seekTime);
+      } catch {
+        return;
+      }
+
+      const deadline = Date.now() + 3000;
+      while (get().ws?.readyState !== WebSocket.OPEN) {
+        if (Date.now() >= deadline) break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      get().sendWs({ event: 'load_url', url: source, value: seekTime });
+      set({
+        isPlaying: true,
+        localMediaType: 'audio',
+        isLiveStream: false,
+        restoredFilePath: null,
+        currentFilePath: source,
+        currentLyricPath: null,
+        currentLyricSlideIndex: 0,
+        currentLyricTotalSlides: 0,
+        localTime: seekTime > 0 ? seekTime : 0,
+        localDuration: seekTime > 0 ? get().localDuration : 0,
+      });
+
+      saveSetting('last_media_path', source).catch(() => {});
+      saveSetting('last_media_type', 'audio').catch(() => {});
+      saveSetting('last_time', '0').catch(() => {});
+      void broadcastPlayerSync(get, 'load_url');
+      return;
+    }
 
     let win = await getMediaWindow();
     if (!win) {
@@ -484,7 +601,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     get().sendWs({ event: 'load_url', url: source, value: seekTime });
     set({
       isPlaying: true,
-      localMediaType: isVideo ? 'video' : 'audio',
+      localMediaType: 'video',
       isLiveStream: false,
       restoredFilePath: null,
       currentFilePath: source,
@@ -496,12 +613,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
 
     saveSetting('last_media_path', source).catch(() => {});
-    saveSetting('last_media_type', isVideo ? 'video' : 'audio').catch(() => {});
+    saveSetting('last_media_type', 'video').catch(() => {});
     saveSetting('last_time', '0').catch(() => {});
     void broadcastPlayerSync(get, 'load_url');
 
-    if (isVideo && win) {
+    if (win) {
       await win.show();
+      await win.setFullscreen(true);
       set({ isScreenOpen: true });
     }
   },
@@ -538,6 +656,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     if (win) {
       await win.show();
+      await win.setFullscreen(true);
       set({ isScreenOpen: true });
     }
   },
@@ -560,6 +679,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     if (win) {
       await win.show();
+      await win.setFullscreen(true);
       set({ isScreenOpen: true });
     }
   },
