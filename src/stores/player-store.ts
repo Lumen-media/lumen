@@ -1,14 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { readFile } from '@tauri-apps/plugin-fs';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { create } from 'zustand';
+import { useModuleStore } from '@/modules/store';
 import { getSetting, saveSetting } from '@/services/db';
 import { remoteSyncService } from '@/services/remote-sync-service';
 import { urlMediaService } from '@/services/url-media-service';
-import { useQueueStore } from '@/stores/queue-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
-import { useModuleStore } from '@/modules/store';
+import { useQueueStore } from '@/stores/queue-store';
 
 interface PlayerStore {
   localTime: number;
@@ -68,7 +68,7 @@ function getAudioPlayer(): HTMLAudioElement {
     audioElement.addEventListener('timeupdate', () => {
       const store = usePlayerStore.getState();
       if (store.isDragging) return;
-      if (audioElement && audioElement.duration) {
+      if (audioElement?.duration) {
         store.sendWs({
           event: 'progress',
           value: audioElement.currentTime,
@@ -92,15 +92,12 @@ async function playAudio(source: string, seekTime: number): Promise<void> {
     audioBlobUrl = null;
   }
 
+  const blobUrl = URL.createObjectURL(new Blob([await readFile(source)]));
+  audioBlobUrl = blobUrl;
+  audio.src = blobUrl;
+
   if (seekTime > 0) {
-    const blobUrl = URL.createObjectURL(new Blob([await readFile(source)]));
-    audioBlobUrl = blobUrl;
-    audio.src = blobUrl;
     audio.currentTime = seekTime;
-  } else {
-    const blobUrl = URL.createObjectURL(new Blob([await readFile(source)]));
-    audioBlobUrl = blobUrl;
-    audio.src = blobUrl;
   }
 
   await audio.play();
@@ -136,6 +133,29 @@ async function waitForMediaWindowReady(timeoutMs = 3000): Promise<void> {
       finish(() => reject(new Error('Timed out waiting for media window readiness')));
     }, timeoutMs);
   });
+}
+
+async function ensureMediaWindow(): Promise<WebviewWindow | null> {
+  const existing = await getMediaWindow();
+  if (existing) return existing;
+
+  try {
+    const readyPromise = waitForMediaWindowReady();
+    await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+    await readyPromise;
+    return await getMediaWindow();
+  } catch {
+    return null;
+  }
+}
+
+async function waitForWsOpen(get: () => PlayerStore, timeoutMs = 3000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (get().ws?.readyState !== WebSocket.OPEN) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return true;
 }
 
 function normalizeMediaSource(source: string): string {
@@ -552,56 +572,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       } catch {
         return;
       }
-
-      const deadline = Date.now() + 3000;
-      while (get().ws?.readyState !== WebSocket.OPEN) {
-        if (Date.now() >= deadline) break;
-        await new Promise((r) => setTimeout(r, 50));
-      }
-
-      get().sendWs({ event: 'load_url', url: source, value: seekTime });
-      set({
-        isPlaying: true,
-        localMediaType: 'audio',
-        isLiveStream: false,
-        restoredFilePath: null,
-        currentFilePath: source,
-        currentLyricPath: null,
-        currentLyricSlideIndex: 0,
-        currentLyricTotalSlides: 0,
-        localTime: seekTime > 0 ? seekTime : 0,
-        localDuration: seekTime > 0 ? get().localDuration : 0,
-      });
-
-      saveSetting('last_media_path', source).catch(() => {});
-      saveSetting('last_media_type', 'audio').catch(() => {});
-      saveSetting('last_time', '0').catch(() => {});
-      void broadcastPlayerSync(get, 'load_url');
-      return;
+      await waitForWsOpen(get);
     }
 
-    let win = await getMediaWindow();
-    if (!win) {
-      try {
-        const readyPromise = waitForMediaWindowReady();
-        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-        await readyPromise;
-        win = await getMediaWindow();
-      } catch {
-        return;
-      }
-    }
-
-    const deadline = Date.now() + 3000;
-    while (get().ws?.readyState !== WebSocket.OPEN) {
-      if (Date.now() >= deadline) return;
-      await new Promise((r) => setTimeout(r, 50));
+    if (isVideo) {
+      const win = await ensureMediaWindow();
+      if (!win) return;
+      const ok = await waitForWsOpen(get);
+      if (!ok) return;
+      await win.show();
+      await win.setFullscreen(true);
+      set({ isScreenOpen: true });
     }
 
     get().sendWs({ event: 'load_url', url: source, value: seekTime });
     set({
       isPlaying: true,
-      localMediaType: 'video',
+      localMediaType: isVideo ? 'video' : 'audio',
       isLiveStream: false,
       restoredFilePath: null,
       currentFilePath: source,
@@ -613,35 +600,17 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
 
     saveSetting('last_media_path', source).catch(() => {});
-    saveSetting('last_media_type', 'video').catch(() => {});
+    saveSetting('last_media_type', isVideo ? 'video' : 'audio').catch(() => {});
     saveSetting('last_time', '0').catch(() => {});
     void broadcastPlayerSync(get, 'load_url');
-
-    if (win) {
-      await win.show();
-      await win.setFullscreen(true);
-      set({ isScreenOpen: true });
-    }
   },
 
   presentLyric: async (filePath: string, startIndex = 0) => {
-    let win = await getMediaWindow();
-    if (!win) {
-      try {
-        const readyPromise = waitForMediaWindowReady();
-        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-        await readyPromise;
-        win = await getMediaWindow();
-      } catch {
-        return;
-      }
-    }
+    const win = await ensureMediaWindow();
+    if (!win) return;
 
-    const deadline = Date.now() + 3000;
-    while (get().ws?.readyState !== WebSocket.OPEN) {
-      if (Date.now() >= deadline) return;
-      await new Promise((r) => setTimeout(r, 50));
-    }
+    const ok = await waitForWsOpen(get);
+    if (!ok) return;
 
     await emit('load-lyric', { url: filePath });
     get().sendWs({ event: 'load_lyric', url: filePath, startIndex });
@@ -654,34 +623,21 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
     void broadcastPlayerSync(get, 'load_lyric');
 
-    if (win) {
-      await win.show();
-      await win.setFullscreen(true);
-      set({ isScreenOpen: true });
-    }
+    await win.show();
+    await win.setFullscreen(true);
+    set({ isScreenOpen: true });
   },
 
   presentImage: async (filePath: string) => {
-    let win = await getMediaWindow();
-    if (!win) {
-      try {
-        const readyPromise = waitForMediaWindowReady();
-        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-        await readyPromise;
-        win = await getMediaWindow();
-      } catch {
-        return;
-      }
-    }
+    const win = await ensureMediaWindow();
+    if (!win) return;
 
     await emit('load-image', { url: filePath });
     set({ currentImagePath: filePath, currentLyricPath: null });
 
-    if (win) {
-      await win.show();
-      await win.setFullscreen(true);
-      set({ isScreenOpen: true });
-    }
+    await win.show();
+    await win.setFullscreen(true);
+    set({ isScreenOpen: true });
   },
 
   restoreLastMedia: async () => {
