@@ -259,6 +259,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         isPlaying: true,
         currentFilePath: filePath,
         currentLyricPath: null,
+        currentImagePath: null,
         currentLyricSlideIndex: 0,
         currentLyricTotalSlides: 0,
         localMediaType: getMediaTypeFromPath(filePath),
@@ -271,6 +272,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const unlistenLoadLyric = listen<{ url: string }>('load-lyric', (event) => {
       set({
         currentLyricPath: event.payload.url,
+        currentImagePath: null,
         currentLyricSlideIndex: 0,
         currentLyricTotalSlides: 0,
       });
@@ -523,10 +525,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       await new Promise((r) => setTimeout(r, 50));
     }
 
+    await emit('load-lyric', { url: filePath });
     get().sendWs({ event: 'load_lyric', url: filePath, startIndex });
     emit('lyric-start-slide', { startIndex }).catch(() => {});
     set({
       currentLyricPath: filePath,
+      currentImagePath: null,
       currentLyricSlideIndex: 0,
       currentLyricTotalSlides: 0,
     });
@@ -552,7 +556,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     }
 
     await emit('load-image', { url: filePath });
-    set({ currentImagePath: filePath });
+    set({ currentImagePath: filePath, currentLyricPath: null });
 
     if (win) {
       await win.show();
