@@ -4,17 +4,18 @@ import {
   ChevronDown,
   ChevronUp,
   Image as ImageIcon,
-  MonitorUp,
   Music2,
-  Palette,
   Presentation,
-  ScreenShareOff,
+  SkipBack,
+  SkipForward,
 } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEventListener, useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
 import type { StageBackdropChangeDetail } from '@/modules/types';
@@ -25,6 +26,8 @@ import { useProfileStore } from '@/stores/profile-store';
 import { Card } from './ui/card';
 
 type PresenterKind = 'lyrics' | 'image' | 'presentation';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 type PresenterMeta = ReturnType<typeof getKindMeta>;
 
@@ -43,6 +46,24 @@ interface FallbackSlide {
   label: string;
   active: boolean;
   image: boolean;
+  source?: string | null;
+}
+
+interface PresenterDisplayState {
+  wallpaper: boolean;
+  hideLyrics: boolean;
+  blackout: boolean;
+}
+
+type PresenterDisplayMode = keyof PresenterDisplayState;
+type PresenterShortcutEvent =
+  | 'presenter:wallpaper-toggle'
+  | 'presenter:lyrics-toggle'
+  | 'presenter:blackout-toggle'
+  | 'presenter:exit';
+
+function emitPresenterEvent(event: PresenterShortcutEvent) {
+  emit(event).catch(() => {});
 }
 
 function fileNameFromPath(path: string | null | undefined) {
@@ -111,30 +132,30 @@ function stateFromBackdrop(detail: StageBackdropChangeDetail): PresenterState {
   return { active: false, kind: null };
 }
 
-function getKindMeta(kind: PresenterKind | null) {
+function getKindMeta(kind: PresenterKind | null, t: Translate) {
   if (kind === 'image') {
     return {
       icon: ImageIcon,
-      label: 'Image',
-      title: 'Image on screen',
-      subtitle: 'Static media',
+      label: t('Image'),
+      title: t('Image on screen'),
+      subtitle: t('Static media'),
     };
   }
 
   if (kind === 'presentation') {
     return {
       icon: Presentation,
-      label: 'PPT',
-      title: 'Presentation',
-      subtitle: 'Slides',
+      label: t('PPT'),
+      title: t('Presentation'),
+      subtitle: t('Slides'),
     };
   }
 
   return {
     icon: Music2,
-    label: 'Lyric',
-    title: 'Lyrics',
-    subtitle: 'Hymn',
+    label: t('Lyric'),
+    title: t('Lyrics'),
+    subtitle: t('Hymn'),
   };
 }
 
@@ -147,6 +168,29 @@ function stopKeyboardShortcutPropagation(event: KeyboardEvent) {
   event.stopImmediatePropagation();
 }
 
+function emitPresenterShortcut(key: string) {
+  if (key === 'F8') {
+    emitPresenterEvent('presenter:wallpaper-toggle');
+    return true;
+  }
+
+  if (key === 'F9') {
+    emitPresenterEvent('presenter:lyrics-toggle');
+    return true;
+  }
+
+  if (key === 'F10') {
+    emitPresenterEvent('presenter:blackout-toggle');
+    return true;
+  }
+
+  if (key === 'Escape') {
+    emitPresenterEvent('presenter:exit');
+    return true;
+  }
+
+  return false;
+}
 function getPresenterNavigationIndex(key: string, currentIndex: number, totalItems: number) {
   if (totalItems <= 0) return null;
 
@@ -363,23 +407,35 @@ function usePresenterCollapseAnimation() {
   return { isMinimized, sequenceRef, sequenceContentRef, toggle };
 }
 
-function useFallbackSlides(kind: PresenterKind | null): FallbackSlide[] {
+function useFallbackSlides(
+  kind: PresenterKind | null,
+  imagePath: string | null | undefined,
+  t: Translate
+): FallbackSlide[] {
   return useMemo(() => {
     if (kind === 'image') {
-      return [{ id: 'current-image', label: 'Current image', active: true, image: true }];
+      return [
+        {
+          id: 'current-image',
+          label: t('Current image'),
+          active: true,
+          image: true,
+          source: imagePath,
+        },
+      ];
     }
 
     if (kind === 'presentation') {
       return Array.from({ length: 5 }, (_, index) => ({
         id: `presentation-${index}`,
-        label: index === 0 ? 'Current slide' : `Slide ${index + 1}`,
+        label: index === 0 ? t('Current slide') : t('Slide {{number}}', { number: index + 1 }),
         active: index === 0,
         image: index === 2,
       }));
     }
 
     return [];
-  }, [kind]);
+  }, [imagePath, kind, t]);
 }
 
 function LyricSequenceThumbnail({
@@ -480,6 +536,8 @@ function FallbackSequenceThumbnail({
   slide: FallbackSlide;
   onClick: () => void;
 }) {
+  const imageSrc = useBackgroundSrc(slide.image ? (slide.source ?? undefined) : undefined);
+
   return (
     <button
       type="button"
@@ -492,7 +550,15 @@ function FallbackSequenceThumbnail({
       onClick={onClick}
     >
       {slide.image ? (
-        <div className="absolute inset-0 bg-muted opacity-80" />
+        imageSrc ? (
+          <img
+            src={imageSrc}
+            alt=""
+            className="absolute inset-0 h-full w-full bg-black object-contain"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-muted opacity-80" />
+        )
       ) : (
         <div className="flex h-full items-center justify-center px-3 text-center text-[10px] font-semibold text-muted-foreground">
           {slide.label}
@@ -508,12 +574,14 @@ function PresenterHeader({
   currentPosition,
   totalItems,
   isMinimized,
+  t,
 }: {
   meta: PresenterMeta;
   title: string;
   currentPosition: number;
   totalItems: number;
   isMinimized: boolean;
+  t: Translate;
 }) {
   const Icon = meta.icon;
 
@@ -535,9 +603,121 @@ function PresenterHeader({
           </span>
         </div>
         <p className="truncate text-xs leading-tight text-muted-foreground">
-          {meta.subtitle} · Slide {currentPosition} of {totalItems || 1}
+          {meta.subtitle} ·{' '}
+          {t('Slide {{current}} of {{total}}', {
+            current: currentPosition,
+            total: totalItems || 1,
+          })}
         </p>
       </div>
+    </div>
+  );
+}
+
+function ShortcutLabel({ shortcut, label }: { shortcut?: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {shortcut && (
+        <span className="font-semibold text-foreground/90 uppercase tracking-normal">
+          {shortcut}
+        </span>
+      )}
+      <span>{label}</span>
+    </span>
+  );
+}
+
+const shortcutToggleItems = [
+  {
+    value: 'wallpaper',
+    ariaLabel: 'Toggle wallpaper',
+    shortcut: 'F8',
+    label: 'wallpaper',
+    event: 'presenter:wallpaper-toggle',
+  },
+  {
+    value: 'hideLyrics',
+    ariaLabel: 'Toggle lyrics visibility',
+    shortcut: 'F9',
+    label: 'without lyrics',
+    event: 'presenter:lyrics-toggle',
+  },
+  {
+    value: 'blackout',
+    ariaLabel: 'Toggle black screen',
+    shortcut: 'F10',
+    label: 'black screen',
+    event: 'presenter:blackout-toggle',
+  },
+] satisfies Array<{
+  value: PresenterDisplayMode;
+  ariaLabel: string;
+  shortcut: string;
+  label: string;
+  event: Exclude<PresenterShortcutEvent, 'presenter:exit'>;
+}>;
+
+const shortcutButtonClass = 'h-7 px-2 text-xs text-muted-foreground hover:text-accent-foreground';
+
+function PresenterShortcuts({
+  activeDisplayModes,
+  onPrevious,
+  onNext,
+  t,
+}: {
+  activeDisplayModes: PresenterDisplayMode[];
+  onPrevious: () => void;
+  onNext: () => void;
+  t: Translate;
+}) {
+  const actionButtons = [
+    {
+      id: 'exit',
+      shortcut: 'ESC',
+      icon: undefined,
+      label: 'exit',
+      onClick: () => emitPresenterEvent('presenter:exit'),
+    },
+    { id: 'previous', shortcut: undefined, icon: SkipBack, label: 'previous', onClick: onPrevious },
+    { id: 'next', shortcut: undefined, icon: SkipForward, label: 'next', onClick: onNext },
+  ];
+
+  return (
+    <div className="flex items-center justify-center gap-1">
+      <ToggleGroup
+        multiple
+        value={activeDisplayModes}
+        variant="secondary"
+        size="sm"
+        spacing={4}
+        className="rounded-md"
+      >
+        {shortcutToggleItems.map((item) => (
+          <ToggleGroupItem
+            key={item.value}
+            value={item.value}
+            aria-label={t(item.ariaLabel)}
+            className="h-7 rounded-md px-2 text-xs"
+            onClick={() => emitPresenterEvent(item.event)}
+          >
+            <ShortcutLabel shortcut={item.shortcut} label={t(item.label)} />
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+
+      {actionButtons.map(({ id, icon: Icon, shortcut, label, onClick }) => (
+        <Button
+          key={id}
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={shortcutButtonClass}
+          onClick={onClick}
+        >
+          {Icon ? <Icon className="size-3" /> : <ShortcutLabel shortcut={shortcut} label={t(label)} />}
+          {Icon ? t(label) : null}
+        </Button>
+      ))}
     </div>
   );
 }
@@ -545,52 +725,24 @@ function PresenterHeader({
 function PresenterActions({
   isMinimized,
   onToggleMinimized,
+  t,
 }: {
   isMinimized: boolean;
   onToggleMinimized: () => void;
+  t: Translate;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-1.5">
+    <div className="flex shrink-0 items-center justify-end">
       <Button
         type="button"
         variant="ghost"
         size="icon-sm"
         className="border border-border bg-background/55 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
         onClick={onToggleMinimized}
-        aria-label={isMinimized ? 'Expand presenter controls' : 'Minimize presenter controls'}
-        title={isMinimized ? 'Expand' : 'Minimize'}
+        aria-label={isMinimized ? t('Expand presenter controls') : t('Minimize presenter controls')}
+        title={isMinimized ? t('Expand') : t('Minimize')}
       >
         {isMinimized ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-      </Button>
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        className="h-8 border border-border bg-background/55 px-2 text-xs text-foreground hover:bg-accent hover:text-accent-foreground"
-        onClick={() => emit('presenter:theme-request').catch(() => {})}
-      >
-        <Palette className="size-3.5" />
-        Theme
-      </Button>
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        className="h-8 border border-primary/25 bg-primary/10 px-2 text-xs text-primary hover:bg-primary/20"
-        onClick={() => emit('presenter:go-live').catch(() => {})}
-      >
-        <MonitorUp className="size-3.5" />
-        Go Live
-      </Button>
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        className="h-8 border border-destructive/25 bg-destructive/10 px-2 text-xs text-destructive hover:bg-destructive/20"
-        onClick={() => emit('presenter:blackout-toggle').catch(() => {})}
-      >
-        <ScreenShareOff className="size-3.5" />
-        Blackout
       </Button>
     </div>
   );
@@ -626,7 +778,10 @@ function PresenterSequence({
       )}
     >
       <div ref={sequenceContentRef}>
-        <ScrollArea className="w-full" viewportClassName="focus-visible:ring-0 focus-visible:outline-none">
+        <ScrollArea
+          className="w-full"
+          viewportClassName="focus-visible:ring-0 focus-visible:outline-none"
+        >
           <div className="flex gap-3 px-1 pb-3 pt-1">
             {kind === 'lyrics' && lyricData
               ? lyricItems.map((slide, index) => (
@@ -658,6 +813,7 @@ function PresenterSequence({
 }
 
 export function PresenterControls({ className }: PresenterControlsProps) {
+  const { t } = useTranslation();
   const lyricSlideIndex = usePlayerStore((s) => s.currentLyricSlideIndex);
   const lyricTotalSlides = usePlayerStore((s) => s.currentLyricTotalSlides);
   const lyricPath = usePlayerStore((s) => s.currentLyricPath);
@@ -667,8 +823,32 @@ export function PresenterControls({ className }: PresenterControlsProps) {
   const lyricData = usePresentedLyricData(lyricPath, presenter.kind);
   const profileBackground = useProfileBackground();
   const { isMinimized, sequenceRef, sequenceContentRef, toggle } = usePresenterCollapseAnimation();
-  const fallbackSlides = useFallbackSlides(presenter.kind);
+  const fallbackSlides = useFallbackSlides(presenter.kind, imagePath, t);
   const controlsRef = useRef<HTMLDivElement>(null);
+  const [displayState, setDisplayState] = useState<PresenterDisplayState>({
+    wallpaper: false,
+    hideLyrics: false,
+    blackout: false,
+  });
+
+  useEffect(() => {
+    const unlistenDisplayState = listen<PresenterDisplayState>(
+      'presenter:display-state',
+      (event) => setDisplayState(event.payload)
+    );
+
+    return () => {
+      unlistenDisplayState.then((unlisten) => unlisten());
+    };
+  }, []);
+
+  const activeDisplayModes = useMemo(
+    () =>
+      (Object.entries(displayState)
+        .filter(([, active]) => active)
+        .map(([key]) => key) as PresenterDisplayMode[]),
+    [displayState]
+  );
 
   const lyricItems = lyricData?.slides ?? [];
   const totalItems =
@@ -678,17 +858,11 @@ export function PresenterControls({ className }: PresenterControlsProps) {
   const currentIndex = presenter.kind === 'lyrics' ? lyricSlideIndex : 0;
   const currentPosition = currentIndex + 1;
 
-  useEventListener(
-    'keydown',
-    (event) => {
-      if (!presenter.active || !presenter.kind) return;
+  const selectPresenterIndex = useCallback(
+    (index: number) => {
+      if (!presenter.kind || totalItems <= 0) return;
 
-      const nextIndex = getPresenterNavigationIndex(event.key, currentIndex, totalItems);
-      if (nextIndex === null) return;
-
-      event.preventDefault();
-      stopKeyboardShortcutPropagation(event);
-
+      const nextIndex = Math.max(0, Math.min(index, totalItems - 1));
       if (nextIndex === currentIndex) return;
 
       if (presenter.kind === 'lyrics') {
@@ -696,6 +870,27 @@ export function PresenterControls({ className }: PresenterControlsProps) {
       }
 
       emit('presenter:select-slide', { kind: presenter.kind, index: nextIndex }).catch(() => {});
+    },
+    [currentIndex, presenter.kind, totalItems]
+  );
+
+  useEventListener(
+    'keydown',
+    (event) => {
+      if (!presenter.active || !presenter.kind) return;
+
+      if (emitPresenterShortcut(event.key)) {
+        event.preventDefault();
+        stopKeyboardShortcutPropagation(event);
+        return;
+      }
+
+      const nextIndex = getPresenterNavigationIndex(event.key, currentIndex, totalItems);
+      if (nextIndex === null) return;
+
+      event.preventDefault();
+      stopKeyboardShortcutPropagation(event);
+      selectPresenterIndex(nextIndex);
     },
     undefined,
     { capture: true }
@@ -705,16 +900,22 @@ export function PresenterControls({ className }: PresenterControlsProps) {
     'keyup',
     (event) => {
       if (!presenter.active || !presenter.kind) return;
-      if (getPresenterNavigationIndex(event.key, currentIndex, totalItems) === null) return;
+      if (
+        !['F8', 'F9', 'F10', 'Escape'].includes(event.key) &&
+        getPresenterNavigationIndex(event.key, currentIndex, totalItems) === null
+      ) {
+        return;
+      }
       stopKeyboardShortcutPropagation(event);
     },
     undefined,
     { capture: true }
   );
 
-  const meta = getKindMeta(presenter.kind);
+  const meta = getKindMeta(presenter.kind, t);
+  const presenterName = presenter.name === 'Presentation' ? t('Presentation') : presenter.name;
   const displayTitle =
-    presenter.name ??
+    presenterName ??
     lyricData?.metadata.name ??
     (presenter.kind === 'image'
       ? fileNameFromPath(imagePath)
@@ -728,17 +929,26 @@ export function PresenterControls({ className }: PresenterControlsProps) {
     <Card
       ref={controlsRef}
       className={cn(isMinimized ? 'min-h-10 p-2 gap-0' : 'min-h-14 gap-3', className)}
-      aria-label="Presenter controls"
+      aria-label={t('Presenter controls')}
     >
-      <div className="flex min-w-0 items-center justify-between gap-3">
+      <div className="relative flex min-w-0 items-center justify-between gap-3">
         <PresenterHeader
           meta={meta}
           title={displayTitle}
           currentPosition={currentPosition}
           totalItems={totalItems}
           isMinimized={isMinimized}
+          t={t}
         />
-        <PresenterActions isMinimized={isMinimized} onToggleMinimized={toggle} />
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <PresenterShortcuts
+            activeDisplayModes={activeDisplayModes}
+            onPrevious={() => selectPresenterIndex(currentIndex - 1)}
+            onNext={() => selectPresenterIndex(currentIndex + 1)}
+            t={t}
+          />
+        </div>
+        <PresenterActions isMinimized={isMinimized} onToggleMinimized={toggle} t={t} />
       </div>
 
       <PresenterSequence

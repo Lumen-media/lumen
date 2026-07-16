@@ -81,7 +81,19 @@ function useSlideBgSrc(path?: string) {
   return displayedSrc;
 }
 
-export function LyricPresentation({ filePath, startIndex = 0 }: { filePath: string; startIndex?: number }) {
+export function LyricPresentation({
+  filePath,
+  startIndex = 0,
+  hideLyrics = false,
+  useProfileWallpaper = false,
+  blackoutActive = false,
+}: {
+  filePath: string;
+  startIndex?: number;
+  hideLyrics?: boolean;
+  useProfileWallpaper?: boolean;
+  blackoutActive?: boolean;
+}) {
   useProfiles();
   const { profiles, activeProfileId } = useProfileStore();
   const profileBackground =
@@ -120,13 +132,23 @@ export function LyricPresentation({ filePath, startIndex = 0 }: { filePath: stri
     const slide = lyricData.slides[currentSlide];
     const parsedFontSize = Number.parseInt(lyricData.metadata.fontSize, 10);
     const fontSize = Number.isFinite(parsedFontSize) ? parsedFontSize : 48;
-    const background = slide?.background || lyricData.metadata.globalBackground || profileBackground || undefined;
+    const background = useProfileWallpaper
+      ? profileBackground
+      : slide?.background || lyricData.metadata.globalBackground || profileBackground || undefined;
+
+    if (blackoutActive) {
+      invoke('push_stream_blank').catch(() => {});
+      return;
+    }
+
+    const shouldHideLyrics = hideLyrics || useProfileWallpaper;
+    const lines = shouldHideLyrics ? [] : (slide?.lines ?? []);
 
     emit('lyric-slide-changed', {
       filePath,
       slideIndex: currentSlide,
       totalSlides: lyricData.slides.length,
-      lines: slide?.lines ?? [],
+      lines,
       font: lyricData.metadata.font || undefined,
       fontSize,
       alignment: lyricData.metadata.alignment || 'center',
@@ -136,7 +158,7 @@ export function LyricPresentation({ filePath, startIndex = 0 }: { filePath: stri
 
     invoke('push_stream_slide', {
       update: {
-        lines: slide?.lines ?? [],
+        lines,
         font: lyricData.metadata.font || null,
         font_size: fontSize,
         alignment: lyricData.metadata.alignment || 'center',
@@ -146,7 +168,7 @@ export function LyricPresentation({ filePath, startIndex = 0 }: { filePath: stri
         active: true,
       },
     }).catch(() => { });
-  }, [currentSlide, filePath, lyricData, profileBackground]);
+  }, [blackoutActive, currentSlide, filePath, hideLyrics, lyricData, profileBackground, useProfileWallpaper]);
 
   const totalSlides = lyricData?.slides.length ?? 0;
   const [textVisible, setTextVisible] = useState(true);
@@ -234,8 +256,10 @@ export function LyricPresentation({ filePath, startIndex = 0 }: { filePath: stri
     }
   });
 
-  const globalBgSrc = useBackgroundSrc(lyricData?.metadata.globalBackground || profileBackground);
-  const slideBgSrc = useSlideBgSrc(slide?.background);
+  const globalBgSrc = useBackgroundSrc(
+    useProfileWallpaper ? profileBackground : lyricData?.metadata.globalBackground || profileBackground
+  );
+  const slideBgSrc = useSlideBgSrc(useProfileWallpaper ? undefined : slide?.background);
 
   if (!lyricData || !slide) {
     return <div className="h-full w-full bg-black" />;
@@ -266,7 +290,7 @@ export function LyricPresentation({ filePath, startIndex = 0 }: { filePath: stri
       <div
         className="absolute inset-0 z-2 flex items-center justify-center overflow-hidden p-[5%]"
         style={{
-          opacity: textVisible ? 1 : 0,
+          opacity: textVisible && !hideLyrics && !useProfileWallpaper ? 1 : 0,
           transition: `opacity ${fadeMs}ms ease`,
         }}
       >

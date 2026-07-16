@@ -5,10 +5,13 @@ import { readFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
 import { LyricPresentation } from '@/components/lyric-presentation';
+import { useProfiles } from '@/hooks/use-profiles';
 import { Videoplayer } from '@/components/ui/videoplayer';
 import { PresenterSlot } from '@/modules/components/PresenterSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
+import { usePlayerStore } from '@/stores/player-store';
+import { useProfileStore } from '@/stores/profile-store';
 
 function StreamOverlay() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -122,11 +125,47 @@ const FULLSCREEN_SIZE_TOLERANCE = 2;
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
+function useMediaImageSrc(path?: string | null) {
+  const [src, setSrc] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (!path) {
+      setSrc(undefined);
+      return;
+    }
+
+    if (path.startsWith('http') || path.startsWith('#') || path.startsWith('blob:')) {
+      setSrc(path);
+      return;
+    }
+
+    let url: string;
+    readFile(path)
+      .then((bytes) => {
+        url = URL.createObjectURL(new Blob([bytes]));
+        setSrc(url);
+      })
+      .catch(() => setSrc(undefined));
+
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [path]);
+
+  return src;
+}
+
 export const Route = createFileRoute('/media-window')({
   component: MediaWindowComponent,
 });
 
 function MediaWindowComponent() {
+  useProfiles();
+  const { profiles, activeProfileId } = useProfileStore();
+  const profileBackground =
+    profiles.find((profile) => profile.id === activeProfileId)?.defaultBackground?.src ?? undefined;
+  const profileBackgroundSrc = useMediaImageSrc(profileBackground);
+
   const [isFullscreen, setIsFullscreen] = useState(true);
   const [mode, setMode] = useState<'video' | 'lyric'>('video');
   const [lyricPath, setLyricPath] = useState('');
@@ -134,6 +173,9 @@ function MediaWindowComponent() {
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [imageSrc, setImageSrc] = useState<string | undefined>();
   const [streamOverlayActive, setStreamOverlayActive] = useState(false);
+  const [isBlackoutActive, setIsBlackoutActive] = useState(false);
+  const [useProfileWallpaper, setUseProfileWallpaper] = useState(false);
+  const [hideLyrics, setHideLyrics] = useState(false);
 
   useEffect(() => {
     if (!imagePath) {
@@ -151,6 +193,39 @@ function MediaWindowComponent() {
       if (url) URL.revokeObjectURL(url);
     };
   }, [imagePath]);
+
+  const resetPresenterDisplayModes = useCallback(() => {
+    setIsBlackoutActive(false);
+    setUseProfileWallpaper(false);
+    setHideLyrics(false);
+  }, []);
+
+  useEffect(() => {
+    emit('presenter:display-state', {
+      wallpaper: useProfileWallpaper,
+      hideLyrics,
+      blackout: isBlackoutActive,
+    }).catch(() => {});
+  }, [hideLyrics, isBlackoutActive, useProfileWallpaper]);
+
+  const clearPresentedContent = useCallback(() => {
+    setMode('video');
+    setLyricPath('');
+    setLyricStartIndex(0);
+    setImagePath(null);
+    setImageSrc(undefined);
+    resetPresenterDisplayModes();
+    useModuleStore.getState().clearPresenter();
+    invoke('push_stream_blank').catch(() => {});
+    emit('module:presenter-clear').catch(() => {});
+    emit('stage-backdrop-change', {
+      active: false,
+      source: null,
+      mediaType: null,
+      id: null,
+      name: null,
+    }).catch(() => {});
+  }, [resetPresenterDisplayModes]);
 
   const saveCurrentPosition = useCallback(async () => {
     try {
@@ -224,6 +299,15 @@ function MediaWindowComponent() {
       console.error('Failed to close window:', error);
     }
   }, [saveCurrentPosition]);
+
+  const exitPresentedContent = useCallback(() => {
+    clearPresentedContent();
+
+    const hasBaseMedia = Boolean(usePlayerStore.getState().currentFilePath);
+    if (!hasBaseMedia) {
+      void closeWindow();
+    }
+  }, [clearPresentedContent, closeWindow]);
 
   const ensureDefaultWindowMode = useCallback(async () => {
     try {
@@ -319,18 +403,47 @@ function MediaWindowComponent() {
         void toggleFullscreen();
       }
 
+      if (key === 'F8') {
+        event.preventDefault();
+        setIsBlackoutActive(false);
+        setUseProfileWallpaper((active) => !active);
+      }
+
+      if (key === 'F9') {
+        event.preventDefault();
+        setIsBlackoutActive(false);
+        setHideLyrics((active) => !active);
+      }
+
+      if (key === 'F10') {
+        event.preventDefault();
+        setIsBlackoutActive((active) => {
+          const next = !active;
+          if (next) invoke('push_stream_blank').catch(() => {});
+          return next;
+        });
+      }
+
       if (key === 'Escape') {
         event.preventDefault();
-        void closeWindow();
+        const hasPresentedContent =
+          mode === 'lyric' || imagePath || useModuleStore.getState().presenterViewId !== null;
+
+        if (hasPresentedContent) {
+          exitPresentedContent();
+        } else {
+          void closeWindow();
+        }
       }
     },
-    [closeWindow, toggleFullscreen]
+    [closeWindow, exitPresentedContent, imagePath, mode, toggleFullscreen]
   );
 
   useEventListener('keydown', handleKeyDown);
 
   useEffect(() => {
     const unlistenLyric = listen<{ url: string }>('load-lyric', (event) => {
+      resetPresenterDisplayModes();
       setMode('lyric');
       setLyricPath(event.payload.url);
       setImagePath(null);
@@ -342,12 +455,14 @@ function MediaWindowComponent() {
     });
 
     const unlistenLoadUrl = listen('load-url', () => {
+      resetPresenterDisplayModes();
       setMode('video');
       invoke('push_stream_blank').catch(() => { });
       emit('stage-backdrop-change', { active: true, source: 'player', mediaType: 'video' }).catch(() => { });
     });
 
     const unlistenLoadImage = listen<{ url: string }>('load-image', (event) => {
+      resetPresenterDisplayModes();
       setImagePath(event.payload.url);
       setMode('video');
       emit('stage-backdrop-change', { active: true, source: 'media', mediaType: 'image' }).catch(() => { });
@@ -357,12 +472,36 @@ function MediaWindowComponent() {
       setStreamOverlayActive(event.payload.active);
     });
 
+    const unlistenBlackout = listen('presenter:blackout-toggle', () => {
+      setIsBlackoutActive((active) => {
+        const next = !active;
+        if (next) invoke('push_stream_blank').catch(() => {});
+        return next;
+      });
+    });
+
+    const unlistenWallpaper = listen('presenter:wallpaper-toggle', () => {
+      setIsBlackoutActive(false);
+      setUseProfileWallpaper((active) => !active);
+    });
+
+    const unlistenLyricsToggle = listen('presenter:lyrics-toggle', () => {
+      setIsBlackoutActive(false);
+      setHideLyrics((active) => !active);
+    });
+
+    const unlistenExit = listen('presenter:exit', exitPresentedContent);
+
     Promise.all([
       unlistenLyric,
       unlistenStartSlide,
       unlistenLoadUrl,
       unlistenLoadImage,
       unlistenStreamOverlay,
+      unlistenBlackout,
+      unlistenWallpaper,
+      unlistenLyricsToggle,
+      unlistenExit,
     ]).then(() => emit('media-window-ready').catch(() => { }));
 
     return () => {
@@ -371,8 +510,12 @@ function MediaWindowComponent() {
       unlistenLoadUrl.then((f) => f());
       unlistenLoadImage.then((f) => f());
       unlistenStreamOverlay.then((f) => f());
+      unlistenBlackout.then((f) => f());
+      unlistenWallpaper.then((f) => f());
+      unlistenLyricsToggle.then((f) => f());
+      unlistenExit.then((f) => f());
     };
-  }, []);
+  }, [exitPresentedContent, resetPresenterDisplayModes]);
 
   useInterval(
     () => {
@@ -391,7 +534,13 @@ function MediaWindowComponent() {
       )}
       {mode === 'lyric' && lyricPath && (
         <div className="absolute inset-0 z-10">
-          <LyricPresentation filePath={lyricPath} startIndex={lyricStartIndex} />
+          <LyricPresentation
+            filePath={lyricPath}
+            startIndex={lyricStartIndex}
+            hideLyrics={hideLyrics}
+            useProfileWallpaper={useProfileWallpaper}
+            blackoutActive={isBlackoutActive}
+          />
         </div>
       )}
       {streamOverlayActive && (
@@ -400,6 +549,20 @@ function MediaWindowComponent() {
         </div>
       )}
       <PresenterSlot />
+      <div
+        className={`absolute inset-0 z-[10000] h-full w-full bg-black transition-opacity duration-300 ease-out ${
+          useProfileWallpaper ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      >
+        {profileBackgroundSrc && (
+          <img src={profileBackgroundSrc} alt="" className="h-full w-full object-cover" />
+        )}
+      </div>
+      <div
+        className={`absolute inset-0 z-[10001] h-full w-full bg-black transition-opacity duration-300 ease-out ${
+          isBlackoutActive ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      />
     </div>
   );
 }
