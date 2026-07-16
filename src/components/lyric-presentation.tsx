@@ -193,12 +193,18 @@ export function LyricPresentation({ filePath, startIndex = 0 }: { filePath: stri
   }, [goNext, goPrev, changeSlide]);
 
   useEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
       e.preventDefault();
       goNext();
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
       e.preventDefault();
       goPrev();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      changeSlide(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      changeSlide(Math.max(totalSlides - 1, 0));
     }
   });
 
