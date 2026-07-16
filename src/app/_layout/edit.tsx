@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Pencil } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslation } from '@/lib/i18n';
 import { useEventListener, useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { LyricData, LyricSlide } from '@/services/lyric-service';
 import { thumbnailService } from '@/services/thumbnail-service';
@@ -55,7 +55,9 @@ function RouteComponent() {
     const total = lyricData.slides.length;
     if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
       e.preventDefault();
-      handleSelectSlide(selectedSlideIndex === null ? 0 : Math.min(selectedSlideIndex + 1, total - 1));
+      handleSelectSlide(
+        selectedSlideIndex === null ? 0 : Math.min(selectedSlideIndex + 1, total - 1)
+      );
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
       e.preventDefault();
       handleSelectSlide(selectedSlideIndex === null ? 0 : Math.max(selectedSlideIndex - 1, 0));
@@ -87,7 +89,10 @@ function RouteComponent() {
         </Button>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0" viewportClassName="focus-visible:ring-0 focus-visible:outline-none">
+      <ScrollArea
+        className="flex-1 min-h-0"
+        viewportClassName="focus-visible:ring-0 focus-visible:outline-none"
+      >
         <div className="flex flex-col px-6 pb-4 py-1">
           {lyricData.slides.map((slide, index) => (
             <div key={slideIds[index]}>
@@ -205,10 +210,15 @@ function useBackgroundSrc(path?: string) {
       return;
     }
     let cancelled = false;
-    thumbnailService.getThumbnail(path)
-      .then((url) => { if (!cancelled) setSrc(url); })
+    thumbnailService
+      .getThumbnail(path)
+      .then((url) => {
+        if (!cancelled) setSrc(url);
+      })
       .catch(() => setSrc(undefined));
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [path]);
 
   return src;
