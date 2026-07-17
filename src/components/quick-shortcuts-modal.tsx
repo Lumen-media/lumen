@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   LayoutGrid,
   Music,
+  Presentation,
   Search,
   ShieldQuestion,
   Sparkles,
@@ -76,6 +77,11 @@ const SOURCE_THEME: Record<SearchSource, SourceTheme> = {
     icon: ImageIcon,
     iconBox: 'bg-primary/10 text-primary border-primary/25',
     badge: 'bg-primary/15 text-primary border-primary/30',
+  },
+  presentation: {
+    icon: Presentation,
+    iconBox: 'bg-amber-500/10 text-amber-300 border-amber-500/25',
+    badge: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
   },
   command: {
     icon: Terminal,

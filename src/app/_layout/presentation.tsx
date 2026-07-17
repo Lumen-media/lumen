@@ -6,9 +6,9 @@ import { Plus, PresentationIcon, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { CardContent } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { type FileInfo, fileManagementService } from '@/services';
 import { usePresentationStore } from '@/stores/presentation-store';
@@ -78,7 +78,7 @@ function RouteComponent() {
 
   const handleOpenFile = async (file: FileInfo) => {
     try {
-      const existing = WebviewWindow.getByLabel('media-window');
+      const existing = await WebviewWindow.getByLabel('media-window');
       let win: WebviewWindow | null = existing;
 
       if (!win) {
@@ -92,7 +92,7 @@ function RouteComponent() {
 
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
         await readyPromise;
-        win = WebviewWindow.getByLabel('media-window');
+        win = await WebviewWindow.getByLabel('media-window');
       }
 
       if (!win) return;

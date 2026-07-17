@@ -220,7 +220,7 @@ export function MediaPanel() {
 
   const openPresentation = useCallback(async (filePath: string) => {
     try {
-      const existing = WebviewWindow.getByLabel('media-window');
+      const existing = await WebviewWindow.getByLabel('media-window');
       let win: WebviewWindow | null = existing;
 
       if (!win) {
@@ -234,7 +234,7 @@ export function MediaPanel() {
 
         await invoke('create_window', { label: 'media-window', title: 'Media Player' });
         await readyPromise;
-        win = WebviewWindow.getByLabel('media-window');
+        win = await WebviewWindow.getByLabel('media-window');
       }
 
       if (!win) return;
