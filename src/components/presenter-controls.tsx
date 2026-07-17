@@ -766,6 +766,8 @@ function PresenterSequence({
   sequenceRef,
   sequenceContentRef,
   isMinimized,
+  active,
+  totalItems,
 }: {
   kind: PresenterKind;
   lyricData: LyricData | null;
@@ -776,6 +778,8 @@ function PresenterSequence({
   sequenceRef: React.RefObject<HTMLDivElement | null>;
   sequenceContentRef: React.RefObject<HTMLDivElement | null>;
   isMinimized: boolean;
+  active: boolean;
+  totalItems: number;
 }) {
   return (
     <div
@@ -815,7 +819,12 @@ function PresenterSequence({
           </div>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
-        <PresenterControlsSlot />
+        <PresenterControlsSlot
+          kind={kind}
+          active={active}
+          slideIndex={lyricSlideIndex}
+          totalSlides={totalItems}
+        />
       </div>
     </div>
   );
@@ -969,6 +978,8 @@ export function PresenterControls({ className }: PresenterControlsProps) {
         sequenceRef={sequenceRef}
         sequenceContentRef={sequenceContentRef}
         isMinimized={isMinimized}
+        active={presenter.active}
+        totalItems={totalItems}
       />
     </Card>
   );

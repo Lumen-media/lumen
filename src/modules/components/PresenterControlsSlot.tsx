@@ -1,11 +1,14 @@
 import { useMemo } from 'react';
 import type React from 'react';
 import { useModuleStore } from '../store';
-import type { PanelProps, PanelSpec } from '../types';
+import type { PanelSpec } from '../types';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 
-interface PresenterControlsSlotProps {
-  panelProps?: PanelProps;
+export interface PresenterControlsSlotProps {
+  kind: 'lyrics' | 'image' | 'presentation' | null;
+  active: boolean;
+  slideIndex: number;
+  totalSlides: number;
 }
 
 type SlotPanel = {
@@ -13,7 +16,7 @@ type SlotPanel = {
   spec: PanelSpec;
 };
 
-export function PresenterControlsSlot({ panelProps = {} }: PresenterControlsSlotProps) {
+export function PresenterControlsSlot({ kind, active, slideIndex, totalSlides }: PresenterControlsSlotProps) {
   const panelMap = useModuleStore((s) => s.panels);
   const panels = useMemo(() => {
     const result: SlotPanel[] = [];
@@ -36,12 +39,12 @@ export function PresenterControlsSlot({ panelProps = {} }: PresenterControlsSlot
       {panels.map(({ moduleId, spec }, index) => {
         if (spec.when && !spec.when()) return null;
 
-        const Component = spec.component as React.ComponentType<PanelProps>;
+        const Component = spec.component as unknown as React.ComponentType<PresenterControlsSlotProps>;
         const panelKey = `${moduleId}:${spec.id}:${index}`;
 
         return (
           <ModuleErrorBoundary key={panelKey} moduleId={moduleId} panelId={spec.id}>
-            <Component {...panelProps} />
+            <Component kind={kind} active={active} slideIndex={slideIndex} totalSlides={totalSlides} />
           </ModuleErrorBoundary>
         );
       })}
