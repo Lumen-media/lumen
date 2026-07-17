@@ -159,7 +159,7 @@ class MediaDbService {
         } catch {}
 
         if (mediaType === 'presentation') {
-          content = await extractPresentationContent(file.path);
+          content = (await extractPresentationContent(file.path)) ?? null;
         }
 
         await db.execute(
@@ -217,7 +217,7 @@ class MediaDbService {
     }
 
     if (mediaType === 'presentation' && !content) {
-      content = await extractPresentationContent(file.path);
+      content = (await extractPresentationContent(file.path)) ?? undefined;
     }
 
     await db.execute(
