@@ -17,6 +17,7 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { PresenterControlsSlot } from '@/modules/components/PresenterControlsSlot';
 import { useModuleStore } from '@/modules/store';
 import type { StageBackdropChangeDetail } from '@/modules/types';
 import { type LyricData, type LyricSlide, lyricService } from '@/services/lyric-service';
@@ -63,12 +64,15 @@ type PresenterShortcutEvent =
   | 'presenter:exit';
 
 function emitPresenterEvent(event: PresenterShortcutEvent) {
-  emit(event).catch(() => {});
+  emit(event).catch(() => { });
 }
 
 function fileNameFromPath(path: string | null | undefined) {
   if (!path) return undefined;
-  return path.split(/[\\/]/).pop()?.replace(/\.[^/.]+$/, '');
+  return path
+    .split(/[\\/]/)
+    .pop()
+    ?.replace(/\.[^/.]+$/, '');
 }
 
 function getInitialPresenterState(): PresenterState {
@@ -714,7 +718,11 @@ function PresenterShortcuts({
           className={shortcutButtonClass}
           onClick={onClick}
         >
-          {Icon ? <Icon className="size-3" /> : <ShortcutLabel shortcut={shortcut} label={t(label)} />}
+          {Icon ? (
+            <Icon className="size-3" />
+          ) : (
+            <ShortcutLabel shortcut={shortcut} label={t(label)} />
+          )}
           {Icon ? t(label) : null}
         </Button>
       ))}
@@ -785,28 +793,29 @@ function PresenterSequence({
           <div className="flex gap-3 px-1 pb-3 pt-1">
             {kind === 'lyrics' && lyricData
               ? lyricItems.map((slide, index) => (
-                  <LyricSequenceThumbnail
-                    key={`${index}-${slide.lines.join('|')}`}
-                    slide={slide}
-                    isSelected={lyricSlideIndex === index}
-                    lyricData={lyricData}
-                    profileBackground={profileBackground}
-                    onClick={() => {
-                      emit('lyric-start-slide', { startIndex: index }).catch(() => {});
-                      emit('presenter:select-slide', { kind, index }).catch(() => {});
-                    }}
-                  />
-                ))
+                <LyricSequenceThumbnail
+                  key={`${index}-${slide.lines.join('|')}`}
+                  slide={slide}
+                  isSelected={lyricSlideIndex === index}
+                  lyricData={lyricData}
+                  profileBackground={profileBackground}
+                  onClick={() => {
+                    emit('lyric-start-slide', { startIndex: index }).catch(() => { });
+                    emit('presenter:select-slide', { kind, index }).catch(() => { });
+                  }}
+                />
+              ))
               : fallbackSlides.map((slide, index) => (
-                  <FallbackSequenceThumbnail
-                    key={slide.id}
-                    slide={slide}
-                    onClick={() => emit('presenter:select-slide', { kind, index }).catch(() => {})}
-                  />
-                ))}
+                <FallbackSequenceThumbnail
+                  key={slide.id}
+                  slide={slide}
+                  onClick={() => emit('presenter:select-slide', { kind, index }).catch(() => { })}
+                />
+              ))}
           </div>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
+        <PresenterControlsSlot />
       </div>
     </div>
   );
@@ -832,9 +841,8 @@ export function PresenterControls({ className }: PresenterControlsProps) {
   });
 
   useEffect(() => {
-    const unlistenDisplayState = listen<PresenterDisplayState>(
-      'presenter:display-state',
-      (event) => setDisplayState(event.payload)
+    const unlistenDisplayState = listen<PresenterDisplayState>('presenter:display-state', (event) =>
+      setDisplayState(event.payload)
     );
 
     return () => {
@@ -844,9 +852,9 @@ export function PresenterControls({ className }: PresenterControlsProps) {
 
   const activeDisplayModes = useMemo(
     () =>
-      (Object.entries(displayState)
+      Object.entries(displayState)
         .filter(([, active]) => active)
-        .map(([key]) => key) as PresenterDisplayMode[]),
+        .map(([key]) => key) as PresenterDisplayMode[],
     [displayState]
   );
 
@@ -866,10 +874,10 @@ export function PresenterControls({ className }: PresenterControlsProps) {
       if (nextIndex === currentIndex) return;
 
       if (presenter.kind === 'lyrics') {
-        emit('lyric-start-slide', { startIndex: nextIndex }).catch(() => {});
+        emit('lyric-start-slide', { startIndex: nextIndex }).catch(() => { });
       }
 
-      emit('presenter:select-slide', { kind: presenter.kind, index: nextIndex }).catch(() => {});
+      emit('presenter:select-slide', { kind: presenter.kind, index: nextIndex }).catch(() => { });
     },
     [currentIndex, presenter.kind, totalItems]
   );
