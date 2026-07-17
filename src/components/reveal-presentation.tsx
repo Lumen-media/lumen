@@ -1,16 +1,11 @@
 import { emit, listen } from '@tauri-apps/api/event';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from '@aiden0z/pptx-renderer';
+import { toJpeg } from 'html-to-image';
 import { useEffect, useRef, useState } from 'react';
 
 interface PptxPresentationProps {
   filePath: string;
-}
-
-function svgElementToDataUrl(el: SVGElement): string {
-  const serialized = new XMLSerializer().serializeToString(el);
-  const encoded = btoa(unescape(encodeURIComponent(serialized)));
-  return `data:image/svg+xml;base64,${encoded}`;
 }
 
 export function PptxPresentation({ filePath }: PptxPresentationProps) {
@@ -32,12 +27,6 @@ export function PptxPresentation({ filePath }: PptxPresentationProps) {
           renderMode: 'slide',
           fitMode: 'contain',
           zipLimits: RECOMMENDED_ZIP_LIMITS,
-          onSlideChange: (index: number) => {
-            emit('presentation:slide-changed', {
-              currentSlide: index,
-              totalSlides: viewer.slideCount,
-            }).catch(() => {});
-          },
         });
 
         if (cancelled) {
@@ -47,31 +36,61 @@ export function PptxPresentation({ filePath }: PptxPresentationProps) {
 
         viewerRef.current = viewer;
 
+        viewer.addEventListener('slidechange', (e: Event) => {
+          const ce = e as CustomEvent<{ index: number }>;
+          emit('presentation:slide-changed', {
+            currentSlide: ce.detail?.index ?? 0,
+            totalSlides: viewer.slideCount,
+          }).catch(() => {});
+        });
+
         const count = viewer.slideCount;
+
+        emit('presentation:slide-changed', {
+          currentSlide: viewer.currentSlideIndex,
+          totalSlides: count,
+        }).catch(() => {});
+
+        const placeholders: Array<{ index: number; dataUrl: string; label: string }> = [];
+        for (let i = 0; i < count; i++) {
+          placeholders.push({ index: i, dataUrl: '', label: `Slide ${i + 1}` });
+        }
+        emit('presentation:thumbnails-ready', { thumbs: placeholders }).catch(() => {});
 
         const thumbs: Array<{ index: number; dataUrl: string; label: string }> = [];
         for (let i = 0; i < count; i++) {
           const wrapper = document.createElement('div');
-          wrapper.style.width = '320px';
+          wrapper.style.position = 'absolute';
+          wrapper.style.left = '-9999px';
           wrapper.style.overflow = 'hidden';
+          wrapper.style.width = '320px';
+          document.body.appendChild(wrapper);
+
           const th = viewer.renderThumbnailToContainer(i, wrapper, { width: 320 });
           await th?.ready;
-          const svg = wrapper.querySelector('svg');
-          if (svg) {
-            thumbs.push({
-              index: i,
-              dataUrl: svgElementToDataUrl(svg),
-              label: `Slide ${i + 1}`,
-            });
+
+          let dataUrl = '';
+
+          const el = th?.element;
+          if (el) {
+            try {
+              dataUrl = await toJpeg(el, { quality: 0.7, pixelRatio: 2 });
+            } catch {
+              // thumbnail capture failed, skip
+            }
           }
+
           th?.dispose();
+          wrapper.remove();
+
+          thumbs.push({
+            index: i,
+            dataUrl,
+            label: `Slide ${i + 1}`,
+          });
         }
 
         emit('presentation:thumbnails-ready', { thumbs }).catch(() => {});
-        emit('presentation:slide-changed', {
-          currentSlide: 0,
-          totalSlides: count,
-        }).catch(() => {});
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
