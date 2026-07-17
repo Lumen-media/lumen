@@ -5,6 +5,7 @@ import { readFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
 import { LyricPresentation } from '@/components/lyric-presentation';
+import { RevealPresentation } from '@/components/reveal-presentation';
 import { Videoplayer } from '@/components/ui/videoplayer';
 import { useProfiles } from '@/hooks/use-profiles';
 import { cn } from '@/lib/utils';
@@ -171,6 +172,7 @@ function MediaWindowComponent() {
   const [imageSrc, setImageSrc] = useState<string | undefined>();
   const [streamOverlayActive, setStreamOverlayActive] = useState(false);
   const [isBlackoutActive, setIsBlackoutActive] = useState(false);
+  const [presentationPath, setPresentationPath] = useState<string | null>(null);
   const [useProfileWallpaper, setUseProfileWallpaper] = useState(false);
   const [hideLyrics, setHideLyrics] = useState(false);
 
@@ -211,6 +213,7 @@ function MediaWindowComponent() {
     setLyricStartIndex(0);
     setImagePath(null);
     setImageSrc(undefined);
+    setPresentationPath(null);
     resetPresenterDisplayModes();
     useModuleStore.getState().clearPresenter();
     invoke('push_stream_blank').catch(() => { });
@@ -486,6 +489,25 @@ function MediaWindowComponent() {
 
     const unlistenExit = listen('presenter:exit', exitPresentedContent);
 
+    const unlistenPresentationLoad = listen<{ filePath: string }>('presentation:load', (event) => {
+      resetPresenterDisplayModes();
+      setMode('video');
+      setLyricPath('');
+      setImagePath(null);
+      setImageSrc(undefined);
+      setPresentationPath(event.payload.filePath);
+      emit('stage-backdrop-change', {
+        active: true,
+        source: 'scene',
+        mediaType: 'unknown',
+        name: event.payload.filePath.split(/[\\/]/).pop(),
+      }).catch(() => {});
+    });
+
+    const unlistenPresentationClear = listen('presentation:clear', () => {
+      setPresentationPath(null);
+    });
+
     Promise.all([
       unlistenLyric,
       unlistenStartSlide,
@@ -496,6 +518,8 @@ function MediaWindowComponent() {
       unlistenWallpaper,
       unlistenLyricsToggle,
       unlistenExit,
+      unlistenPresentationLoad,
+      unlistenPresentationClear,
     ]).then(() => emit('media-window-ready').catch(() => { }));
 
     return () => {
@@ -508,6 +532,8 @@ function MediaWindowComponent() {
       unlistenWallpaper.then((f) => f());
       unlistenLyricsToggle.then((f) => f());
       unlistenExit.then((f) => f());
+      unlistenPresentationLoad.then((f) => f());
+      unlistenPresentationClear.then((f) => f());
     };
   }, [exitPresentedContent, resetPresenterDisplayModes]);
 
@@ -535,6 +561,11 @@ function MediaWindowComponent() {
             useProfileWallpaper={useProfileWallpaper}
             blackoutActive={isBlackoutActive}
           />
+        </div>
+      )}
+      {presentationPath && (
+        <div className="absolute inset-0 z-10">
+          <RevealPresentation filePath={presentationPath} />
         </div>
       )}
       {streamOverlayActive && (
