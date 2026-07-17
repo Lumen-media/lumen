@@ -2,7 +2,7 @@ import type { CommandSpec, PrefixSpec } from '@/modules/types';
 import { mediaDbService, type SearchHit } from './media-db-service';
 import type { MediaType } from './types';
 
-export type SearchSource = 'lyric' | 'audio' | 'video' | 'image' | 'command' | 'app';
+export type SearchSource = 'lyric' | 'audio' | 'video' | 'image' | 'presentation' | 'command' | 'app';
 
 export type SearchScope = 'all' | 'lyrics' | 'media' | 'commands';
 
@@ -35,7 +35,7 @@ export interface SearchOpts {
   limitPerGroup?: number;
 }
 
-const SEARCHABLE_MEDIA: MediaType[] = ['audio', 'video', 'image'];
+const SEARCHABLE_MEDIA: MediaType[] = ['audio', 'video', 'image', 'presentation'];
 
 function badgeForMediaType(type: string): string {
   switch (type) {
@@ -43,6 +43,7 @@ function badgeForMediaType(type: string): string {
     case 'audio':  return 'AUDIO';
     case 'video':  return 'VIDEO';
     case 'image':  return 'IMAGE';
+    case 'presentation': return 'PPT';
     default:       return type.toUpperCase();
   }
 }
@@ -53,6 +54,7 @@ function sourceForMediaType(type: string): SearchSource {
     case 'audio':  return 'audio';
     case 'video':  return 'video';
     case 'image':  return 'image';
+    case 'presentation': return 'presentation';
     default:       return 'audio';
   }
 }
