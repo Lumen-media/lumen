@@ -8,6 +8,8 @@ declare module 'pptx-browser' {
     load(source: ArrayBuffer | Uint8Array, onProgress?: (progress: number) => void): Promise<void>;
     renderSlide(slideIndex: number, canvas: HTMLCanvasElement, width?: number): Promise<void>;
     renderAllSlides(width?: number): Promise<HTMLCanvasElement[]>;
+    allToSvg(): Promise<string[]>;
+    toSvg(slideIndex: number): Promise<string>;
     destroy(): void;
   }
 }
