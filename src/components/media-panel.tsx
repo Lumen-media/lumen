@@ -7,10 +7,14 @@ import {
   Image as ImageIcon,
   Music,
   Plus,
+  Presentation,
   RefreshCw,
   Search,
   Video,
 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DeleteFileAlert } from '@/components/delete-file-alert';
@@ -25,6 +29,7 @@ import { type FileInfo, fileInitService, fileManagementService, type MediaType }
 import { useLyricEditStore } from '@/stores/lyric-edit-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { usePlayerStore } from '@/stores/player-store';
+import { usePresentationStore } from '@/stores/presentation-store';
 import { useQueueStore } from '@/stores/queue-store';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
 
@@ -35,6 +40,7 @@ const mediaItems = [
   { id: 'audio' as MediaType, label: 'Audio', icon: Headphones },
   { id: 'image' as MediaType, label: 'Image', icon: ImageIcon },
   { id: 'files' as MediaType, label: 'Files', icon: FolderOpen },
+  { id: 'presentation' as MediaType, label: 'Presentation', icon: Presentation },
 ];
 
 export function MediaPanel() {
@@ -53,6 +59,9 @@ export function MediaPanel() {
     }
     if (activeMedia === 'image') {
       player.presentImage(file.path);
+    }
+    if (activeMedia === 'presentation') {
+      openPresentation(file.path);
     }
   }, [activeMedia, player]);
 
@@ -208,6 +217,37 @@ export function MediaPanel() {
       setIsLoading(false);
     }
   };
+
+  const openPresentation = useCallback(async (filePath: string) => {
+    try {
+      const existing = WebviewWindow.getByLabel('media-window');
+      let win: WebviewWindow | null = existing;
+
+      if (!win) {
+        const readyPromise = new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Timed out')), 3000);
+          listen('media-window-ready', () => {
+            clearTimeout(timeout);
+            resolve();
+          }).catch(() => {});
+        });
+
+        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+        await readyPromise;
+        win = WebviewWindow.getByLabel('media-window');
+      }
+
+      if (!win) return;
+
+      usePresentationStore.getState().loadPresentation(filePath);
+
+      await win.show();
+      await win.setFullscreen(true);
+    } catch (err) {
+      console.error('Failed to open presentation:', err);
+      toast.error('Failed to open presentation window');
+    }
+  }, []);
 
   const handleBack = () => {
     setActiveMedia(null);

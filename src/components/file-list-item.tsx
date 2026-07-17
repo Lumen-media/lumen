@@ -9,6 +9,7 @@ import {
   ListVideo,
   Music,
   Pencil,
+  Presentation,
   Trash2,
   Video,
 } from 'lucide-react';
@@ -104,6 +105,8 @@ const getMediaIcon = (mediaType: MediaType) => {
       return Headphones;
     case 'image':
       return ImageIcon;
+    case 'presentation':
+      return Presentation;
     case 'text':
       return FileText;
     case 'files':
