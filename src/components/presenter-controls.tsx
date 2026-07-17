@@ -23,6 +23,7 @@ import type { StageBackdropChangeDetail } from '@/modules/types';
 import { type LyricData, type LyricSlide, lyricService } from '@/services/lyric-service';
 import { thumbnailService } from '@/services/thumbnail-service';
 import { usePlayerStore } from '@/stores/player-store';
+import { usePresentationStore } from '@/stores/presentation-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { Card } from './ui/card';
 
@@ -416,6 +417,9 @@ function useFallbackSlides(
   imagePath: string | null | undefined,
   t: Translate
 ): FallbackSlide[] {
+  const presentationSlides = usePresentationStore((s) => s.slides);
+  const presentationCurrent = usePresentationStore((s) => s.currentSlide);
+
   return useMemo(() => {
     if (kind === 'image') {
       return [
@@ -430,6 +434,16 @@ function useFallbackSlides(
     }
 
     if (kind === 'presentation') {
+      if (presentationSlides.length > 0) {
+        return presentationSlides.map((slide) => ({
+          id: `presentation-${slide.index}`,
+          label: slide.label,
+          active: slide.index === presentationCurrent,
+          image: true,
+          source: slide.thumbnail,
+        }));
+      }
+
       return Array.from({ length: 5 }, (_, index) => ({
         id: `presentation-${index}`,
         label: index === 0 ? t('Current slide') : t('Slide {{number}}', { number: index + 1 }),
@@ -439,7 +453,7 @@ function useFallbackSlides(
     }
 
     return [];
-  }, [imagePath, kind, t]);
+  }, [imagePath, kind, t, presentationSlides, presentationCurrent]);
 }
 
 function LyricSequenceThumbnail({
@@ -868,11 +882,19 @@ export function PresenterControls({ className }: PresenterControlsProps) {
   );
 
   const lyricItems = lyricData?.slides ?? [];
+  const presentationState = usePresentationStore();
   const totalItems =
     presenter.kind === 'lyrics'
       ? lyricData?.slides.length || lyricTotalSlides || 0
-      : fallbackSlides.length;
-  const currentIndex = presenter.kind === 'lyrics' ? lyricSlideIndex : 0;
+      : presenter.kind === 'presentation'
+        ? presentationState.totalSlides
+        : fallbackSlides.length;
+  const currentIndex =
+    presenter.kind === 'lyrics'
+      ? lyricSlideIndex
+      : presenter.kind === 'presentation'
+        ? presentationState.currentSlide
+        : 0;
   const currentPosition = currentIndex + 1;
 
   const selectPresenterIndex = useCallback(
@@ -884,6 +906,11 @@ export function PresenterControls({ className }: PresenterControlsProps) {
 
       if (presenter.kind === 'lyrics') {
         emit('lyric-start-slide', { startIndex: nextIndex }).catch(() => { });
+      }
+
+      if (presenter.kind === 'presentation') {
+        usePresentationStore.getState().setSlide(nextIndex);
+        return;
       }
 
       emit('presenter:select-slide', { kind: presenter.kind, index: nextIndex }).catch(() => { });
@@ -930,7 +957,7 @@ export function PresenterControls({ className }: PresenterControlsProps) {
   );
 
   const meta = getKindMeta(presenter.kind, t);
-  const presenterName = presenter.name === 'Presentation' ? t('Presentation') : presenter.name;
+  const presenterName = presenter.name === 'Presentation' ? (presentationState.fileName ?? t('Presentation')) : presenter.name;
   const displayTitle =
     presenterName ??
     lyricData?.metadata.name ??
