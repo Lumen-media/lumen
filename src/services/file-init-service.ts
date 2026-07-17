@@ -36,6 +36,7 @@ class FileInitServiceImpl implements FileInitService {
     'audio',
     'files',
     'themes',
+    'presentation',
   ];
 
   async initializeMediaFolders(): Promise<void> {
