@@ -1,8 +1,9 @@
 import { emit, listen } from '@tauri-apps/api/event';
 import { readFile } from '@tauri-apps/plugin-fs';
-import { Deck, Slide, type RevealApi } from '@revealjs/react';
+import { Deck, Slide } from '@revealjs/react';
 import { PptxRenderer } from 'pptx-browser';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { RevealApi } from 'reveal.js';
 import 'reveal.js/reveal.css';
 import 'reveal.js/theme/black.css';
 
@@ -52,7 +53,7 @@ export function RevealPresentation({ filePath }: RevealPresentationProps) {
     async function load() {
       try {
         const bytes = await readFile(filePath);
-        await renderer.load(bytes.buffer, (progress) => {
+        await renderer.load(bytes.buffer, (progress: number) => {
           if (progress < 1) return;
         });
 
@@ -118,10 +119,11 @@ export function RevealPresentation({ filePath }: RevealPresentationProps) {
   }, []);
 
   const handleSlideChange = useCallback(
-    (event: { indexh: number }) => {
+    (event: Event) => {
+      const slideEvent = event as unknown as { indexh: number; indexv?: number };
       const total = slideImages.length;
       emit('presentation:slide-changed', {
-        currentSlide: event.indexh,
+        currentSlide: slideEvent.indexh,
         totalSlides: total,
       }).catch(() => {});
     },

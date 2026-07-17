@@ -546,7 +546,7 @@ function MediaWindowComponent() {
 
   return (
     <div className="fixed inset-0 h-dvh w-dvw overflow-hidden bg-black">
-      <Videoplayer className="h-full w-full" url="" autoplay muted={false} interactive={false} />
+      {!(presentationPath || imagePath || lyricPath) && <Videoplayer className="h-full w-full" url="" autoplay muted={false} interactive={false} />}
       {imageSrc && mode !== 'lyric' && (
         <div className="absolute inset-0 z-10 w-dvw h-dvh bg-black">
           <img src={imageSrc} alt="" className="w-full h-full object-contain" />
