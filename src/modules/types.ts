@@ -7,6 +7,7 @@ export interface Disposable {
 export type SlotName =
   | 'dialog'
   | 'presenter.content'
+  | 'presenter.controls.item'
   | 'sidebar.right.tabs'
   | 'app.header.trailing';
 
