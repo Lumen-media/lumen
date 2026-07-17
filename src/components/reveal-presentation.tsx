@@ -11,90 +11,45 @@ interface RevealPresentationProps {
   filePath: string;
 }
 
-interface SlideImage {
-  index: number;
-  dataUrl: string;
-}
-
-const SLIDE_WIDTH = 1920;
-const THUMB_WIDTH = 320;
-
-async function canvasToBlobUrl(canvas: HTMLCanvasElement): Promise<string> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        reject(new Error('Failed to create blob from canvas'));
-        return;
-      }
-      resolve(URL.createObjectURL(blob));
-    }, 'image/jpeg');
-  });
+function svgToDataUrl(svg: string): string {
+  const encoded = btoa(unescape(encodeURIComponent(svg)));
+  return `data:image/svg+xml;base64,${encoded}`;
 }
 
 export function RevealPresentation({ filePath }: RevealPresentationProps) {
   const deckRef = useRef<RevealApi | null>(null);
-  const [slideImages, setSlideImages] = useState<SlideImage[]>([]);
-  const rendererRef = useRef<PptxRenderer | null>(null);
-  const blobUrlsRef = useRef<string[]>([]);
+  const [svgs, setSvgs] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-  const revokeAll = useCallback(() => {
-    for (const url of blobUrlsRef.current) {
-      URL.revokeObjectURL(url);
-    }
-    blobUrlsRef.current = [];
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
     const renderer = new PptxRenderer();
-    rendererRef.current = renderer;
 
     async function load() {
       try {
         const bytes = await readFile(filePath);
-        await renderer.load(bytes.buffer, (progress: number) => {
-          if (progress < 1) return;
-        });
+        await renderer.load(bytes.buffer, () => {});
 
         const count = renderer.slideCount;
-
-        const canvases = await renderer.renderAllSlides(SLIDE_WIDTH);
+        const allSvgs = await renderer.allToSvg();
         if (cancelled) return;
 
-        const images: SlideImage[] = [];
-        const thumbs: Array<{ index: number; dataUrl: string; label: string }> = [];
+        setSvgs(allSvgs);
 
-        for (let i = 0; i < canvases.length; i++) {
-          const dataUrl = await canvasToBlobUrl(canvases[i]);
-          blobUrlsRef.current.push(dataUrl);
-          images.push({ index: i, dataUrl });
-        }
+        const thumbs = allSvgs.map((svg, i) => ({
+          index: i,
+          dataUrl: svgToDataUrl(svg),
+          label: `Slide ${i + 1}`,
+        }));
 
-        if (cancelled) return;
-        setSlideImages(images);
-
-        const thumbCanvases = count > 1 ? await renderer.renderAllSlides(THUMB_WIDTH) : canvases;
-        for (let i = 0; i < thumbCanvases.length; i++) {
-          if (cancelled) return;
-          const thumbUrl = thumbCanvases[i].toDataURL('image/jpeg', 0.7);
-          thumbs.push({
-            index: i,
-            dataUrl: thumbUrl,
-            label: `Slide ${i + 1}`,
-          });
-        }
-
-        if (!cancelled) {
-          emit('presentation:thumbnails-ready', { thumbs }).catch(() => {});
-          emit('presentation:slide-changed', {
-            currentSlide: 0,
-            totalSlides: count,
-          }).catch(() => {});
-        }
+        emit('presentation:thumbnails-ready', { thumbs }).catch(() => {});
+        emit('presentation:slide-changed', {
+          currentSlide: 0,
+          totalSlides: count,
+        }).catch(() => {});
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load presentation');
+          setError(err instanceof Error ? err.message : String(err));
         }
       }
     }
@@ -103,10 +58,9 @@ export function RevealPresentation({ filePath }: RevealPresentationProps) {
 
     return () => {
       cancelled = true;
-      revokeAll();
       renderer.destroy();
     };
-  }, [filePath, revokeAll]);
+  }, [filePath]);
 
   useEffect(() => {
     const unlisten = listen<{ index: number }>('presentation:set-slide', (event) => {
@@ -121,13 +75,12 @@ export function RevealPresentation({ filePath }: RevealPresentationProps) {
   const handleSlideChange = useCallback(
     (event: Event) => {
       const slideEvent = event as unknown as { indexh: number; indexv?: number };
-      const total = slideImages.length;
       emit('presentation:slide-changed', {
         currentSlide: slideEvent.indexh,
-        totalSlides: total,
+        totalSlides: svgs.length,
       }).catch(() => {});
     },
-    [slideImages.length]
+    [svgs.length]
   );
 
   if (error) {
@@ -138,7 +91,7 @@ export function RevealPresentation({ filePath }: RevealPresentationProps) {
     );
   }
 
-  if (slideImages.length === 0) {
+  if (svgs.length === 0) {
     return <div className="h-full w-full bg-black" />;
   }
 
@@ -148,7 +101,7 @@ export function RevealPresentation({ filePath }: RevealPresentationProps) {
         deckRef={deckRef}
         onSlideChange={handleSlideChange}
         config={{
-          width: SLIDE_WIDTH,
+          width: 1920,
           height: 1080,
           transition: 'slide',
           backgroundTransition: 'fade',
@@ -160,13 +113,10 @@ export function RevealPresentation({ filePath }: RevealPresentationProps) {
           autoSlide: 0,
         }}
       >
-        {slideImages.map((slide, index) => (
-          <Slide
-            key={`slide-${index}`}
-            backgroundImage={slide.dataUrl}
-            backgroundSize="contain"
-            backgroundColor="#000"
-          />
+        {svgs.map((svg, index) => (
+          <Slide key={`slide-${index}`} backgroundColor="#000">
+            <div className="flex h-full w-full items-center justify-center" dangerouslySetInnerHTML={{ __html: svg }} />
+          </Slide>
         ))}
       </Deck>
     </div>
