@@ -36,6 +36,9 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.3.0
         version: 1.3.0(@types/react@19.2.17)(react@19.2.7)
+      '@revealjs/react':
+        specifier: ^0.2.1
+        version: 0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(reveal.js@6.0.1)
       '@tailwindcss/cli':
         specifier: ^4.3.2
         version: 4.3.2
@@ -168,6 +171,9 @@ importers:
       polished:
         specifier: ^4.3.1
         version: 4.3.1
+      pptx-browser:
+        specifier: ^4.1.5
+        version: 4.1.5
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
@@ -189,6 +195,9 @@ importers:
       react-resizable-panels:
         specifier: ^4.12.1
         version: 4.12.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      reveal.js:
+        specifier: ^6.0.1
+        version: 6.0.1
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1038,6 +1047,13 @@ packages:
     peerDependenciesMeta:
       '@types/react':
         optional: true
+
+  '@revealjs/react@0.2.1':
+    resolution: {integrity: sha512-bEivSQ1W0WpiSUPd4KNLkFGSkdywuno2jjzBHQCO+SN3ChFWP6Y3Z2OLRih3Qeel5k1bwKsSsmr5AMUMA5ZdyQ==}
+    peerDependencies:
+      react: '>=18'
+      react-dom: '>=18'
+      reveal.js: '>=5'
 
   '@rolldown/binding-android-arm64@1.1.5':
     resolution: {integrity: sha512-lZg8fqIv2v7FF237bwMgzGZEJvGL79/s5knJ/i6FmsGF4XXlzccZ4jb+TrFIxtSSxFtIpdsgrPZeMk1I9AFcyQ==}
@@ -2334,6 +2350,10 @@ packages:
     resolution: {integrity: sha512-J7EF+8X+CzRPaJPOv9Ck2wNWJvGnnl3PcNPAdGg6GTLjyVpyQ0yATMSXRFRV01BviT/9Gwuc3rjEyJbDJG9a4w==}
     engines: {node: ^10 || ^12 || >=14}
 
+  pptx-browser@4.1.5:
+    resolution: {integrity: sha512-ZMWVG5jOBIvoggGR7Fou/g5d3Mc6BO1i2xtfMt8oPosxAms/mHx3MWJftDoc+u9cMttSJezduTJvd8MbqlFTeg==}
+    engines: {node: '>=18.0.0'}
+
   prettier@3.9.5:
     resolution: {integrity: sha512-/FVl766LpUfB5vXgCYOYa0MeV/441Ia99AeICQIQFTY/Nw0roZwULcXpku5i1/m5kt/baz+s4Zogspd839HSMg==}
     engines: {node: '>=14'}
@@ -2480,6 +2500,9 @@ packages:
 
   reselect@5.2.0:
     resolution: {integrity: sha512-AgZ3UOZm3YndfrJ4OYjgrT7bmCm/1iqkjvEfH/oYjzh6PD2qw4QuT3jjnXIrpdt4MTpMXclMT3lXbmRY+XRakw==}
+
+  reveal.js@6.0.1:
+    resolution: {integrity: sha512-9eacArNIgqO2HGWOK+93gJNn+gvdGDVbSq+i2u3Ja9kjiHps0XNLpgYTZTYjKRH91uXy3clGimeGiw4umHG/tg==}
 
   rocketseat-biomejs-config@1.0.1:
     resolution: {integrity: sha512-opQjuWP27sJ6esh09Wsp9qjtViFAVukB+f7CpJydp/vwRKXSECXUrLVIfLWours20PJB3lBBgxQbgDdapDSTlw==}
@@ -3426,6 +3449,12 @@ snapshots:
       react: 19.2.7
     optionalDependencies:
       '@types/react': 19.2.17
+
+  '@revealjs/react@0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(reveal.js@6.0.1)':
+    dependencies:
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      reveal.js: 6.0.1
 
   '@rolldown/binding-android-arm64@1.1.5':
     optional: true
@@ -4561,6 +4590,8 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
+  pptx-browser@4.1.5: {}
+
   prettier@3.9.5: {}
 
   prop-types@15.8.1:
@@ -4737,6 +4768,8 @@ snapshots:
   require-main-filename@2.0.0: {}
 
   reselect@5.2.0: {}
+
+  reveal.js@6.0.1: {}
 
   rocketseat-biomejs-config@1.0.1:
     dependencies:
