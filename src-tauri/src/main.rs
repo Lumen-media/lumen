@@ -2,6 +2,7 @@
 
 mod devices;
 mod module_runtime;
+mod presentation;
 mod streaming;
 mod thumbnail;
 mod websocket;
@@ -491,6 +492,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             module_runtime::module_fs_list,
             module_runtime::module_fs_remove,
             module_runtime::net::module_net_request,
+            presentation::extract_presentation_metadata,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
