@@ -5,7 +5,7 @@ import { readFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
 import { LyricPresentation } from '@/components/lyric-presentation';
-import { RevealPresentation } from '@/components/reveal-presentation';
+import { PptxPresentation } from '@/components/reveal-presentation';
 import { Videoplayer } from '@/components/ui/videoplayer';
 import { useProfiles } from '@/hooks/use-profiles';
 import { cn } from '@/lib/utils';
@@ -565,7 +565,7 @@ function MediaWindowComponent() {
       )}
       {presentationPath && (
         <div className="absolute inset-0 z-10">
-          <RevealPresentation filePath={presentationPath} />
+          <PptxPresentation filePath={presentationPath} />
         </div>
       )}
       {streamOverlayActive && (
