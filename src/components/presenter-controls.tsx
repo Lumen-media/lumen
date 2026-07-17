@@ -222,7 +222,7 @@ function useBackgroundSrc(path?: string) {
       return;
     }
 
-    if (path.startsWith('http') || path.startsWith('#') || path.startsWith('blob:')) {
+    if (path.startsWith('http') || path.startsWith('#') || path.startsWith('blob:') || path.startsWith('data:')) {
       setSrc(path);
       return;
     }
@@ -419,6 +419,7 @@ function useFallbackSlides(
 ): FallbackSlide[] {
   const presentationSlides = usePresentationStore((s) => s.slides);
   const presentationCurrent = usePresentationStore((s) => s.currentSlide);
+  const presentationTotal = usePresentationStore((s) => s.totalSlides);
 
   return useMemo(() => {
     if (kind === 'image') {
@@ -444,16 +445,18 @@ function useFallbackSlides(
         }));
       }
 
-      return Array.from({ length: 5 }, (_, index) => ({
+      const numSlides = presentationTotal || 1;
+      return Array.from({ length: numSlides }, (_, index) => ({
         id: `presentation-${index}`,
         label: index === 0 ? t('Current slide') : t('Slide {{number}}', { number: index + 1 }),
         active: index === 0,
-        image: index === 2,
+        image: true,
+        source: undefined,
       }));
     }
 
     return [];
-  }, [imagePath, kind, t, presentationSlides, presentationCurrent]);
+  }, [imagePath, kind, t, presentationSlides, presentationCurrent, presentationTotal]);
 }
 
 function LyricSequenceThumbnail({
@@ -555,9 +558,17 @@ function FallbackSequenceThumbnail({
   onClick: () => void;
 }) {
   const imageSrc = useBackgroundSrc(slide.image ? (slide.source ?? undefined) : undefined);
+  const ref = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (slide.active && ref.current) {
+      ref.current.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, [slide.active]);
 
   return (
     <button
+      ref={ref}
       type="button"
       className={cn(
         'relative h-[90px] w-40 shrink-0 overflow-hidden rounded-lg border bg-muted/30 text-left transition-colors',
@@ -567,17 +578,17 @@ function FallbackSequenceThumbnail({
       )}
       onClick={onClick}
     >
-      {slide.image ? (
-        imageSrc ? (
-          <img
-            src={imageSrc}
-            alt=""
-            className="absolute inset-0 h-full w-full bg-black object-contain"
-          />
+        {slide.image ? (
+          imageSrc ? (
+            <img
+              src={imageSrc}
+              alt=""
+              className="absolute inset-0 h-full w-full bg-black object-contain"
+            />
+          ) : (
+            <div className="absolute inset-0 animate-pulse bg-muted opacity-60" />
+          )
         ) : (
-          <div className="absolute inset-0 bg-muted opacity-80" />
-        )
-      ) : (
         <div className="flex h-full items-center justify-center px-3 text-center text-[10px] font-semibold text-muted-foreground">
           {slide.label}
         </div>
@@ -782,6 +793,7 @@ function PresenterSequence({
   isMinimized,
   active,
   totalItems,
+  onSelectSlide,
 }: {
   kind: PresenterKind;
   lyricData: LyricData | null;
@@ -794,6 +806,7 @@ function PresenterSequence({
   isMinimized: boolean;
   active: boolean;
   totalItems: number;
+  onSelectSlide?: (index: number) => void;
 }) {
   return (
     <div
@@ -818,6 +831,7 @@ function PresenterSequence({
                   lyricData={lyricData}
                   profileBackground={profileBackground}
                   onClick={() => {
+                    onSelectSlide?.(index);
                     emit('lyric-start-slide', { startIndex: index }).catch(() => { });
                     emit('presenter:select-slide', { kind, index }).catch(() => { });
                   }}
@@ -827,7 +841,7 @@ function PresenterSequence({
                 <FallbackSequenceThumbnail
                   key={slide.id}
                   slide={slide}
-                  onClick={() => emit('presenter:select-slide', { kind, index }).catch(() => { })}
+                  onClick={() => onSelectSlide?.(index)}
                 />
               ))}
           </div>
@@ -1007,6 +1021,7 @@ export function PresenterControls({ className }: PresenterControlsProps) {
         isMinimized={isMinimized}
         active={presenter.active}
         totalItems={totalItems}
+        onSelectSlide={selectPresenterIndex}
       />
     </Card>
   );
