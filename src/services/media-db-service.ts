@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { exists, mkdir } from '@tauri-apps/plugin-fs';
 import Database from '@tauri-apps/plugin-sql';
 import { getAppBasePath, getDbPath } from './app-paths';
@@ -102,6 +103,8 @@ class MediaDbService {
     await db.execute(
       `CREATE INDEX IF NOT EXISTS idx_mf_original_url ON media_files (original_url)`
     );
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_mf_content ON media_files (content)`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_mf_type_content ON media_files (media_type, content)`);
 
     await db.execute(`
       CREATE TABLE IF NOT EXISTS theme_files (
@@ -150,9 +153,14 @@ class MediaDbService {
     for (const file of fsFiles) {
       if (!existingPaths.has(file.path)) {
         let metadata: { duration?: number; artist?: string } = {};
+        let content: string | null = null;
         try {
           metadata = await extractMetadata(file.path);
         } catch {}
+
+        if (mediaType === 'presentation') {
+          content = await extractPresentationContent(file.path);
+        }
 
         await db.execute(
           `INSERT OR IGNORE INTO media_files (name, path, size, modified_at, extension, media_type, duration, artist, content, download_status)
@@ -166,7 +174,7 @@ class MediaDbService {
             mediaType,
             metadata.duration ?? null,
             metadata.artist ?? null,
-            null,
+            content,
           ]
         );
       }
@@ -206,6 +214,10 @@ class MediaDbService {
       try {
         metadata = await extractMetadata(file.path);
       } catch {}
+    }
+
+    if (mediaType === 'presentation' && !content) {
+      content = await extractPresentationContent(file.path);
     }
 
     await db.execute(
@@ -482,6 +494,25 @@ function rowToSearchHit(row: DbRow): SearchHit {
     remote_thumbnail_url: row.remote_thumbnail_url,
     download_status: row.download_status,
   };
+}
+
+async function extractPresentationContent(path: string): Promise<string | null> {
+  try {
+    const meta = await invoke<{
+      slide_count: number;
+      slides: Array<{ index: number; text: string }>;
+      title?: string;
+    }>('extract_presentation_metadata', { path });
+
+    const parts = meta.slides
+      .filter((s) => s.text.trim().length > 0)
+      .map((s) => s.text.trim());
+
+    return parts.length > 0 ? parts.join('\n\n') : null;
+  } catch (err) {
+    console.error('Failed to extract presentation text:', err);
+    return null;
+  }
 }
 
 function escapeLike(s: string): string {

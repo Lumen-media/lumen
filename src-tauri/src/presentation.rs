@@ -19,7 +19,7 @@ pub struct PresentationMeta {
 
 fn extract_text_from_xml(xml: &[u8]) -> String {
     let mut reader = Reader::from_reader(xml);
-    reader.config().trim_text(true);
+    reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut text = String::new();
     let mut in_text_tag = false;
@@ -57,30 +57,28 @@ fn extract_text_from_xml(xml: &[u8]) -> String {
 
 fn extract_title(xml: &[u8]) -> Option<String> {
     let mut reader = Reader::from_reader(xml);
-    reader.config().trim_text(true);
+    reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut depth = 0;
-    let mut in_title = false;
 
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let name = e.name().as_ref();
-                if name == b"p:presentation" || name == b"presentation" {
+                let name = e.name();
+                if name.as_ref() == b"p:presentation" || name.as_ref() == b"presentation" {
                     depth += 1;
                 }
             }
             Ok(Event::End(ref e)) => {
-                let name = e.name().as_ref();
-                if name == b"p:presentation" || name == b"presentation" {
+                let name = e.name();
+                if name.as_ref() == b"p:presentation" || name.as_ref() == b"presentation" {
                     depth -= 1;
                 }
             }
             Ok(Event::Text(ref e)) if depth > 0 => {
                 if let Ok(t) = e.unescape() {
                     let trimmed = t.trim();
-                    if !trimmed.is_empty() && !in_title {
-                        in_title = true;
+                    if !trimmed.is_empty() {
                         return Some(trimmed.to_string());
                     }
                 }

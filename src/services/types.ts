@@ -1,4 +1,4 @@
-export type MediaType = 'lyrics' | 'video' | 'image' | 'text' | 'audio' | 'files' | 'themes';
+export type MediaType = 'lyrics' | 'video' | 'image' | 'text' | 'audio' | 'files' | 'themes' | 'presentation';
 export type DownloadStatus = 'not_downloaded' | 'downloaded' | 'missing';
 
 export interface FileInfo {
