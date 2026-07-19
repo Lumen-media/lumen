@@ -4,6 +4,7 @@ import {
   type DragEndEvent,
   KeyboardSensor,
   PointerSensor,
+  useDroppable,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -296,11 +297,21 @@ function QueueTab({
     if (entry.kind === 'item') itemPositions.set(entry.id, pos++);
   }
 
+  const { setNodeRef: setQueueDropRef } = useDroppable({ id: 'queue-drop-zone' });
+
   if (queue.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-        Queue is empty
-      </div>
+      <ContextMenu
+        onOpenChange={(open) => {
+          if (!open) setContextTargetItem(null);
+        }}
+      >
+        <ContextMenuTrigger className="flex flex-col h-full flex-1 min-h-0">
+          <div ref={setQueueDropRef} className="flex-1 min-h-0 flex items-center justify-center text-sm text-muted-foreground">
+            Queue is empty
+          </div>
+        </ContextMenuTrigger>
+      </ContextMenu>
     );
   }
 
@@ -312,8 +323,9 @@ function QueueTab({
         }}
       >
         <ContextMenuTrigger className="flex flex-col h-full flex-1 min-h-0">
-          <ScrollArea className="flex-1">
-            <DndContext
+          <div ref={setQueueDropRef} className="flex-1 min-h-0">
+            <ScrollArea className="h-full">
+              <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={handleDragEnd}
@@ -365,6 +377,7 @@ function QueueTab({
               </SortableContext>
             </DndContext>
           </ScrollArea>
+          </div>
 
           <div className="border-t border-border p-3 shrink-0 flex gap-2">
             <Button variant="secondary" size="sm" className="flex-1 rounded-md" onClick={onClear}>
