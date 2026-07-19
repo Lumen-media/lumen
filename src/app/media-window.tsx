@@ -173,6 +173,7 @@ function MediaWindowComponent() {
   const [streamOverlayActive, setStreamOverlayActive] = useState(false);
   const [isBlackoutActive, setIsBlackoutActive] = useState(false);
   const [presentationPath, setPresentationPath] = useState<string | null>(null);
+  const [presentationInitialSlide, setPresentationInitialSlide] = useState(0);
   const [presentationCurrentSlide, setPresentationCurrentSlide] = useState(0);
   const [presentationTotalSlides, setPresentationTotalSlides] = useState(0);
   const [useProfileWallpaper, setUseProfileWallpaper] = useState(false);
@@ -210,12 +211,16 @@ function MediaWindowComponent() {
   }, [hideLyrics, isBlackoutActive, useProfileWallpaper]);
 
   const clearPresentedContent = useCallback(() => {
+    const hadPresentation = Boolean(presentationPath);
     setMode('video');
     setLyricPath('');
     setLyricStartIndex(0);
     setImagePath(null);
     setImageSrc(undefined);
     setPresentationPath(null);
+    if (hadPresentation) {
+      emit('presentation:presenter-closed').catch(() => { });
+    }
     resetPresenterDisplayModes();
     useModuleStore.getState().clearPresenter();
     invoke('push_stream_blank').catch(() => { });
@@ -227,7 +232,7 @@ function MediaWindowComponent() {
       id: null,
       name: null,
     }).catch(() => { });
-  }, [resetPresenterDisplayModes]);
+  }, [presentationPath, resetPresenterDisplayModes]);
 
   const saveCurrentPosition = useCallback(async () => {
     try {
@@ -333,6 +338,7 @@ function MediaWindowComponent() {
     let detachCloseListener: (() => void) | undefined;
 
     const notifyPresenterClosed = () => {
+      emit('presentation:presenter-closed').catch(() => { });
       emit('module:presenter-window-closed').catch(() => { });
       emit('stage-backdrop-change', {
         active: false,
@@ -420,7 +426,7 @@ function MediaWindowComponent() {
       if (key === 'Escape') {
         event.preventDefault();
         const hasPresentedContent =
-          mode === 'lyric' || imagePath || useModuleStore.getState().presenterViewId !== null;
+          mode === 'lyric' || imagePath || presentationPath || useModuleStore.getState().presenterViewId !== null;
 
         if (hasPresentedContent) {
           exitPresentedContent();
@@ -510,12 +516,13 @@ function MediaWindowComponent() {
 
     const unlistenExit = listen('presenter:exit', exitPresentedContent);
 
-    const unlistenPresentationLoad = listen<{ filePath: string }>('presentation:load', (event) => {
+    const unlistenPresentationLoad = listen<{ filePath: string; initialSlide?: number }>('presentation:load', (event) => {
       resetPresenterDisplayModes();
       setMode('video');
       setLyricPath('');
       setImagePath(null);
       setImageSrc(undefined);
+      setPresentationInitialSlide(event.payload.initialSlide ?? 0);
       setPresentationPath(event.payload.filePath);
       emit('stage-backdrop-change', {
         active: true,
@@ -526,6 +533,7 @@ function MediaWindowComponent() {
     });
 
     const unlistenPresentationClear = listen('presentation:clear', () => {
+      setPresentationInitialSlide(0);
       setPresentationPath(null);
     });
 
@@ -596,7 +604,7 @@ function MediaWindowComponent() {
       )}
       {presentationPath && (
         <div className="absolute inset-0 z-10">
-          <PptxPresentation filePath={presentationPath} />
+          <PptxPresentation filePath={presentationPath} initialSlide={presentationInitialSlide} />
         </div>
       )}
       {streamOverlayActive && (

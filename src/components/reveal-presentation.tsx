@@ -7,9 +7,10 @@ import { useEffect, useRef, useState } from 'react';
 
 interface PptxPresentationProps {
   filePath: string;
+  initialSlide?: number;
 }
 
-export function PptxPresentation({ filePath }: PptxPresentationProps) {
+export function PptxPresentation({ filePath, initialSlide = 0 }: PptxPresentationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PptxViewer | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +56,10 @@ export function PptxPresentation({ filePath }: PptxPresentationProps) {
         });
 
         const count = viewer.slideCount;
+        const startIndex = Math.max(0, Math.min(initialSlide, count - 1));
+        if (startIndex !== viewer.currentSlideIndex) {
+          viewer.goToSlide(startIndex);
+        }
 
         emit('presentation:slide-changed', {
           currentSlide: viewer.currentSlideIndex,
@@ -115,7 +120,7 @@ export function PptxPresentation({ filePath }: PptxPresentationProps) {
       viewerRef.current?.destroy();
       viewerRef.current = null;
     };
-  }, [filePath]);
+  }, [filePath, initialSlide]);
 
   useEffect(() => {
     const unlisten = listen<{ index: number }>('presentation:set-slide', (event) => {
