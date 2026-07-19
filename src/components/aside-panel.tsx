@@ -308,12 +308,17 @@ function QueueTab({
         }}
       >
         <ContextMenuTrigger className="flex flex-col h-full flex-1 min-h-0">
-          <div ref={setQueueDropRef} data-queue-container className="flex-1 min-h-0 flex items-center justify-center text-sm text-muted-foreground">
+          <div
+            ref={setQueueDropRef}
+            data-queue-container
+            className={cn(
+              'flex-1 min-h-0 text-sm text-muted-foreground',
+              dropTargetIndex === null && 'flex items-center justify-center'
+            )}
+          >
             {dropTargetIndex !== null ? (
-              <div className="border-2 border-primary/40 rounded-lg border-dashed mx-3 p-4 flex items-center justify-center min-h-[60px] w-full">
-                <span className="text-sm text-primary font-medium">
-                  {t('Drop to add to queue')}
-                </span>
+              <div className="py-3 space-y-1">
+                <DropIndicator />
               </div>
             ) : (
               t('Queue is empty')
