@@ -138,5 +138,8 @@
 	"Minimize presenter controls": "Minimize presenter controls",
 	"Expand": "Expand",
 	"Minimize": "Minimize",
-	"Presenter controls": "Presenter controls"
+	"Presenter controls": "Presenter controls",
+	"Insert in queue": "Insert in queue",
+	"Drop to add to queue": "Drop to add to queue",
+	"Queue is empty": "Queue is empty"
 }

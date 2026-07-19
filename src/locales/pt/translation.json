@@ -145,5 +145,8 @@
 	"Minimize presenter controls": "Minimizar controles do presenter",
 	"Expand": "Expandir",
 	"Minimize": "Minimizar",
-	"Presenter controls": "Controles do presenter"
+	"Presenter controls": "Controles do presenter",
+	"Insert in queue": "Inserir na fila",
+	"Drop to add to queue": "Solte para adicionar à fila",
+	"Queue is empty": "Fila vazia"
 }
