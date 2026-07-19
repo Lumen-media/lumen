@@ -228,7 +228,7 @@ export function FileListItem({
         </Button>
       </ContextMenuTrigger>
       <ContextMenuContent side="bottom">
-        {mediaType === 'image' && onDoubleClick && (
+        {onDoubleClick && (
           <>
             <ContextMenuItem onClick={() => onDoubleClick(file)}>
               <ImageIcon className="h-4 w-4" aria-hidden="true" />
