@@ -32,6 +32,34 @@ import { usePresentationStore } from '@/stores/presentation-store';
 import { useQueueStore } from '@/stores/queue-store';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
 
+const PRESENTATION_PREVIEW_STORAGE_KEY = 'lumen:presentation-preview-file';
+const PRESENTATION_PREVIEW_EVENT = 'lumen:presentation-preview-selected';
+
+function selectPresentationPreview(filePath: string) {
+  localStorage.setItem(PRESENTATION_PREVIEW_STORAGE_KEY, filePath);
+  window.dispatchEvent(
+    new CustomEvent(PRESENTATION_PREVIEW_EVENT, { detail: { filePath } })
+  );
+}
+
+async function ensureMediaWindow(): Promise<WebviewWindow | null> {
+  const existing = await WebviewWindow.getByLabel('media-window');
+  if (existing) return existing;
+
+  const readyPromise = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Timed out')), 3000);
+    listen('media-window-ready', () => {
+      clearTimeout(timeout);
+      resolve();
+    }).catch(() => { });
+  });
+
+  await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+  await readyPromise;
+
+  return WebviewWindow.getByLabel('media-window');
+}
+
 const mediaItems = [
   { id: 'lyrics' as MediaType, label: 'Lyrics', icon: Music },
   { id: 'video' as MediaType, label: 'Video', icon: Video },
@@ -50,33 +78,20 @@ export function MediaPanel() {
 
   const openPresentation = useCallback(async (filePath: string) => {
     try {
-      const existing = await WebviewWindow.getByLabel('media-window');
-      let win: WebviewWindow | null = existing;
-
-      if (!win) {
-        const readyPromise = new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('Timed out')), 3000);
-          listen('media-window-ready', () => {
-            clearTimeout(timeout);
-            resolve();
-          }).catch(() => { });
-        });
-
-        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-        await readyPromise;
-        win = await WebviewWindow.getByLabel('media-window');
-      }
-
+      const win = await ensureMediaWindow();
       if (!win) return;
 
       usePresentationStore.getState().loadPresentation(filePath);
-
       await win.show();
       await win.setFullscreen(true);
     } catch (err) {
       console.error('Failed to open presentation:', err);
       toast.error('Failed to open presentation window');
     }
+  }, []);
+
+  const activatePresentation = useCallback((filePath: string) => {
+    selectPresentationPreview(filePath);
   }, []);
 
   const handleFileDoubleClick = useCallback(
@@ -454,6 +469,13 @@ export function MediaPanel() {
                             onClick={(file) => {
                               if (activeMedia === 'lyrics') {
                                 useLyricEditStore.getState().loadLyric(file.path);
+                              }
+
+                              const ext = file.extension?.toLowerCase() ?? '';
+                              const extWithDot = ext.startsWith('.') ? ext : `.${ext}`;
+                              const isPpt = extWithDot === '.ppt' || extWithDot === '.pptx';
+                              if (activeMedia === 'presentation' || (activeMedia === 'files' && isPpt)) {
+                                activatePresentation(file.path);
                               }
                             }}
                             onDoubleClick={handleFileDoubleClick}

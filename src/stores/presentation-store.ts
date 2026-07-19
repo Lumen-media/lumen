@@ -15,7 +15,7 @@ export interface PresentationStore {
   isActive: boolean;
   slides: PresentationSlide[];
 
-  loadPresentation: (filePath: string) => Promise<void>;
+  loadPresentation: (filePath: string, options?: { initialSlide?: number }) => Promise<void>;
   setSlide: (index: number) => void;
   nextSlide: () => void;
   prevSlide: () => void;
@@ -53,8 +53,13 @@ export const usePresentationStore = create<PresentationStore>((set, get) => {
       set({ slides });
     });
 
+    const unlistenPresenterClosed = await listen('presentation:presenter-closed', () => {
+      set({ isActive: false });
+    });
+
     unlisteners.push(unlistenSlideChanged);
     unlisteners.push(unlistenThumbnails);
+    unlisteners.push(unlistenPresenterClosed);
   }
 
   setupListeners();
@@ -67,18 +72,18 @@ export const usePresentationStore = create<PresentationStore>((set, get) => {
     isActive: false,
     slides: [],
 
-    loadPresentation: async (filePath: string) => {
+    loadPresentation: async (filePath: string, options) => {
       const fileName = filePath.split(/[\\/]/).pop() ?? filePath;
       set({
         filePath,
         fileName,
-        currentSlide: 0,
+        currentSlide: options?.initialSlide ?? 0,
         totalSlides: 0,
         isActive: true,
         slides: [],
       });
 
-      emitToMedia('presentation:load', { filePath, fileName });
+      emitToMedia('presentation:load', { filePath, fileName, initialSlide: options?.initialSlide ?? 0 });
     },
 
     setSlide: (index: number) => {
