@@ -41,6 +41,11 @@ interface FileListItemProps {
 
 const THUMBNAIL_TYPES = new Set<MediaType>(['video', 'image']);
 
+function isUnsupportedPresentation(ext: string): boolean {
+  const e = ext.startsWith('.') ? ext : `.${ext}`;
+  return ['.odp', '.pptm', '.ppsx', '.potx', '.key'].includes(e);
+}
+
 function isUrlMedia(file: FileInfo): boolean {
   return file.extension === 'url' || Boolean(file.originalUrl);
 }
@@ -231,13 +236,16 @@ export function FileListItem({
         {onDoubleClick && (
           <>
             <ContextMenuItem onClick={() => onDoubleClick(file)}>
-              <ImageIcon className="h-4 w-4" aria-hidden="true" />
+              {(() => {
+                const Icon = iconForMedia(mediaType, file.extension);
+                return <Icon className="h-4 w-4" aria-hidden="true" />;
+              })()}
               Open
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}
-        {(onPlayNext || onAddToQueue) && (
+        {!isUnsupportedPresentation(file.extension) && (onPlayNext || onAddToQueue) && (
           <>
             {onPlayNext && (
               <ContextMenuItem onClick={() => onPlayNext(file)}>
