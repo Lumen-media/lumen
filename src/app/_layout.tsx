@@ -1,4 +1,4 @@
-import { DndContext, DragOverlay } from '@dnd-kit/core';
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { Presentation } from 'lucide-react';
 import * as React from 'react';
@@ -37,6 +37,11 @@ function LayoutComponent() {
   });
 
   const [dragFile, setDragFile] = React.useState<FileInfo | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 100, tolerance: 5 },
+    })
+  );
   const finalCursorY = React.useRef(0);
   const dragCleanup = React.useRef<(() => void) | null>(null);
 
@@ -56,6 +61,7 @@ function LayoutComponent() {
 
   return (
     <DndContext
+      sensors={sensors}
       onDragStart={(event) => {
         const file = event.active.data.current?.file ?? null;
         setDragFile(file);
