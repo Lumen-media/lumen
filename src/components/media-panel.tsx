@@ -115,20 +115,16 @@ export function MediaPanel() {
 
   const handlePlayNext = useCallback(
     (file: FileInfo) => {
-      if (activeMedia === 'video') {
-        playNext(file);
-      }
+      playNext(file);
     },
-    [activeMedia, playNext]
+    [playNext]
   );
 
   const handleAddToQueue = useCallback(
     (file: FileInfo) => {
-      if (activeMedia === 'video') {
-        addToQueue(file);
-      }
+      addToQueue(file);
     },
-    [activeMedia, addToQueue]
+    [addToQueue]
   );
 
   const [searchQuery, setSearchQuery] = useState('');

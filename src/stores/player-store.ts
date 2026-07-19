@@ -9,6 +9,7 @@ import { remoteSyncService } from '@/services/remote-sync-service';
 import { urlMediaService } from '@/services/url-media-service';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 import { useQueueStore } from '@/stores/queue-store';
+import { usePresentationStore } from '@/stores/presentation-store';
 
 interface PlayerStore {
   localTime: number;
@@ -564,6 +565,25 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   loadFile: async (filePath: string, seekTime = 0) => {
     const source = normalizeMediaSource(filePath);
+    const ext = source.split('.').pop()?.toLowerCase() ?? '';
+    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'tiff', 'svg'];
+    const isPresentation = ext === 'ppt' || ext === 'pptx';
+    const isImage = imageExtensions.includes(ext);
+
+    if (isPresentation) {
+      const win = await ensureMediaWindow();
+      if (!win) return;
+      usePresentationStore.getState().loadPresentation(source);
+      await win.show();
+      await win.setFullscreen(true);
+      return;
+    }
+
+    if (isImage) {
+      await get().presentImage(source);
+      return;
+    }
+
     const isVideo = getMediaTypeFromPath(source) === 'video';
 
     if (!isVideo) {
