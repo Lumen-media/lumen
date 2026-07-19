@@ -330,7 +330,7 @@ function RouteComponent() {
             </Button>
           </div>
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1" viewportClassName="focus-visible:ring-0 focus-visible:outline-none">
             <div className="flex flex-wrap gap-2 p-1">
               {displaySlides.map((slide) => (
                 <button
@@ -393,7 +393,7 @@ function RouteComponent() {
               </EmptyHeader>
             </Empty>
           ) : (
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1" viewportClassName="focus-visible:ring-0 focus-visible:outline-none">
               <div className="flex flex-col gap-1">
                 {files.map((file) => (
                   <Button
