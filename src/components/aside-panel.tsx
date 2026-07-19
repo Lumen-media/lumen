@@ -37,7 +37,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import type React from 'react';
+import * as React from 'react';
 import {
   type RefObject,
   useCallback,
@@ -192,6 +192,13 @@ export function AsidePanel() {
   );
 }
 
+function formatDuration(seconds?: number) {
+  if (!seconds) return '';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 function QueueTab({
   queue,
   onRemove,
@@ -214,6 +221,7 @@ function QueueTab({
   const triggerSpecs = Array.from(triggerSpecsMap.values());
 
   const entries = useQueueEntriesStore((s) => s.entries);
+  const dropTargetIndex = useQueueEntriesStore((s) => s.dropTargetIndex);
   const { syncQueue, setEntries } = useQueueEntriesStore.getState();
 
   const [triggerDialog, setTriggerDialog] = useState<TriggerDialog>(null);
@@ -277,13 +285,6 @@ function QueueTab({
     setEntries(entries.filter((e) => e.id !== entryId));
   }
 
-  const formatDuration = (seconds?: number) => {
-    if (!seconds) return '';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const dialogSpec = triggerDialog
     ? triggerSpecs.find((s) => s.id === triggerDialog.triggerId)
     : null;
@@ -307,8 +308,16 @@ function QueueTab({
         }}
       >
         <ContextMenuTrigger className="flex flex-col h-full flex-1 min-h-0">
-          <div ref={setQueueDropRef} className="flex-1 min-h-0 flex items-center justify-center text-sm text-muted-foreground">
-            Queue is empty
+          <div ref={setQueueDropRef} data-queue-container className="flex-1 min-h-0 flex items-center justify-center text-sm text-muted-foreground">
+            {dropTargetIndex !== null ? (
+              <div className="border-2 border-primary/40 rounded-lg border-dashed mx-3 p-4 flex items-center justify-center min-h-[60px] w-full">
+                <span className="text-sm text-primary font-medium">
+                  {t('Drop to add to queue')}
+                </span>
+              </div>
+            ) : (
+              t('Queue is empty')
+            )}
           </div>
         </ContextMenuTrigger>
       </ContextMenu>
@@ -326,57 +335,79 @@ function QueueTab({
           <div ref={setQueueDropRef} className="flex-1 min-h-0">
             <ScrollArea className="h-full">
               <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-            >
-              <SortableContext
-                items={entries.map((e) => e.id)}
-                strategy={verticalListSortingStrategy}
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+                modifiers={[restrictToVerticalAxis, restrictToParentElement]}
               >
-                <div className="py-3 space-y-1">
-                  {entries.map((entry) => {
-                    if (entry.kind === 'item') {
-                      const isCurrent = entry.item.file.path === currentFilePath;
-                      return (
-                        <SortableQueueItem
-                          key={entry.id}
-                          sortableId={entry.id}
-                          item={entry.item}
-                          isCurrent={isCurrent}
-                          index={itemPositions.get(entry.id) ?? 0}
-                          onPlay={onPlay}
-                          onContextMenu={() => setContextTargetItem(entry.item)}
-                          formatDuration={formatDuration}
-                        />
-                      );
-                    }
-                    const spec = triggerSpecs.find((s) => s.id === entry.inst.triggerId);
-                    if (!spec) return null;
-                    return (
-                      <SortableTriggerItem
-                        key={entry.id}
-                        inst={entry.inst}
-                        spec={spec}
-                        onEdit={() => openEditTrigger(entry.inst)}
-                        onRemove={() => removeTriggerInstance(entry.id)}
-                        onToggleLabel={() =>
-                          setEntries(
-                            entries.map((e) =>
-                              e.id === entry.id && e.kind === 'trigger'
-                                ? { ...e, inst: { ...e.inst, showLabel: !e.inst.showLabel } }
-                                : e
-                            )
-                          )
+                <SortableContext
+                  items={entries.map((e) => e.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="py-3 space-y-1" data-queue-container>
+                    {(() => {
+                      let dropEntryIndex: number | null = null;
+                      if (dropTargetIndex !== null) {
+                        let seenItems = 0;
+                        for (let i = 0; i < entries.length; i++) {
+                          if (entries[i].kind === 'item') {
+                            if (seenItems === dropTargetIndex) {
+                              dropEntryIndex = i;
+                              break;
+                            }
+                            seenItems++;
+                          }
                         }
-                      />
-                    );
-                  })}
-                </div>
-              </SortableContext>
-            </DndContext>
-          </ScrollArea>
+                        if (dropEntryIndex === null && seenItems === dropTargetIndex) {
+                          dropEntryIndex = entries.length;
+                        }
+                      }
+                      return (
+                        <>
+                          {entries.map((entry, idx) => (
+                            <React.Fragment key={entry.id}>
+                              {dropEntryIndex === idx && <DropIndicator />}
+                              {entry.kind === 'item' ? (
+                                <SortableQueueItem
+                                  sortableId={entry.id}
+                                  item={entry.item}
+                                  isCurrent={entry.item.file.path === currentFilePath}
+                                  index={itemPositions.get(entry.id) ?? 0}
+                                  onPlay={onPlay}
+                                  onContextMenu={() => setContextTargetItem(entry.item)}
+                                  formatDuration={formatDuration}
+                                />
+                              ) : (() => {
+                                const spec = triggerSpecs.find((s) => s.id === entry.inst.triggerId);
+                                if (!spec) return null;
+                                return (
+                                  <SortableTriggerItem
+                                    inst={entry.inst}
+                                    spec={spec}
+                                    onEdit={() => openEditTrigger(entry.inst)}
+                                    onRemove={() => removeTriggerInstance(entry.id)}
+                                    onToggleLabel={() =>
+                                      setEntries(
+                                        entries.map((e) =>
+                                          e.id === entry.id && e.kind === 'trigger'
+                                            ? { ...e, inst: { ...e.inst, showLabel: !e.inst.showLabel } }
+                                            : e
+                                        )
+                                      )
+                                    }
+                                  />
+                                );
+                              })()}
+                            </React.Fragment>
+                          ))}
+                          {dropEntryIndex === entries.length && <DropIndicator />}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            </ScrollArea>
           </div>
 
           <div className="border-t border-border p-3 shrink-0 flex gap-2">
@@ -487,6 +518,8 @@ function SortableQueueItem({
   return (
     <div
       ref={setNodeRef}
+      data-queue-entry
+      data-queue-item
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
@@ -776,6 +809,45 @@ function ThemeThumbnail({
   );
 }
 
+function DropIndicator() {
+  const dragFileInfo = useQueueEntriesStore((s) => s.dragFileInfo);
+  const dropIndex = useQueueEntriesStore((s) => s.dropTargetIndex);
+  if (!dragFileInfo) return null;
+  return (
+    <div className="flex items-center rounded-lg mx-3 px-3 py-2 border-2 border-dashed border-primary/20 opacity-70">
+      <div className="flex flex-1 items-center justify-between min-w-0">
+        <div className="flex items-start gap-1 min-w-0">
+          <span className="text-sm font-medium text-muted-foreground w-5 shrink-0 pt-0.5 opacity-50">
+            #
+          </span>
+          <div className="min-w-0">
+            <div className="font-semibold text-sm leading-tight line-clamp-1 text-foreground/50">
+              {dragFileInfo.title || dragFileInfo.name}
+            </div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground/50">
+              <span className="truncate">
+                {dragFileInfo.artist || dragFileInfo.name.split('.').pop()?.toUpperCase()}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 ml-2">
+          {dragFileInfo.duration ? (
+            <div className="text-xs text-muted-foreground/50 font-medium">
+              {formatDuration(dragFileInfo.duration)}
+            </div>
+          ) : null}
+          <div className="text-[10px] font-mono text-primary/40 bg-primary/6 px-1 rounded">
+            {dropIndex}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
 function SortableTriggerItem({
   inst,
   spec,
@@ -800,6 +872,7 @@ function SortableTriggerItem({
   return (
     <div
       ref={setNodeRef}
+      data-queue-entry
       style={{
         transform: CSS.Transform.toString(transform),
         transition,

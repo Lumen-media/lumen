@@ -1,8 +1,8 @@
 import { toast } from 'sonner';
 import { create } from 'zustand';
 import { queueDbService } from '@/services/queue-db-service';
-import { urlMediaService } from '@/services/url-media-service';
 import type { FileInfo } from '@/services/types';
+import { urlMediaService } from '@/services/url-media-service';
 
 export interface QueueItem {
   id: number;
@@ -23,6 +23,7 @@ interface QueueStore {
   shiftQueue: (excludePath?: string) => Promise<FileInfo | null>;
   clearQueue: () => Promise<void>;
   shuffleQueue: () => Promise<void>;
+  insertAtIndex: (file: FileInfo, index: number) => Promise<void>;
   reorderQueue: (orderedIds: number[]) => Promise<void>;
   updateMetadata: (
     filePath: string,
@@ -36,7 +37,7 @@ interface QueueStore {
   ) => Promise<void>;
 }
 
-export const useQueueStore = create<QueueStore>((set) => ({
+export const useQueueStore = create<QueueStore>((set, get) => ({
   queue: [],
 
   loadFromDb: async () => {
@@ -128,6 +129,23 @@ export const useQueueStore = create<QueueStore>((set) => ({
     await queueDbService.loadQueue().then((items) => {
       set({ queue: items.map((item) => ({ id: item.id, file: item, played: item.played })) });
     });
+  },
+
+  insertAtIndex: async (file, index) => {
+    const already = await queueDbService.exists(file.path);
+    if (already) {
+      toast.info('Already in queue', { description: file.name });
+      return;
+    }
+    const id = await queueDbService.addToQueue(file);
+    set((s) => {
+      const newQueue = [...s.queue, { id, file, played: false }];
+      const item = newQueue.pop()!;
+      const clampedIndex = Math.min(index, newQueue.length);
+      newQueue.splice(clampedIndex, 0, item);
+      return { queue: newQueue };
+    });
+    await queueDbService.reorderQueue(get().queue.map((i) => i.id));
   },
 
   reorderQueue: async (orderedIds) => {
