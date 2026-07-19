@@ -1,3 +1,4 @@
+import { useDraggable } from '@dnd-kit/core';
 import { invoke } from '@tauri-apps/api/core';
 import {
   File,
@@ -165,6 +166,11 @@ export function FileListItem({
   const statusLabel = downloadStatusLabel(file);
   const fileSizeLabel = urlMedia ? 'URL' : formatFileSize(file.size);
 
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `media-file:${file.path}`,
+    data: { type: 'media-file', file },
+  });
+
   const handleClick = () => {
     if (onClick) {
       onClick(file);
@@ -199,38 +205,45 @@ export function FileListItem({
   return (
     <ContextMenu>
       <ContextMenuTrigger>
-        <Button
-          variant="ghost"
-          className={`w-full justify-start text-left p-3 h-auto ${isFocused ? 'ring-2 ring-ring' : ''}`}
-          onClick={handleClick}
-          onDoubleClick={handleDoubleClick}
-          aria-label={fileDescription}
+        <div
+          ref={setNodeRef}
+          {...attributes}
+          {...listeners}
+          style={{ opacity: isDragging ? 0.5 : undefined }}
         >
-          <div className="flex items-start gap-3 w-full min-w-0">
-            <FileThumbnail file={file} mediaType={mediaType} />
-            <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{file.title || file.name}</p>
-              <div
-                className="flex items-center gap-2 mt-1 text-sm text-muted-foreground"
-                aria-hidden="true"
-              >
-                {file.originalUrl && (
-                  <Badge variant="secondary" className="h-4 rounded px-1.5 text-[10px]">
-                    YouTube
-                  </Badge>
-                )}
-                {statusLabel && (
-                  <Badge variant="outline" className="h-4 rounded px-1.5 text-[10px]">
-                    {statusLabel}
-                  </Badge>
-                )}
-                {!statusLabel && <span>{fileSizeLabel}</span>}
-                <span>-</span>
-                <span className="truncate">{formatDate(file.modifiedAt)}</span>
+          <Button
+            variant="ghost"
+            className={`w-full justify-start text-left p-3 h-auto ${isFocused ? 'ring-2 ring-ring' : ''}`}
+            onClick={handleClick}
+            onDoubleClick={handleDoubleClick}
+            aria-label={fileDescription}
+          >
+            <div className="flex items-start gap-3 w-full min-w-0">
+              <FileThumbnail file={file} mediaType={mediaType} />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{file.title || file.name}</p>
+                <div
+                  className="flex items-center gap-2 mt-1 text-sm text-muted-foreground"
+                  aria-hidden="true"
+                >
+                  {file.originalUrl && (
+                    <Badge variant="secondary" className="h-4 rounded px-1.5 text-[10px]">
+                      YouTube
+                    </Badge>
+                  )}
+                  {statusLabel && (
+                    <Badge variant="outline" className="h-4 rounded px-1.5 text-[10px]">
+                      {statusLabel}
+                    </Badge>
+                  )}
+                  {!statusLabel && <span>{fileSizeLabel}</span>}
+                  <span>-</span>
+                  <span className="truncate">{formatDate(file.modifiedAt)}</span>
+                </div>
               </div>
             </div>
-          </div>
-        </Button>
+          </Button>
+        </div>
       </ContextMenuTrigger>
       <ContextMenuContent side="bottom">
         {onDoubleClick && (
