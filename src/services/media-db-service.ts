@@ -189,6 +189,12 @@ class MediaDbService {
 
   async listFiles(mediaType: MediaType): Promise<FileInfo[]> {
     const db = await this.ready();
+    if (mediaType === 'files') {
+      const rows = await db.select<DbRow[]>(
+        "SELECT * FROM media_files WHERE media_type IN ('files', 'presentation') ORDER BY name COLLATE NOCASE"
+      );
+      return rows.map(rowToFileInfo);
+    }
     const rows = await db.select<DbRow[]>(
       'SELECT * FROM media_files WHERE media_type = $1 ORDER BY name COLLATE NOCASE',
       [mediaType]

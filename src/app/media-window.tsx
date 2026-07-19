@@ -173,6 +173,8 @@ function MediaWindowComponent() {
   const [streamOverlayActive, setStreamOverlayActive] = useState(false);
   const [isBlackoutActive, setIsBlackoutActive] = useState(false);
   const [presentationPath, setPresentationPath] = useState<string | null>(null);
+  const [presentationCurrentSlide, setPresentationCurrentSlide] = useState(0);
+  const [presentationTotalSlides, setPresentationTotalSlides] = useState(0);
   const [useProfileWallpaper, setUseProfileWallpaper] = useState(false);
   const [hideLyrics, setHideLyrics] = useState(false);
 
@@ -426,8 +428,27 @@ function MediaWindowComponent() {
           void closeWindow();
         }
       }
+
+      if (presentationPath) {
+        let nextIndex: number | null = null;
+
+        if (key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown') {
+          nextIndex = Math.min(presentationCurrentSlide + 1, presentationTotalSlides - 1);
+        } else if (key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp') {
+          nextIndex = Math.max(presentationCurrentSlide - 1, 0);
+        } else if (key === 'Home') {
+          nextIndex = 0;
+        } else if (key === 'End') {
+          nextIndex = presentationTotalSlides - 1;
+        }
+
+        if (nextIndex !== null && nextIndex !== presentationCurrentSlide) {
+          event.preventDefault();
+          emit('presentation:set-slide', { index: nextIndex }).catch(() => { });
+        }
+      }
     },
-    [closeWindow, exitPresentedContent, imagePath, mode, toggleFullscreen]
+    [closeWindow, exitPresentedContent, imagePath, mode, toggleFullscreen, presentationPath, presentationCurrentSlide, presentationTotalSlides]
   );
 
   useEventListener('keydown', handleKeyDown);
@@ -508,6 +529,14 @@ function MediaWindowComponent() {
       setPresentationPath(null);
     });
 
+    const unlistenSlideChanged = listen<{
+      currentSlide: number;
+      totalSlides: number;
+    }>('presentation:slide-changed', (event) => {
+      setPresentationCurrentSlide(event.payload.currentSlide);
+      setPresentationTotalSlides(event.payload.totalSlides);
+    });
+
     Promise.all([
       unlistenLyric,
       unlistenStartSlide,
@@ -520,6 +549,7 @@ function MediaWindowComponent() {
       unlistenExit,
       unlistenPresentationLoad,
       unlistenPresentationClear,
+      unlistenSlideChanged,
     ]).then(() => emit('media-window-ready').catch(() => { }));
 
     return () => {
@@ -534,6 +564,7 @@ function MediaWindowComponent() {
       unlistenExit.then((f) => f());
       unlistenPresentationLoad.then((f) => f());
       unlistenPresentationClear.then((f) => f());
+      unlistenSlideChanged.then((f) => f());
     };
   }, [exitPresentedContent, resetPresenterDisplayModes]);
 

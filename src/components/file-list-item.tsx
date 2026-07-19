@@ -57,8 +57,38 @@ function downloadStatusLabel(file: FileInfo): string | null {
   }
 }
 
+const ICON_BY_EXT: Record<string, typeof File> = {
+  '.mp3': Headphones, '.wav': Headphones, '.ogg': Headphones,
+  '.flac': Headphones, '.m4a': Headphones,
+  '.mp4': Video, '.avi': Video, '.mov': Video, '.mkv': Video, '.webm': Video,
+  '.jpg': ImageIcon, '.jpeg': ImageIcon, '.png': ImageIcon,
+  '.gif': ImageIcon, '.webp': ImageIcon, '.svg': ImageIcon,
+  '.txt': FileText, '.md': FileText, '.doc': FileText,
+  '.docx': FileText, '.pdf': FileText,
+  '.ppt': Presentation, '.pptx': Presentation, '.pptm': Presentation,
+  '.potx': Presentation, '.ppsx': Presentation, '.odp': Presentation, '.key': Presentation,
+  '.lrc': Music, '.srt': Music,
+};
+
+function iconForMedia(mediaType: MediaType, extension?: string): typeof File {
+  if (mediaType === 'files' && extension) {
+    const ext = extension.toLowerCase();
+    const extWithDot = ext.startsWith('.') ? ext : `.${ext}`;
+    const found = ICON_BY_EXT[extWithDot];
+    if (found) return found;
+  }
+
+  if (mediaType === 'lyrics') return Music;
+  if (mediaType === 'video') return Video;
+  if (mediaType === 'audio') return Headphones;
+  if (mediaType === 'image') return ImageIcon;
+  if (mediaType === 'presentation') return Presentation;
+  if (mediaType === 'text') return FileText;
+
+  return File;
+}
+
 function FileThumbnail({ file, mediaType }: { file: FileInfo; mediaType: MediaType }) {
-  const Icon = getMediaIcon(mediaType);
   const [thumbSrc, setThumbSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -78,6 +108,8 @@ function FileThumbnail({ file, mediaType }: { file: FileInfo; mediaType: MediaTy
     };
   }, [file, mediaType]);
 
+  const Icon = iconForMedia(mediaType, file.extension);
+
   if (!THUMBNAIL_TYPES.has(mediaType) || failed) {
     return <Icon className="size-5 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />;
   }
@@ -94,27 +126,6 @@ function FileThumbnail({ file, mediaType }: { file: FileInfo; mediaType: MediaTy
     </div>
   );
 }
-
-const getMediaIcon = (mediaType: MediaType) => {
-  switch (mediaType) {
-    case 'lyrics':
-      return Music;
-    case 'video':
-      return Video;
-    case 'audio':
-      return Headphones;
-    case 'image':
-      return ImageIcon;
-    case 'presentation':
-      return Presentation;
-    case 'text':
-      return FileText;
-    case 'files':
-      return File;
-    default:
-      return File;
-  }
-};
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes';
