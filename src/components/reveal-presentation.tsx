@@ -1,6 +1,7 @@
+import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from '@aiden0z/pptx-renderer';
 import { emit, listen } from '@tauri-apps/api/event';
 import { readFile } from '@tauri-apps/plugin-fs';
-import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from '@aiden0z/pptx-renderer';
+import { animate } from 'animejs';
 import { toJpeg } from 'html-to-image';
 import { useEffect, useRef, useState } from 'react';
 
@@ -41,7 +42,16 @@ export function PptxPresentation({ filePath }: PptxPresentationProps) {
           emit('presentation:slide-changed', {
             currentSlide: ce.detail?.index ?? 0,
             totalSlides: viewer.slideCount,
-          }).catch(() => {});
+          }).catch(() => { });
+
+          if (container) {
+            animate(container, {
+              opacity: [0.85, 1],
+              scale: [0.98, 1],
+              duration: 500,
+              easing: 'easeOutCubic',
+            });
+          }
         });
 
         const count = viewer.slideCount;
@@ -49,13 +59,13 @@ export function PptxPresentation({ filePath }: PptxPresentationProps) {
         emit('presentation:slide-changed', {
           currentSlide: viewer.currentSlideIndex,
           totalSlides: count,
-        }).catch(() => {});
+        }).catch(() => { });
 
         const placeholders: Array<{ index: number; dataUrl: string; label: string }> = [];
         for (let i = 0; i < count; i++) {
           placeholders.push({ index: i, dataUrl: '', label: `Slide ${i + 1}` });
         }
-        emit('presentation:thumbnails-ready', { thumbs: placeholders }).catch(() => {});
+        emit('presentation:thumbnails-ready', { thumbs: placeholders }).catch(() => { });
 
         const thumbs: Array<{ index: number; dataUrl: string; label: string }> = [];
         for (let i = 0; i < count; i++) {
@@ -90,7 +100,7 @@ export function PptxPresentation({ filePath }: PptxPresentationProps) {
           });
         }
 
-        emit('presentation:thumbnails-ready', { thumbs }).catch(() => {});
+        emit('presentation:thumbnails-ready', { thumbs }).catch(() => { });
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
