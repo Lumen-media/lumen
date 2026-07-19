@@ -44,6 +44,10 @@ A desktop application focused on simplicity, visual sophistication, and operatio
 - Unsplash integration for searching background images
 - Local library of downloaded images
 - Font, size, and alignment options per song
+- **PowerPoint (.pptx) import and slide rendering** with SVG vector quality
+- Dedicated presenter controls with current slide tracking
+- Dedicated media window with fullscreen support for audience display
+- Thumbnail generation and keyboard navigation for slide decks
 
 ### Media Playback
 - Audio and video playback
@@ -60,9 +64,11 @@ A desktop application focused on simplicity, visual sophistication, and operatio
 
 ### Playback Queue
 - Add, remove, and reorder items in the queue
+- **Drag from media panel to a specific queue position** with visual drop indicator
 - Mark items as played
 - Shuffle the queue
 - Queue persistence between sessions
+- Insertion triggers and automation support
 
 ### Media Window (Secondary Screen)
 - Dedicated window for audience display
@@ -158,10 +164,10 @@ Each block separated by a double blank line becomes an individual slide in the p
 
 ## Roadmap
 
-- [ ] Full presentation mode with slide control
+- [x] Full presentation mode with slide control (PowerPoint .pptx support)
 - [ ] Live broadcast mode
 - [x] Custom visual themes
 - [ ] Per-song notes
-- [ ] Raffle system modal
+- [x] Raffle system modal
 - [ ] Presentation manager (event section navigation)
-- [ ] More media search integrations
+- [x] More media search integrations
