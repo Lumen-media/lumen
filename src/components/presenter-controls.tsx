@@ -693,11 +693,13 @@ function PresenterShortcuts({
   onPrevious,
   onNext,
   t,
+  kind,
 }: {
   activeDisplayModes: PresenterDisplayMode[];
   onPrevious: () => void;
   onNext: () => void;
   t: Translate;
+  kind: PresenterKind | null;
 }) {
   const actionButtons = [
     {
@@ -711,28 +713,34 @@ function PresenterShortcuts({
     { id: 'next', shortcut: undefined, icon: SkipForward, label: 'next', onClick: onNext },
   ];
 
+  const visibleToggles = shortcutToggleItems.filter(
+    (item) => item.value !== 'hideLyrics' || kind === 'lyrics'
+  );
+
   return (
     <div className="flex items-center justify-center gap-1">
-      <ToggleGroup
-        multiple
-        value={activeDisplayModes}
-        variant="secondary"
-        size="sm"
-        spacing={4}
-        className="rounded-md"
-      >
-        {shortcutToggleItems.map((item) => (
-          <ToggleGroupItem
-            key={item.value}
-            value={item.value}
-            aria-label={t(item.ariaLabel)}
-            className="h-7 rounded-md px-2 text-xs"
-            onClick={() => emitPresenterEvent(item.event)}
-          >
-            <ShortcutLabel shortcut={item.shortcut} label={t(item.label)} />
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+      {visibleToggles.length > 0 && (
+        <ToggleGroup
+          multiple
+          value={activeDisplayModes}
+          variant="secondary"
+          size="sm"
+          spacing={4}
+          className="rounded-md"
+        >
+          {visibleToggles.map((item) => (
+            <ToggleGroupItem
+              key={item.value}
+              value={item.value}
+              aria-label={t(item.ariaLabel)}
+              className="h-7 rounded-md px-2 text-xs"
+              onClick={() => emitPresenterEvent(item.event)}
+            >
+              <ShortcutLabel shortcut={item.shortcut} label={t(item.label)} />
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      )}
 
       {actionButtons.map(({ id, icon: Icon, shortcut, label, onClick }) => (
         <Button
@@ -1004,6 +1012,7 @@ export function PresenterControls({ className }: PresenterControlsProps) {
             onPrevious={() => selectPresenterIndex(currentIndex - 1)}
             onNext={() => selectPresenterIndex(currentIndex + 1)}
             t={t}
+            kind={presenter.kind}
           />
         </div>
         <PresenterActions isMinimized={isMinimized} onToggleMinimized={toggle} t={t} />

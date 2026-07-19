@@ -1,4 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
   ArrowLeft,
   FileText,
@@ -7,14 +10,10 @@ import {
   Image as ImageIcon,
   Music,
   Plus,
-  Presentation,
   RefreshCw,
   Search,
   Video,
 } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DeleteFileAlert } from '@/components/delete-file-alert';
@@ -40,7 +39,6 @@ const mediaItems = [
   { id: 'audio' as MediaType, label: 'Audio', icon: Headphones },
   { id: 'image' as MediaType, label: 'Image', icon: ImageIcon },
   { id: 'files' as MediaType, label: 'Files', icon: FolderOpen },
-  { id: 'presentation' as MediaType, label: 'Presentation', icon: Presentation },
 ];
 
 export function MediaPanel() {
@@ -50,38 +48,88 @@ export function MediaPanel() {
   const openLyricModal = useLyricModalStore((s) => s.open);
   const [activeMedia, setActiveMedia] = useState<MediaType | null>(null);
 
-  const handleFileDoubleClick = useCallback((file: FileInfo) => {
-    if (activeMedia === 'audio' || activeMedia === 'video') {
-      player.loadFile(file.path);
-    }
-    if (activeMedia === 'lyrics') {
-      player.presentLyric(file.path);
-    }
-    if (activeMedia === 'image') {
-      player.presentImage(file.path);
-    }
-    if (activeMedia === 'presentation') {
-      openPresentation(file.path);
-    }
-  }, [activeMedia, player]);
+  const openPresentation = useCallback(async (filePath: string) => {
+    try {
+      const existing = await WebviewWindow.getByLabel('media-window');
+      let win: WebviewWindow | null = existing;
 
-  const handleFileEdit = useCallback((file: FileInfo) => {
-    if (activeMedia === 'lyrics') {
-      openLyricModal(file.path);
-    }
-  }, [activeMedia, openLyricModal]);
+      if (!win) {
+        const readyPromise = new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Timed out')), 3000);
+          listen('media-window-ready', () => {
+            clearTimeout(timeout);
+            resolve();
+          }).catch(() => { });
+        });
 
-  const handlePlayNext = useCallback((file: FileInfo) => {
-    if (activeMedia === 'video') {
-      playNext(file);
-    }
-  }, [activeMedia, playNext]);
+        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+        await readyPromise;
+        win = await WebviewWindow.getByLabel('media-window');
+      }
 
-  const handleAddToQueue = useCallback((file: FileInfo) => {
-    if (activeMedia === 'video') {
-      addToQueue(file);
+      if (!win) return;
+
+      usePresentationStore.getState().loadPresentation(filePath);
+
+      await win.show();
+      await win.setFullscreen(true);
+    } catch (err) {
+      console.error('Failed to open presentation:', err);
+      toast.error('Failed to open presentation window');
     }
-  }, [activeMedia, addToQueue]);
+  }, []);
+
+  const handleFileDoubleClick = useCallback(
+    (file: FileInfo) => {
+      if (activeMedia === 'audio' || activeMedia === 'video') {
+        player.loadFile(file.path);
+      }
+      if (activeMedia === 'lyrics') {
+        player.presentLyric(file.path);
+      }
+      if (activeMedia === 'image') {
+        player.presentImage(file.path);
+      }
+      const ext = file.extension?.toLowerCase() ?? '';
+      const extWithDot = ext.startsWith('.') ? ext : `.${ext}`;
+      const isPpt = extWithDot === '.ppt' || extWithDot === '.pptx';
+      const isUnsupportedPres = extWithDot === '.odp' || extWithDot === '.pptm' ||
+        extWithDot === '.ppsx' || extWithDot === '.potx' || extWithDot === '.key';
+      if (activeMedia === 'presentation' || (activeMedia === 'files' && isPpt)) {
+        openPresentation(file.path);
+      } else if (activeMedia === 'files' && isUnsupportedPres) {
+        toast.error(t('Unsupported presentation format'));
+      }
+    },
+    [activeMedia, player, openPresentation, t]
+  );
+
+  const handleFileEdit = useCallback(
+    (file: FileInfo) => {
+      if (activeMedia === 'lyrics') {
+        openLyricModal(file.path);
+      }
+    },
+    [activeMedia, openLyricModal]
+  );
+
+  const handlePlayNext = useCallback(
+    (file: FileInfo) => {
+      if (activeMedia === 'video') {
+        playNext(file);
+      }
+    },
+    [activeMedia, playNext]
+  );
+
+  const handleAddToQueue = useCallback(
+    (file: FileInfo) => {
+      if (activeMedia === 'video') {
+        addToQueue(file);
+      }
+    },
+    [activeMedia, addToQueue]
+  );
 
   const [searchQuery, setSearchQuery] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
@@ -217,37 +265,6 @@ export function MediaPanel() {
       setIsLoading(false);
     }
   };
-
-  const openPresentation = useCallback(async (filePath: string) => {
-    try {
-      const existing = await WebviewWindow.getByLabel('media-window');
-      let win: WebviewWindow | null = existing;
-
-      if (!win) {
-        const readyPromise = new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('Timed out')), 3000);
-          listen('media-window-ready', () => {
-            clearTimeout(timeout);
-            resolve();
-          }).catch(() => {});
-        });
-
-        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-        await readyPromise;
-        win = await WebviewWindow.getByLabel('media-window');
-      }
-
-      if (!win) return;
-
-      usePresentationStore.getState().loadPresentation(filePath);
-
-      await win.show();
-      await win.setFullscreen(true);
-    } catch (err) {
-      console.error('Failed to open presentation:', err);
-      toast.error('Failed to open presentation window');
-    }
-  }, []);
 
   const handleBack = () => {
     setActiveMedia(null);
