@@ -457,7 +457,7 @@ export function MediaPanel() {
                               }
                             }}
                             onDoubleClick={handleFileDoubleClick}
-                            onEdit={handleFileEdit}
+                            onEdit={activeMedia === 'lyrics' ? handleFileEdit : undefined}
                             onPlayNext={handlePlayNext}
                             onAddToQueue={handleAddToQueue}
                           />
