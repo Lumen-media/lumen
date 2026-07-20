@@ -5,6 +5,46 @@ import { PresenterSlot } from '@/modules/components/PresenterSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
 
+interface WindowConfig {
+  maximized?: boolean;
+  resizable?: boolean;
+  decorations?: boolean;
+  title?: string;
+  fullscreen?: boolean;
+  width?: number;
+  height?: number;
+  minWidth?: number;
+  minHeight?: number;
+}
+
+async function applyWindowConfig(config?: WindowConfig) {
+  if (!config) return;
+  try {
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+    const { PhysicalSize } = await import('@tauri-apps/api/dpi');
+    const w = getCurrentWebviewWindow();
+
+    if (config.title) await w.setTitle(config.title);
+    if (config.decorations !== undefined) await w.setDecorations(config.decorations);
+    if (config.resizable !== undefined) await w.setResizable(config.resizable);
+    if (config.width !== undefined && config.height !== undefined) {
+      await w.setSize(new PhysicalSize(config.width, config.height));
+    }
+    if (config.minWidth !== undefined || config.minHeight !== undefined) {
+      await w.setMinSize(
+        new PhysicalSize(
+          config.minWidth ?? config.width ?? 720,
+          config.minHeight ?? config.height ?? 405,
+        ),
+      );
+    }
+    if (config.maximized) await w.maximize();
+    if (config.fullscreen) await w.setFullscreen(true);
+  } catch (error) {
+    console.error('Failed to apply overlay window config:', error);
+  }
+}
+
 export const Route = createFileRoute('/module-overlay-window')({
   component: ModuleOverlayWindow,
 });
@@ -89,6 +129,8 @@ function ModuleOverlayWindow() {
 
     const unlistenProject = listen<{ viewId: string; props: unknown }>('module:overlay-project', (event) => {
       useModuleStore.getState().projectPanel(event.payload.viewId, event.payload.props);
+      const config = (event.payload.props as { windowConfig?: WindowConfig })?.windowConfig;
+      void applyWindowConfig(config);
     });
     const unlistenClear = listen('module:overlay-clear', () => {
       useModuleStore.getState().clearPresenter();
