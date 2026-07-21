@@ -71,6 +71,101 @@ host.meta.version  // string — Lumen app version
 
 ---
 
+## `host.window` ✅
+
+Indicates which window the module is running in.
+
+```ts
+host.window // 'main' | 'presenter' | 'surface'
+```
+
+| Value | Description |
+|---|---|
+| `'main'` | The main Lumen application window |
+| `'presenter'` | The presenter/media output window |
+| `'surface'` | A module-owned native surface window |
+
+---
+
+## `host.surface` ✅
+
+Opens module UI in a separate native window. Each module gets one active surface window, scoped by module id.
+
+```ts
+// Register a panel for the surface window
+host.panels.add({
+  id: 'my-module.control-window',
+  slot: 'surface.window',
+  title: 'Control Window',
+  component: ControlWindow,
+});
+
+// Open the surface window
+host.surface.openWindow(
+  'my-module.control-window',
+  { mode: 'live' },
+  { title: 'Control Window', width: 960, height: 640 },
+);
+
+// Read state
+const state = host.surface.state();        // 'idle' | 'live'
+const open = host.surface.isWindowOpen();  // boolean
+
+// Subscribe to state changes
+const sub = host.surface.onStateChange((next) => {
+  // 'idle' | 'live'
+});
+sub.dispose();
+
+// Close the current module's surface window
+host.surface.clear();
+```
+
+The rendered component receives a `close` callback:
+
+```tsx
+function ControlWindow({ close }: { close?: () => void }) {
+  return (
+    <main className="p-6">
+      <button type="button" onClick={close}>Close</button>
+    </main>
+  );
+}
+```
+
+### `SurfaceHostAPI`
+
+| Method | Returns | Description |
+|---|---|---|
+| `state()` | `'idle' \| 'live'` | Whether this module's surface window is open |
+| `isWindowOpen()` | `boolean` | Same as `state() === 'live'` |
+| `openWindow(panelId, props?, options?)` | `void` | Opens or reuses the module's surface window with the given panel |
+| `clear()` | `void` | Closes this module's surface window |
+| `onStateChange(handler)` | `Disposable` | Subscribe to open/close events scoped to this module |
+
+### `SurfaceWindowOptions`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `title` | `string` | panel title | Native window title |
+| `width` | `number` | `960` | Initial content width |
+| `height` | `number` | `640` | Initial content height |
+| `minWidth` | `number` | `720` | Minimum content width |
+| `minHeight` | `number` | `480` | Minimum content height |
+| `resizable` | `boolean` | `true` | Whether the native window can be resized |
+| `decorations` | `boolean` | `true` | Whether OS window decorations are shown |
+| `maximized` | `boolean` | `false` | Open maximized |
+| `fullscreen` | `boolean` | `false` | Open fullscreen |
+
+### Public bus events
+
+| Topic | Payload | Description |
+|---|---|---|
+| `surface:window-opened` | `{ moduleId, panelId }` | A module surface window became live |
+| `surface:window-closed` | `{ moduleId, panelId? }` | A module surface window closed or cleared |
+
+---
+
 ## `host.panels` ⚠️
 
 Adds React components to named slots in the interface. The infrastructure is ready; slots are still being wired into the app layout.
@@ -100,17 +195,14 @@ host.panels.add({
 
 | Value | Position |
 |---|---|
-| `'sidebar.left.tabs'` | Left sidebar tab area |
-| `'sidebar.right.tabs'` | Right sidebar tab area |
-| `'main.center'` | Main center content area |
 | `'dialog'` | Modal content opened through `host.ui.openDialog(id)` |
+| `'surface.window'` | Module-owned operator-facing native window opened through `host.surface.openWindow(id)` |
 | `'presenter.content'` | Presenter/media output surface |
-| `'settings.section'` | Settings page section |
-| `'command-palette.section'` | Section inside the command palette |
-| `'editor.lyrics.toolbar'` | Lyrics editor toolbar area |
+| `'presenter.controls.item'` | Controls injected into the presenter toolbar |
+| `'sidebar.right.tabs'` | Right sidebar tab area |
 | `'app.header.trailing'` | Compact slot at the start of the header's right-side controls |
 
-The host only renders some slots today. `dialog`, `presenter.content`, and `app.header.trailing` are active surfaces in the current app shell; the remaining slots are part of the typed contract and may be wired progressively.
+Active surfaces in the current app shell: `dialog`, `surface.window`, `presenter.content`, `presenter.controls.item`, `sidebar.right.tabs`, and `app.header.trailing`.
 
 ---
 
@@ -419,6 +511,8 @@ sub.dispose();
 | `'player:prev'` | — | Previous track |
 | `'presentation:project'` | `{ viewId, props? }` | Projection started |
 | `'presentation:clear'` | — | Projection cleared |
+| `'surface:window-opened'` | `{ moduleId, panelId }` | Module surface window opened |
+| `'surface:window-closed'` | `{ moduleId, panelId? }` | Module surface window closed |
 | `'themes:apply'` | `{ id }` | Theme changed |
 
 ---
@@ -1005,8 +1099,8 @@ Returns a `Disposable` — registered trigger is removed on module unload.
 ## Full example
 
 ```ts
-import { LumenPlugin } from '@lumen/module-sdk';
-import type { LumenHost } from '@lumen/module-sdk';
+import { LumenPlugin } from '@lumen-media/module-sdk';
+import type { LumenHost } from '@lumen-media/module-sdk';
 import { MainPanel } from './components/MainPanel';
 
 export default class ExamplePlugin extends LumenPlugin {
@@ -1043,7 +1137,7 @@ export default class ExamplePlugin extends LumenPlugin {
   }
 
   async onunload() {
-    host.log.info('Module unloaded');
+    // Cleanup handled automatically — Disposables are disposed on unload
   }
 }
 ```
