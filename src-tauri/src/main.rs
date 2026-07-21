@@ -188,6 +188,72 @@ async fn create_overlay_window(
     Ok(())
 }
 
+#[derive(serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct SurfaceWindowOptions {
+    maximized: Option<bool>,
+    resizable: Option<bool>,
+    decorations: Option<bool>,
+    fullscreen: Option<bool>,
+    width: Option<f64>,
+    height: Option<f64>,
+    min_width: Option<f64>,
+    min_height: Option<f64>,
+}
+
+#[tauri::command]
+async fn create_surface_window(
+    app_handle: tauri::AppHandle,
+    label: String,
+    title: String,
+    route: Option<String>,
+    options: Option<SurfaceWindowOptions>,
+) -> Result<(), String> {
+    let main_window = app_handle
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window not found".to_string())?;
+
+    let main_position = main_window
+        .outer_position()
+        .map_err(|e| format!("Failed to get main window position: {}", e))?;
+
+    let options = options.unwrap_or_default();
+    let width = options.width.unwrap_or(960.0);
+    let height = options.height.unwrap_or(640.0);
+    let min_width = options.min_width.unwrap_or(720.0);
+    let min_height = options.min_height.unwrap_or(480.0);
+
+    let window = tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        &label,
+        tauri::WebviewUrl::App(route.unwrap_or_else(|| "/module-surface-window".to_string()).into()),
+    )
+    .title(&title)
+    .decorations(options.decorations.unwrap_or(true))
+    .resizable(options.resizable.unwrap_or(true))
+    .fullscreen(options.fullscreen.unwrap_or(false))
+    .inner_size(width, height)
+    .min_inner_size(min_width, min_height)
+    .visible(false)
+    .build()
+    .map_err(|e| format!("Failed to create surface window: {}", e))?;
+
+    window
+        .set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+            x: main_position.x + 120,
+            y: main_position.y + 120,
+        }))
+        .map_err(|e| format!("Failed to set surface window position: {}", e))?;
+
+    if options.maximized.unwrap_or(false) {
+        window
+            .maximize()
+            .map_err(|e| format!("Failed to maximize surface window: {}", e))?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 async fn save_window_position(
     label: String,
@@ -455,6 +521,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             open_folder,
             create_window,
             create_overlay_window,
+            create_surface_window,
             save_window_position,
             get_system_fonts,
             get_system_info,

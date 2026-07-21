@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { createPresenterHost } from './presenter-host';
 import type { LumenPlugin, ModuleManifest } from './types';
 
-export async function bootPresenterModules() {
+export async function bootPresenterModules(window: 'presenter' | 'surface' = 'presenter') {
   let manifests: Array<{ manifest: ModuleManifest }> = [];
 
   try {
@@ -25,7 +25,7 @@ export async function bootPresenterModules() {
         const mod = await import(/* @vite-ignore */ blobUrl) as { default: new () => LumenPlugin };
         const plugin = new mod.default();
         plugin.manifest = manifest;
-        const host = await createPresenterHost(manifest);
+        const host = await createPresenterHost(manifest, window);
         await plugin.onload(host);
       } finally {
         URL.revokeObjectURL(blobUrl);
