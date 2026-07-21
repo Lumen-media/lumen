@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { emit, listen } from '@tauri-apps/api/event';
+import { emit } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useCallback, useEffect, useState } from 'react';
 import { SurfaceWindowSlot } from '@/modules/components/SurfaceWindowSlot';
@@ -35,13 +36,31 @@ async function applyWindowOptions(options?: SurfaceWindowOptions) {
   }
 }
 
+interface SurfaceProjectState {
+  moduleId: string;
+  panelId: string;
+  props?: unknown;
+  options?: SurfaceWindowOptions;
+}
+
+async function waitForSurfaceState(label: string): Promise<SurfaceProjectState | null> {
+  for (let i = 0; i < 150; i++) {
+    const json = await invoke<string | null>('get_surface_state', { label }).catch(() => null);
+    if (json) {
+      return JSON.parse(json) as SurfaceProjectState;
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return null;
+}
+
 export const Route = createFileRoute('/module-surface-window')({
   component: ModuleSurfaceWindow,
 });
 
 function ModuleSurfaceWindow() {
   const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
-  const [lastEvent, setLastEvent] = useState<string>('none');
+  const [status, setStatus] = useState('booting');
 
   const closeWindow = useCallback(async () => {
     try {
@@ -89,99 +108,68 @@ function ModuleSurfaceWindow() {
   }, [closeWindow]);
 
   useEffect(() => {
-    const unlisteners: (() => void)[] = [];
-
-    let label = '';
+    let label = 'unknown';
     try {
       label = getCurrentWebviewWindow().label;
     } catch {
-      console.error('[surface] failed to get window label');
       label = 'unknown';
     }
 
-    console.log('[surface] booting, label:', label);
+    setStatus('loading modules');
 
-    const booted = bootPresenterModules('surface')
-      .then(() => console.log('[surface] modules booted'));
-
-    listen('__surface_self_test', (event) => {
-      setLastEvent(`SELF_TEST_OK: ${JSON.stringify(event.payload)}`);
-    }).catch((err) => {
-      setLastEvent(`self_test_listen_error: ${err}`);
-    });
-
-    const projectListener = listen<{
-      moduleId: string;
-      panelId: string;
-      props?: unknown;
-      options?: SurfaceWindowOptions;
-    }>('module:surface-project', (event) => {
-      setLastEvent(`RECEIVED: ${JSON.stringify(event.payload)}`);
-      console.log('[surface] received module:surface-project', event.payload);
-      useModuleStore
-        .getState()
-        .openSurfaceWindow(
-          event.payload.moduleId,
-          event.payload.panelId,
-          event.payload.props,
-          event.payload.options,
-        );
-      setActiveModuleId(event.payload.moduleId);
-      void applyWindowOptions(event.payload.options);
-    })
-      .then((fn) => {
-        unlisteners.push(fn);
-        setLastEvent('listener_registered');
-        console.log('[surface] projectListener registered');
+    bootPresenterModules('surface')
+      .then(() => {
+        setStatus('waiting for state');
+        return waitForSurfaceState(label);
       })
-      .catch((err) => {
-        setLastEvent(`listener_error: ${err}`);
-        console.error('[surface] projectListener failed:', err);
+      .then((state) => {
+        if (state) {
+          useModuleStore.getState().openSurfaceWindow(
+            state.moduleId,
+            state.panelId,
+            state.props,
+            state.options,
+          );
+          setActiveModuleId(state.moduleId);
+          void applyWindowOptions(state.options);
+        }
+      })
+      .catch(console.error)
+      .finally(() => {
+        emit('module:surface-ready', { label }).catch(() => {});
       });
+  }, [closeWindow]);
 
-    const clearListener = listen<{ moduleId: string }>('module:surface-clear', (event) => {
-      useModuleStore.getState().clearSurfaceWindow(event.payload.moduleId);
-      setActiveModuleId(null);
-      void closeWindow();
-    })
+  useEffect(() => {
+    let detachClearListener: (() => void) | undefined;
+
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => {
+        return listen<{ moduleId: string }>('module:surface-clear', (event) => {
+          useModuleStore.getState().clearSurfaceWindow(event.payload.moduleId);
+          setActiveModuleId(null);
+          void closeWindow();
+        });
+      })
       .then((fn) => {
-        unlisteners.push(fn);
+        detachClearListener = fn;
       })
       .catch(() => {});
 
-    Promise.all([booted, projectListener, clearListener])
-      .then(() => {
-        setLastEvent('all_ready');
-        console.log('[surface] all ready, emitting module:surface-ready');
-        return emit('module:surface-ready', { label }).catch(() => {});
-      })
-      .then(() => {
-        // self-test: try listening before emitting
-        emit('__surface_self_test', { ts: Date.now() }).catch(() => {});
-        setTimeout(() => {
-          emit('__surface_self_test', { ts: Date.now(), delayed: true }).catch(() => {});
-        }, 100);
-      })
-      .catch(console.error);
-
     return () => {
-      unlisteners.forEach((fn) => {
-        try {
-          fn();
-        } catch {}
-      });
+      detachClearListener?.();
     };
   }, [closeWindow]);
 
   if (!activeModuleId) {
+    const label = (() => { try { return getCurrentWebviewWindow().label; } catch { return 'error'; } })();
     return (
       <div style={{ color: 'lime', background: '#111', padding: 40, fontFamily: 'monospace', fontSize: 18 }}>
-        <p>[surface] waiting for project event...</p>
-        <p>label: {(() => { try { return getCurrentWebviewWindow().label; } catch { return 'error'; } })()}</p>
+        <p>[surface] status: {status}</p>
+        <p>label: {label}</p>
         <p>activeModuleId: {activeModuleId ?? 'null'}</p>
         <p>store surfaceWindows: {useModuleStore((s) => s.surfaceWindows.size)}</p>
         <p>store panels: {useModuleStore((s) => s.panels.size)}</p>
-        <p>lastEvent: {lastEvent}</p>
       </div>
     );
   }

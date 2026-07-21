@@ -234,6 +234,7 @@ async fn create_surface_window(
     .fullscreen(options.fullscreen.unwrap_or(false))
     .inner_size(width, height)
     .min_inner_size(min_width, min_height)
+    .visible(false)
     .build()
     .map_err(|e| format!("Failed to create surface window: {}", e))?;
 
@@ -251,6 +252,22 @@ async fn create_surface_window(
     }
 
     Ok(())
+}
+
+struct SurfaceStore {
+    states: Mutex<HashMap<String, String>>,
+}
+
+#[tauri::command]
+fn set_surface_state(label: String, state_json: String, store: State<'_, SurfaceStore>) {
+    if let Ok(mut states) = store.states.lock() {
+        states.insert(label, state_json);
+    }
+}
+
+#[tauri::command]
+fn get_surface_state(label: String, store: State<'_, SurfaceStore>) -> Option<String> {
+    store.states.lock().ok()?.get(&label).cloned()
 }
 
 #[tauri::command]
@@ -372,6 +389,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_sql::Builder::new().build())
         .manage(WindowState {
             positions: Mutex::new(HashMap::new()),
+        })
+        .manage(SurfaceStore {
+            states: Mutex::new(HashMap::new()),
         })
         .manage(devices::default_device_state())
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
@@ -521,6 +541,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             create_window,
             create_overlay_window,
             create_surface_window,
+            set_surface_state,
+            get_surface_state,
             save_window_position,
             get_system_fonts,
             get_system_info,
