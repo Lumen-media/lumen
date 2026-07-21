@@ -343,18 +343,18 @@ function surfaceWindowLabel(moduleId: string) {
   return `surface-${moduleId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 }
 
-const surfaceLabelMap = new Map<string, string>();
-
 function syncSurfaceProjection(moduleId: string) {
   const state = useModuleStore.getState().getSurfaceWindow(moduleId);
-  console.log('[surface-main] syncSurfaceProjection', { moduleId, hasState: !!state });
   if (!state) return;
-  emit('module:surface-project', state).catch(() => {});
+  const label = surfaceWindowLabel(moduleId);
+  invoke('set_surface_state', {
+    label,
+    stateJson: JSON.stringify(state),
+  }).catch(() => {});
 }
 
 async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOptions) {
   const label = surfaceWindowLabel(moduleId);
-  surfaceLabelMap.set(label, moduleId);
 
   let win = await WebviewWindow.getByLabel(label).catch(() => null);
   if (!win) {
@@ -386,11 +386,9 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
 
     await readyPromise;
 
-    console.log('[surface-main] readyPromise resolved, showing window');
     win = await WebviewWindow.getByLabel(label).catch(() => null);
     if (win) {
       await win.show().catch(() => {});
-      syncSurfaceProjection(moduleId);
     }
     return { created: true };
   }
@@ -471,6 +469,7 @@ export function createSurfaceHostAPI(moduleId: string): SurfaceHostAPI {
     openWindow(panelId, props, options) {
       useModuleStore.getState().openSurfaceWindow(moduleId, panelId, props, options);
       globalBus.emit('surface:window-opened', { moduleId, panelId });
+      syncSurfaceProjection(moduleId);
       ensureSurfaceWindow(moduleId, options).catch(() => {});
     },
     clear() {
