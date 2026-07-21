@@ -245,12 +245,6 @@ async fn create_surface_window(
         }))
         .map_err(|e| format!("Failed to set surface window position: {}", e))?;
 
-    if options.maximized.unwrap_or(false) {
-        window
-            .maximize()
-            .map_err(|e| format!("Failed to maximize surface window: {}", e))?;
-    }
-
     Ok(())
 }
 

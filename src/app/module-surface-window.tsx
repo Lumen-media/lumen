@@ -62,6 +62,9 @@ function ModuleSurfaceWindow() {
   const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
   const [status, setStatus] = useState('booting');
 
+  const surfaceWindowsSize = useModuleStore((s) => s.surfaceWindows.size);
+  const panelsSize = useModuleStore((s) => s.panels.size);
+
   const closeWindow = useCallback(async () => {
     try {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
@@ -131,7 +134,6 @@ function ModuleSurfaceWindow() {
             state.options,
           );
           setActiveModuleId(state.moduleId);
-          void applyWindowOptions(state.options);
         }
       })
       .catch(console.error)
@@ -161,6 +163,15 @@ function ModuleSurfaceWindow() {
     };
   }, [closeWindow]);
 
+  useEffect(() => {
+    if (!activeModuleId) return;
+    const state = useModuleStore.getState().getSurfaceWindow(activeModuleId);
+    const timer = setTimeout(() => {
+      void applyWindowOptions(state?.options);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [activeModuleId]);
+
   if (!activeModuleId) {
     const label = (() => { try { return getCurrentWebviewWindow().label; } catch { return 'error'; } })();
     return (
@@ -168,8 +179,8 @@ function ModuleSurfaceWindow() {
         <p>[surface] status: {status}</p>
         <p>label: {label}</p>
         <p>activeModuleId: {activeModuleId ?? 'null'}</p>
-        <p>store surfaceWindows: {useModuleStore((s) => s.surfaceWindows.size)}</p>
-        <p>store panels: {useModuleStore((s) => s.panels.size)}</p>
+        <p>store surfaceWindows: {surfaceWindowsSize}</p>
+        <p>store panels: {panelsSize}</p>
       </div>
     );
   }
