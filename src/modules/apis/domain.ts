@@ -376,7 +376,7 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
     await invoke('create_surface_window', {
       label,
       title: options?.title ?? 'Module Window',
-      route: `/module-surface-window?moduleId=${encodeURIComponent(moduleId)}`,
+      route: `/module-surface-window#${encodeURIComponent(moduleId)}`,
       options,
     }).catch(() => {});
 
