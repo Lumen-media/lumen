@@ -14,7 +14,171 @@ function makeNamedExportWrapper(specifier: string, viteUrl: string): string {
   return `import _mod from ${JSON.stringify(viteUrl)};\n${exports}\nexport default _mod;\n`;
 }
 
-const MODULE_SDK_STUB = ` 
+const MODULE_SDK_STUB = `
+var noop = function() {};
+var stub = function(v) { return function() { return v; }; };
+var noopDisposable = { dispose: noop };
+var noopPromise = function(v) { return function() { return Promise.resolve(v); }; };
+
+export function createMockHost(overrides) {
+  var id = (overrides && overrides.meta && overrides.meta.id) || 'test-module';
+  var version = (overrides && overrides.meta && overrides.meta.version) || '0.0.0';
+  var win = (overrides && overrides.window) || 'main';
+
+  var base = {
+    meta: { id: id, version: version },
+    window: win,
+    app: { version: '0.0.0', locale: 'en-US' },
+
+    panels: {
+      add: function() { return noopDisposable; },
+    },
+
+    commands: {
+      add: function() { return noopDisposable; },
+      invoke: stub(undefined),
+      addPrefix: function() { return noopDisposable; },
+    },
+    menus: {
+      register: function() { return noopDisposable; },
+      addItem: function() { return noopDisposable; },
+    },
+    ui: {
+      notify: noop,
+      confirm: stub(Promise.resolve(false)),
+      prompt: stub(Promise.resolve(null)),
+      openCommandPalette: noop,
+      openDialog: noop,
+      openBackgroundPicker: noop,
+    },
+
+    bus: { emit: noop, on: function() { return noopDisposable; } },
+    events: { emit: noop, on: function() { return noopDisposable; } },
+
+    data: {
+      json: {
+        load: noopPromise({}),
+        save: noopPromise(),
+        get: function(_key, fallback) { return Promise.resolve(fallback); },
+        set: noopPromise(),
+        delete: noopPromise(),
+      },
+      sqlite: noopPromise({
+        exec: noopPromise(),
+        query: noopPromise([]),
+        migrate: noopPromise(),
+      }),
+    },
+    settings: {
+      register: function() { return noopDisposable; },
+      get: stub(undefined),
+      set: noop,
+      onChange: function() { return noopDisposable; },
+    },
+
+    lyrics: {
+      list: noopPromise([]),
+      get: noopPromise(null),
+      currentSlide: stub(null),
+      advance: noop,
+      back: noop,
+    },
+    queue: {
+      items: stub([]),
+      currentIndex: stub(-1),
+      add: noop, remove: noop, reorder: noop, shuffle: noop, markPlayed: noop,
+      state: stub({ items: [], currentIndex: null }),
+      onChange: function() { return noopDisposable; },
+      next: noop,
+      previous: noop,
+      goTo: noop,
+      registerTrigger: function() { return noopDisposable; },
+    },
+    library: {
+      list: noopPromise([]),
+      get: noopPromise(null),
+      metadata: noopPromise({}),
+      thumbnail: noopPromise(''),
+    },
+    player: {
+      current: stub(null),
+      state: stub('idle'),
+      play: noop, pause: noop, seek: noop,
+      volume: stub(1),
+      next: noop, prev: noop,
+    },
+    presentation: {
+      state: stub('idle'),
+      onStateChange: function() { return noopDisposable; },
+      project: noop,
+      clear: noop,
+      isWindowOpen: stub(false),
+    },
+    overlay: {
+      state: stub('idle'),
+      onStateChange: function() { return noopDisposable; },
+      project: noop,
+      clear: noop,
+      isWindowOpen: stub(false),
+    },
+    surface: {
+      state: stub(win === 'surface' ? 'live' : 'idle'),
+      onStateChange: function() { return noopDisposable; },
+      openWindow: noop,
+      clear: noop,
+      isWindowOpen: stub(win === 'surface'),
+    },
+    fonts: {
+      list: noopPromise([]),
+    },
+    themes: {
+      current: stub({ id: 'default', name: 'Default', colorMode: 'dark', accentId: 'cyan' }),
+      list: stub([]),
+      apply: noop,
+      defaultBackground: stub(null),
+      onDefaultBackgroundChange: function() { return noopDisposable; },
+    },
+
+    fs: {
+      read: noopPromise(new Uint8Array()),
+      write: noopPromise(),
+      exists: noopPromise(false),
+      list: noopPromise([]),
+      remove: noopPromise(),
+    },
+    net: {
+      request: noopPromise({ ok: false, status: 0, statusText: '', headers: {}, url: '', redirected: false, data: null }),
+    },
+    i18n: {
+      t: function(key, _params) { return key; },
+      locale: stub('en-US'),
+    },
+    log: {
+      debug: noop,
+      info: noop,
+      warn: noop,
+      error: noop,
+    },
+  };
+
+  if (!overrides) return base;
+  var merged = {};
+  var keys = Object.keys(base);
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    if (overrides[k] != null) {
+      if (typeof overrides[k] === 'object' && !Array.isArray(overrides[k]) && typeof base[k] === 'object' && !Array.isArray(base[k])) {
+        merged[k] = Object.assign({}, base[k], overrides[k]);
+      } else {
+        merged[k] = overrides[k];
+      }
+    } else {
+      merged[k] = base[k];
+    }
+  }
+  return merged;
+}
+
 export class LumenPlugin {
   constructor() {}
   async onload(_host) {}
