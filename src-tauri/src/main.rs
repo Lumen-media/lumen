@@ -491,6 +491,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             module_runtime::module_fs_exists,
             module_runtime::module_fs_list,
             module_runtime::module_fs_remove,
+            module_runtime::module_data_sqlite_open,
+            module_runtime::module_data_sqlite_exec,
+            module_runtime::module_data_sqlite_query,
+            module_runtime::module_data_sqlite_migrate,
             module_runtime::net::module_net_request,
             presentation::extract_presentation_metadata,
         ])

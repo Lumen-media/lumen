@@ -304,6 +304,190 @@ pub fn module_fs_remove(
     }
 }
 
+// ── SQLite commands ───────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct Migration {
+    pub version: i64,
+    pub up: String,
+}
+
+fn module_data_sqlite_path(app: &AppHandle, module_id: &str) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("modules")
+        .join(module_id);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("data.sqlite"))
+}
+
+fn open_sqlite(app: &AppHandle, module_id: &str) -> Result<rusqlite::Connection, String> {
+    let path = module_data_sqlite_path(app, module_id)?;
+    let conn = rusqlite::Connection::open(&path).map_err(|e| e.to_string())?;
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
+        .map_err(|e| e.to_string())?;
+    Ok(conn)
+}
+
+#[tauri::command]
+pub fn module_data_sqlite_open(
+    app: AppHandle,
+    module_id: String,
+) -> Result<(), String> {
+    open_sqlite(&app, &module_id)?;
+    Ok(())
+}
+
+fn params_to_rusqlite(params: &[serde_json::Value]) -> Vec<Box<dyn rusqlite::types::ToSql>> {
+    params
+        .iter()
+        .map(|v| match v {
+            serde_json::Value::Null => Box::new(rusqlite::types::Null) as Box<dyn rusqlite::types::ToSql>,
+            serde_json::Value::Bool(b) => Box::new(*b) as Box<dyn rusqlite::types::ToSql>,
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Box::new(i) as Box<dyn rusqlite::types::ToSql>
+                } else if let Some(f) = n.as_f64() {
+                    Box::new(f) as Box<dyn rusqlite::types::ToSql>
+                } else {
+                    Box::new(n.to_string()) as Box<dyn rusqlite::types::ToSql>
+                }
+            }
+            serde_json::Value::String(s) => Box::new(s.clone()) as Box<dyn rusqlite::types::ToSql>,
+            serde_json::Value::Array(a) => {
+                Box::new(serde_json::to_string(a).unwrap_or_default())
+                    as Box<dyn rusqlite::types::ToSql>
+            }
+            serde_json::Value::Object(o) => {
+                Box::new(serde_json::to_string(o).unwrap_or_default())
+                    as Box<dyn rusqlite::types::ToSql>
+            }
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn module_data_sqlite_exec(
+    app: AppHandle,
+    module_id: String,
+    sql: String,
+    params: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    let conn = open_sqlite(&app, &module_id)?;
+    let rusqlite_params = params_to_rusqlite(&params);
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+        rusqlite_params.iter().map(|p| p.as_ref()).collect();
+    conn.execute(&sql, param_refs.as_slice())
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn module_data_sqlite_query(
+    app: AppHandle,
+    module_id: String,
+    sql: String,
+    params: Vec<serde_json::Value>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let conn = open_sqlite(&app, &module_id)?;
+    let rusqlite_params = params_to_rusqlite(&params);
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+        rusqlite_params.iter().map(|p| p.as_ref()).collect();
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let col_count = stmt.column_count();
+    let col_names: Vec<String> = (0..col_count)
+        .map(|i| stmt.column_name(i).unwrap_or("").to_string())
+        .collect();
+
+    let rows = stmt
+        .query_map(param_refs.as_slice(), |row| {
+            let mut map = serde_json::Map::new();
+            for (i, name) in col_names.iter().enumerate() {
+                let value = row_to_json(row, i);
+                map.insert(name.clone(), value);
+            }
+            Ok(serde_json::Value::Object(map))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+fn row_to_json(row: &rusqlite::Row<'_>, i: usize) -> serde_json::Value {
+    use rusqlite::types::ValueRef;
+    match row.get_ref(i) {
+        Ok(ValueRef::Null) => serde_json::Value::Null,
+        Ok(ValueRef::Integer(v)) => serde_json::Value::Number(v.into()),
+        Ok(ValueRef::Real(v)) => {
+            if let Some(n) = serde_json::Number::from_f64(v) {
+                serde_json::Value::Number(n)
+            } else {
+                serde_json::Value::Null
+            }
+        }
+        Ok(ValueRef::Text(v)) => {
+            let s = String::from_utf8_lossy(v).to_string();
+            serde_json::Value::String(s)
+        }
+        Ok(ValueRef::Blob(v)) => serde_json::Value::String(base64_encode(v)),
+        Err(_) => serde_json::Value::Null,
+    }
+}
+
+fn base64_encode(bytes: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+#[tauri::command]
+pub fn module_data_sqlite_migrate(
+    app: AppHandle,
+    module_id: String,
+    versions: Vec<Migration>,
+) -> Result<(), String> {
+    let conn = open_sqlite(&app, &module_id)?;
+
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS _migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );",
+    )
+    .map_err(|e| e.to_string())?;
+
+    for migration in &versions {
+        let exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM _migrations WHERE version = ?",
+                [migration.version],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+
+        if exists {
+            continue;
+        }
+
+        conn.execute_batch(&migration.up)
+            .map_err(|e| format!("migration v{} failed: {}", migration.version, e))?;
+
+        conn.execute(
+            "INSERT INTO _migrations (version) VALUES (?)",
+            [migration.version],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 fn module_data_json_path(app: &AppHandle, module_id: &str) -> Result<PathBuf, String> {
     let dir = app
         .path()

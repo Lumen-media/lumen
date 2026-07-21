@@ -123,22 +123,24 @@ function ModuleOverlayWindow() {
   }, [closeWindow, toggleFullscreen]);
 
   useEffect(() => {
+    const unlisteners: (() => void)[] = [];
+
     bootPresenterModules()
       .then(() => emit('module:overlay-ready').catch(() => { }))
       .catch(console.error);
 
-    const unlistenProject = listen<{ viewId: string; props: unknown }>('module:overlay-project', (event) => {
+    listen<{ viewId: string; props: unknown }>('module:overlay-project', (event) => {
       useModuleStore.getState().projectPanel(event.payload.viewId, event.payload.props);
       const config = (event.payload.props as { windowConfig?: WindowConfig })?.windowConfig;
       void applyWindowConfig(config);
-    });
-    const unlistenClear = listen('module:overlay-clear', () => {
+    }).then((fn) => unlisteners.push(fn)).catch(() => {});
+
+    listen('module:overlay-clear', () => {
       useModuleStore.getState().clearPresenter();
-    });
+    }).then((fn) => unlisteners.push(fn)).catch(() => {});
 
     return () => {
-      unlistenProject.then((f) => f());
-      unlistenClear.then((f) => f());
+      unlisteners.forEach((fn) => { try { fn(); } catch {} });
     };
   }, []);
 
