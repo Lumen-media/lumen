@@ -110,7 +110,7 @@ function ModuleSurfaceWindow() {
       props?: unknown;
       options?: SurfaceWindowOptions;
     }>('module:surface-project', (event) => {
-      setLastEvent(JSON.stringify(event.payload));
+      setLastEvent(`RECEIVED: ${JSON.stringify(event.payload)}`);
       console.log('[surface] received module:surface-project', event.payload);
       useModuleStore
         .getState()
@@ -125,9 +125,13 @@ function ModuleSurfaceWindow() {
     })
       .then((fn) => {
         unlisteners.push(fn);
+        setLastEvent('listener_registered');
         console.log('[surface] projectListener registered');
       })
-      .catch(() => {});
+      .catch((err) => {
+        setLastEvent(`listener_error: ${err}`);
+        console.error('[surface] projectListener failed:', err);
+      });
 
     const clearListener = listen<{ moduleId: string }>('module:surface-clear', (event) => {
       useModuleStore.getState().clearSurfaceWindow(event.payload.moduleId);
@@ -141,8 +145,18 @@ function ModuleSurfaceWindow() {
 
     Promise.all([booted, projectListener, clearListener])
       .then(() => {
+        setLastEvent('all_ready');
         console.log('[surface] all ready, emitting module:surface-ready');
         return emit('module:surface-ready', { label }).catch(() => {});
+      })
+      .then(() => {
+        // self-test: emit an event and see if our own listener catches it
+        emit('module:surface-project', {
+          moduleId: 'test-self',
+          panelId: 'test',
+          props: {},
+          options: {},
+        }).catch(() => {});
       })
       .catch(console.error);
 
