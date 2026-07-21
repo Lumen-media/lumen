@@ -340,7 +340,7 @@ async function ensureOverlayWindow() {
   return { created: false };
 }
 function surfaceWindowLabel(moduleId: string) {
-  return `module-surface-window-${moduleId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  return `surface:${moduleId}`;
 }
 
 function syncSurfaceProjection(moduleId: string) {
@@ -376,7 +376,7 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
     await invoke('create_surface_window', {
       label,
       title: options?.title ?? 'Module Window',
-      route: `/module-surface-window#${encodeURIComponent(moduleId)}`,
+      route: '/module-surface-window',
       options,
     }).catch(() => {});
 

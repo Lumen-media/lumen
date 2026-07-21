@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { emit, listen } from '@tauri-apps/api/event';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useCallback, useEffect, useMemo } from 'react';
 import { SurfaceWindowSlot } from '@/modules/components/SurfaceWindowSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
@@ -40,7 +41,8 @@ export const Route = createFileRoute('/module-surface-window')({
 
 function ModuleSurfaceWindow() {
   const moduleId = useMemo(() => {
-    return decodeURIComponent(window.location.hash.slice(1)) || '';
+    const label = getCurrentWebviewWindow().label;
+    return label.startsWith('surface:') ? label.slice('surface:'.length) : '';
   }, []);
 
   const closeWindow = useCallback(async () => {
