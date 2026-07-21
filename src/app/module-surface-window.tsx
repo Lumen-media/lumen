@@ -40,8 +40,7 @@ export const Route = createFileRoute('/module-surface-window')({
 
 function ModuleSurfaceWindow() {
   const moduleId = useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('moduleId') ?? '';
+    return decodeURIComponent(window.location.hash.slice(1)) || '';
   }, []);
 
   const closeWindow = useCallback(async () => {
