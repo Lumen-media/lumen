@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { ModuleRecord, ModuleStatus, PanelSpec, QueueTriggerSpec } from './types';
+import type { ModuleRecord, ModuleStatus, PanelSpec, QueueTriggerSpec, SurfaceWindowOptions } from './types';
+
+export interface ModuleSurfaceState {
+  moduleId: string;
+  panelId: string;
+  props?: unknown;
+  options?: SurfaceWindowOptions;
+}
 
 interface ModuleStore {
   modules: Map<string, ModuleRecord>;
@@ -8,6 +15,7 @@ interface ModuleStore {
   openDialogId: string | null;
   presenterViewId: string | null;
   presenterProps: unknown;
+  surfaceWindows: Map<string, ModuleSurfaceState>;
 
   registerModule(record: ModuleRecord): void;
   setStatus(id: string, status: ModuleStatus, error?: string): void;
@@ -26,6 +34,9 @@ interface ModuleStore {
   closeDialog(): void;
   projectPanel(viewId: string, props?: unknown): void;
   clearPresenter(): void;
+  openSurfaceWindow(moduleId: string, panelId: string, props?: unknown, options?: SurfaceWindowOptions): void;
+  clearSurfaceWindow(moduleId: string): void;
+  getSurfaceWindow(moduleId: string): ModuleSurfaceState | null;
 }
 
 export const useModuleStore = create<ModuleStore>((set, get) => ({
@@ -35,6 +46,7 @@ export const useModuleStore = create<ModuleStore>((set, get) => ({
   openDialogId: null,
   presenterViewId: null,
   presenterProps: undefined,
+  surfaceWindows: new Map(),
 
   registerModule(record) {
     set((s) => {
@@ -73,9 +85,11 @@ export const useModuleStore = create<ModuleStore>((set, get) => ({
     set((s) => {
       const nextModules = new Map(s.modules);
       const nextPanels = new Map(s.panels);
+      const nextSurfaceWindows = new Map(s.surfaceWindows);
       nextModules.delete(id);
       nextPanels.delete(id);
-      return { modules: nextModules, panels: nextPanels };
+      nextSurfaceWindows.delete(id);
+      return { modules: nextModules, panels: nextPanels, surfaceWindows: nextSurfaceWindows };
     });
   },
 
@@ -138,6 +152,26 @@ export const useModuleStore = create<ModuleStore>((set, get) => ({
 
   clearPresenter() {
     set({ presenterViewId: null, presenterProps: undefined });
+  },
+
+  openSurfaceWindow(moduleId, panelId, props, options) {
+    set((s) => {
+      const next = new Map(s.surfaceWindows);
+      next.set(moduleId, { moduleId, panelId, props, options });
+      return { surfaceWindows: next };
+    });
+  },
+
+  clearSurfaceWindow(moduleId) {
+    set((s) => {
+      const next = new Map(s.surfaceWindows);
+      next.delete(moduleId);
+      return { surfaceWindows: next };
+    });
+  },
+
+  getSurfaceWindow(moduleId) {
+    return get().surfaceWindows.get(moduleId) ?? null;
   },
 
   getPanelsForSlot(slot) {
