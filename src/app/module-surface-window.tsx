@@ -153,7 +153,14 @@ function ModuleSurfaceWindow() {
     };
   }, [closeWindow]);
 
-  if (!activeModuleId) return null;
+  if (!activeModuleId) {
+    return (
+      <div style={{ color: 'lime', background: '#111', padding: 40, fontFamily: 'monospace', fontSize: 18 }}>
+        <p>[surface] waiting for project event...</p>
+        <p>label: {(() => { try { return getCurrentWebviewWindow().label; } catch { return 'error'; } })()}</p>
+      </div>
+    );
+  }
 
   return <SurfaceWindowSlot moduleId={activeModuleId} />;
 }
