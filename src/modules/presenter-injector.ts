@@ -14,6 +14,7 @@ export async function bootPresenterModules(window: 'presenter' | 'surface' = 'pr
 
   for (const { manifest } of manifests) {
     try {
+      console.log('[bootPresenterModules] loading', manifest.id);
       const res = await fetch(`/__modules/${manifest.id}/${manifest.entry}?t=${Date.now()}`);
       if (!res.ok) continue;
 
