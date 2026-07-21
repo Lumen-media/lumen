@@ -14,7 +14,7 @@ use super::ModuleRuntime;
 // ── Types ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "UPPERCASE")]
 pub enum NetMethod {
     Get,
     Post,
