@@ -340,8 +340,10 @@ async function ensureOverlayWindow() {
   return { created: false };
 }
 function surfaceWindowLabel(moduleId: string) {
-  return `surface:${moduleId}`;
+  return `surface-${moduleId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 }
+
+const surfaceLabelMap = new Map<string, string>();
 
 function syncSurfaceProjection(moduleId: string) {
   const state = useModuleStore.getState().getSurfaceWindow(moduleId);
@@ -352,6 +354,8 @@ function syncSurfaceProjection(moduleId: string) {
 
 async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOptions) {
   const label = surfaceWindowLabel(moduleId);
+  surfaceLabelMap.set(label, moduleId);
+
   let win = await WebviewWindow.getByLabel(label).catch(() => null);
   if (!win) {
     const readyPromise = new Promise<void>((resolve) => {
@@ -361,8 +365,8 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
         settled = true;
         resolve();
       };
-      listen<{ moduleId: string }>('module:surface-ready', (event) => {
-        if (event.payload.moduleId === moduleId) finish();
+      listen<{ label: string }>('module:surface-ready', (event) => {
+        if (event.payload.label === label) finish();
       })
         .then((unlisten) => {
           setTimeout(() => {
