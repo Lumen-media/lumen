@@ -104,6 +104,12 @@ function ModuleSurfaceWindow() {
     const booted = bootPresenterModules('surface')
       .then(() => console.log('[surface] modules booted'));
 
+    listen('__surface_self_test', (event) => {
+      setLastEvent(`SELF_TEST_OK: ${JSON.stringify(event.payload)}`);
+    }).catch((err) => {
+      setLastEvent(`self_test_listen_error: ${err}`);
+    });
+
     const projectListener = listen<{
       moduleId: string;
       panelId: string;
@@ -150,13 +156,11 @@ function ModuleSurfaceWindow() {
         return emit('module:surface-ready', { label }).catch(() => {});
       })
       .then(() => {
-        // self-test: emit an event and see if our own listener catches it
-        emit('module:surface-project', {
-          moduleId: 'test-self',
-          panelId: 'test',
-          props: {},
-          options: {},
-        }).catch(() => {});
+        // self-test: try listening before emitting
+        emit('__surface_self_test', { ts: Date.now() }).catch(() => {});
+        setTimeout(() => {
+          emit('__surface_self_test', { ts: Date.now(), delayed: true }).catch(() => {});
+        }, 100);
       })
       .catch(console.error);
 
