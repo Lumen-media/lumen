@@ -18,6 +18,8 @@ import type {
   PlayerHostAPI,
   PresentationHostAPI,
   OverlayHostAPI,
+  SurfaceHostAPI,
+  SurfaceWindowOptions,
   QueueHostAPI,
   StageBackdropChangeDetail,
   ThemesHostAPI,
@@ -254,6 +256,15 @@ listen('module:overlay-window-closed', () => {
   globalBus.emit('overlay:clear');
 }).catch(() => {});
 
+listen<{ moduleId: string; panelId?: string }>('module:surface-window-closed', (event) => {
+  const state = useModuleStore.getState().getSurfaceWindow(event.payload.moduleId);
+  useModuleStore.getState().clearSurfaceWindow(event.payload.moduleId);
+  globalBus.emit('surface:window-closed', {
+    moduleId: event.payload.moduleId,
+    panelId: event.payload.panelId ?? state?.panelId,
+  });
+}).catch(() => {});
+
 let overlayViewId: string | null = null;
 let overlayProps: unknown;
 
@@ -328,6 +339,61 @@ async function ensureOverlayWindow() {
   syncOverlayProjection();
   return { created: false };
 }
+function surfaceWindowLabel(moduleId: string) {
+  return `module-surface-window-${moduleId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+}
+
+function syncSurfaceProjection(moduleId: string) {
+  const state = useModuleStore.getState().getSurfaceWindow(moduleId);
+  if (!state) return;
+  emit('module:surface-project', state).catch(() => {});
+}
+
+async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOptions) {
+  const label = surfaceWindowLabel(moduleId);
+  let win = await WebviewWindow.getByLabel(label).catch(() => null);
+  if (!win) {
+    await invoke('create_surface_window', {
+      label,
+      title: options?.title ?? 'Module Window',
+      route: `/module-surface-window?moduleId=${encodeURIComponent(moduleId)}`,
+      options,
+    }).catch(() => {});
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      listen<{ moduleId: string }>('module:surface-ready', (event) => {
+        if (event.payload.moduleId === moduleId) finish();
+      })
+        .then((unlisten) => {
+          setTimeout(() => {
+            unlisten();
+            finish();
+          }, 8000);
+        })
+        .catch(() => finish());
+    });
+
+    win = await WebviewWindow.getByLabel(label).catch(() => null);
+    if (win) {
+      await win.show().catch(() => {});
+      syncSurfaceProjection(moduleId);
+    }
+    return { created: true };
+  }
+
+  const visible = await win.isVisible().catch(() => false);
+  if (!visible) await win.show().catch(() => {});
+  await win.setFocus().catch(() => {});
+  syncSurfaceProjection(moduleId);
+  return { created: false };
+}
+
 export function createPresentationHostAPI(): PresentationHostAPI {
   let openedByModule = false;
 
@@ -371,6 +437,45 @@ export function createPresentationHostAPI(): PresentationHostAPI {
     },
     isWindowOpen() {
       return useModuleStore.getState().presenterViewId !== null;
+    },
+  };
+}
+
+export function createSurfaceHostAPI(moduleId: string): SurfaceHostAPI {
+  return {
+    state() {
+      return useModuleStore.getState().getSurfaceWindow(moduleId) ? 'live' : 'idle';
+    },
+    onStateChange(handler) {
+      const onOpen = globalBus.on<{ moduleId: string }>('surface:window-opened', (payload) => {
+        if (payload.moduleId === moduleId) handler('live');
+      });
+      const onClose = globalBus.on<{ moduleId: string }>('surface:window-closed', (payload) => {
+        if (payload.moduleId === moduleId) handler('idle');
+      });
+      return {
+        dispose() {
+          onOpen.dispose();
+          onClose.dispose();
+        },
+      };
+    },
+    openWindow(panelId, props, options) {
+      useModuleStore.getState().openSurfaceWindow(moduleId, panelId, props, options);
+      globalBus.emit('surface:window-opened', { moduleId, panelId });
+      ensureSurfaceWindow(moduleId, options).catch(() => {});
+    },
+    clear() {
+      const state = useModuleStore.getState().getSurfaceWindow(moduleId);
+      useModuleStore.getState().clearSurfaceWindow(moduleId);
+      globalBus.emit('surface:window-closed', { moduleId, panelId: state?.panelId });
+      emit('module:surface-clear', { moduleId }).catch(() => {});
+      WebviewWindow.getByLabel(surfaceWindowLabel(moduleId))
+        .then((w) => w?.close())
+        .catch(() => {});
+    },
+    isWindowOpen() {
+      return useModuleStore.getState().getSurfaceWindow(moduleId) !== null;
     },
   };
 }

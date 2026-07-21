@@ -10,6 +10,7 @@ import {
   createOverlayHostAPI,
   createPresentationHostAPI,
   createQueueHostAPI,
+  createSurfaceHostAPI,
   createThemesHostAPI,
 } from './apis/domain';
 import { createFontsAPI } from './apis/fonts';
@@ -52,6 +53,7 @@ export async function createHost(
     player: createPlayerHostAPI(),
     presentation: createPresentationHostAPI(),
     overlay: createOverlayHostAPI(),
+    surface: createSurfaceHostAPI(id),
     themes: createThemesHostAPI(),
     fonts: createFontsAPI(),
 

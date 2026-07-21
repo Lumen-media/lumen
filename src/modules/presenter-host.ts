@@ -10,12 +10,15 @@ const noop = () => {};
 const stub = <T>(v: T) => () => v;
 const noopDisposable: Disposable = { dispose: noop };
 
-export async function createPresenterHost(manifest: ModuleManifest): Promise<LumenHost> {
+export async function createPresenterHost(
+  manifest: ModuleManifest,
+  window: 'presenter' | 'surface' = 'presenter',
+): Promise<LumenHost> {
   const id = manifest.id;
 
   return {
     meta: { id, version: manifest.version },
-    window: 'presenter',
+    window,
     app: { version: '0.0.0', locale: navigator.language },
 
     panels: createPanelsAPI(id),
@@ -93,6 +96,13 @@ export async function createPresenterHost(manifest: ModuleManifest): Promise<Lum
       project: noop,
       clear: noop,
       isWindowOpen: stub(false),
+    },
+    surface: {
+      state: stub(window === 'surface' ? 'live' as const : 'idle' as const),
+      onStateChange: () => noopDisposable,
+      openWindow: noop,
+      clear: noop,
+      isWindowOpen: stub(window === 'surface'),
     },
     fonts: {
       list: stub(Promise.resolve([] as string[])),
