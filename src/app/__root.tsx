@@ -15,7 +15,7 @@ export const Route = createRootRoute({
   component: RootComponent,
 });
 
-const AUXILIARY_WINDOW_PATHS = new Set(['/media-window', '/module-overlay-window']);
+const AUXILIARY_WINDOW_PATHS = new Set(['/media-window', '/module-overlay-window', '/module-surface-window']);
 
 function RootComponent() {
   const isAuxiliaryWindow = AUXILIARY_WINDOW_PATHS.has(window.location.pathname);
