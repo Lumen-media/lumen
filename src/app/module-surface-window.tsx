@@ -41,6 +41,7 @@ export const Route = createFileRoute('/module-surface-window')({
 
 function ModuleSurfaceWindow() {
   const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
+  const [lastEvent, setLastEvent] = useState<string>('none');
 
   const closeWindow = useCallback(async () => {
     try {
@@ -109,6 +110,7 @@ function ModuleSurfaceWindow() {
       props?: unknown;
       options?: SurfaceWindowOptions;
     }>('module:surface-project', (event) => {
+      setLastEvent(JSON.stringify(event.payload));
       console.log('[surface] received module:surface-project', event.payload);
       useModuleStore
         .getState()
@@ -158,6 +160,10 @@ function ModuleSurfaceWindow() {
       <div style={{ color: 'lime', background: '#111', padding: 40, fontFamily: 'monospace', fontSize: 18 }}>
         <p>[surface] waiting for project event...</p>
         <p>label: {(() => { try { return getCurrentWebviewWindow().label; } catch { return 'error'; } })()}</p>
+        <p>activeModuleId: {activeModuleId ?? 'null'}</p>
+        <p>store surfaceWindows: {useModuleStore((s) => s.surfaceWindows.size)}</p>
+        <p>store panels: {useModuleStore((s) => s.panels.size)}</p>
+        <p>lastEvent: {lastEvent}</p>
       </div>
     );
   }
