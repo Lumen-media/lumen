@@ -353,14 +353,7 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
   const label = surfaceWindowLabel(moduleId);
   let win = await WebviewWindow.getByLabel(label).catch(() => null);
   if (!win) {
-    await invoke('create_surface_window', {
-      label,
-      title: options?.title ?? 'Module Window',
-      route: `/module-surface-window?moduleId=${encodeURIComponent(moduleId)}`,
-      options,
-    }).catch(() => {});
-
-    await new Promise<void>((resolve) => {
+    const readyPromise = new Promise<void>((resolve) => {
       let settled = false;
       const finish = () => {
         if (settled) return;
@@ -378,6 +371,15 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
         })
         .catch(() => finish());
     });
+
+    await invoke('create_surface_window', {
+      label,
+      title: options?.title ?? 'Module Window',
+      route: `/module-surface-window?moduleId=${encodeURIComponent(moduleId)}`,
+      options,
+    }).catch(() => {});
+
+    await readyPromise;
 
     win = await WebviewWindow.getByLabel(label).catch(() => null);
     if (win) {
