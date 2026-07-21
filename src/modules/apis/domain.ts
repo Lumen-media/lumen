@@ -345,6 +345,7 @@ function surfaceWindowLabel(moduleId: string) {
 
 function syncSurfaceProjection(moduleId: string) {
   const state = useModuleStore.getState().getSurfaceWindow(moduleId);
+  console.log('[surface-main] syncSurfaceProjection', { moduleId, hasState: !!state });
   if (!state) return;
   emit('module:surface-project', state).catch(() => {});
 }
@@ -381,6 +382,7 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
 
     await readyPromise;
 
+    console.log('[surface-main] readyPromise resolved, showing window');
     win = await WebviewWindow.getByLabel(label).catch(() => null);
     if (win) {
       await win.show().catch(() => {});
