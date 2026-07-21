@@ -90,10 +90,15 @@ function ModuleSurfaceWindow() {
   }, [closeWindow]);
 
   useEffect(() => {
-    if (!moduleId) return;
+    if (!moduleId) {
+      console.warn('[surface] no moduleId in URL');
+      return;
+    }
+    console.log('[surface] booting moduleId:', moduleId);
     const unlisteners: (() => void)[] = [];
 
-    const booted = bootPresenterModules('surface');
+    const booted = bootPresenterModules('surface')
+      .then(() => console.log('[surface] modules booted'));
 
     const projectListener = listen<{
       moduleId: string;
@@ -101,7 +106,11 @@ function ModuleSurfaceWindow() {
       props?: unknown;
       options?: SurfaceWindowOptions;
     }>('module:surface-project', (event) => {
-      if (event.payload.moduleId !== moduleId) return;
+      console.log('[surface] received module:surface-project', event.payload);
+      if (event.payload.moduleId !== moduleId) {
+        console.warn('[surface] moduleId mismatch, expected:', moduleId, 'got:', event.payload.moduleId);
+        return;
+      }
       useModuleStore
         .getState()
         .openSurfaceWindow(
@@ -114,6 +123,7 @@ function ModuleSurfaceWindow() {
     })
       .then((fn) => {
         unlisteners.push(fn);
+        console.log('[surface] projectListener registered');
       })
       .catch(() => {});
 
@@ -128,7 +138,10 @@ function ModuleSurfaceWindow() {
       .catch(() => {});
 
     Promise.all([booted, projectListener, clearListener])
-      .then(() => emit('module:surface-ready', { moduleId }).catch(() => {}))
+      .then(() => {
+        console.log('[surface] all ready, emitting module:surface-ready');
+        return emit('module:surface-ready', { moduleId }).catch(() => {});
+      })
       .catch(console.error);
 
     return () => {

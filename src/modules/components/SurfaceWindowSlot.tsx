@@ -18,7 +18,22 @@ export function SurfaceWindowSlot({ moduleId }: SurfaceWindowSlotProps) {
     return specs.find((p) => p.id === active.panelId && p.slot === 'surface.window') ?? null;
   });
 
+  const allPanels = useModuleStore((s) => s.panels.get(moduleId));
+
   const clearSurfaceWindow = useModuleStore((s) => s.clearSurfaceWindow);
+
+  if (!state || !spec) {
+    console.log('[SurfaceWindowSlot] not rendering', {
+      moduleId,
+      hasState: !!state,
+      hasSpec: !!spec,
+      statePanelId: state?.panelId,
+      panelCount: allPanels?.length ?? 0,
+      panelIds: allPanels?.map(p => p.id),
+      panelSlots: allPanels?.map(p => p.slot),
+    });
+    return null;
+  }
 
   const close = useCallback(async () => {
     clearSurfaceWindow(moduleId);
