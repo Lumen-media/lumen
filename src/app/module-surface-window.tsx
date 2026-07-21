@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { SurfaceWindowSlot } from '@/modules/components/SurfaceWindowSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
@@ -40,10 +40,7 @@ export const Route = createFileRoute('/module-surface-window')({
 });
 
 function ModuleSurfaceWindow() {
-  const moduleId = useMemo(() => {
-    const label = getCurrentWebviewWindow().label;
-    return label.startsWith('surface:') ? label.slice('surface:'.length) : '';
-  }, []);
+  const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
 
   const closeWindow = useCallback(async () => {
     try {
@@ -55,29 +52,29 @@ function ModuleSurfaceWindow() {
   }, []);
 
   useEffect(() => {
-    if (!moduleId) return;
     let detachCloseListener: (() => void) | undefined;
 
     import('@tauri-apps/api/window')
       .then(({ getCurrentWindow }) =>
         getCurrentWindow().onCloseRequested(() => {
-          const state = useModuleStore.getState().getSurfaceWindow(moduleId);
-          emit('module:surface-window-closed', { moduleId, panelId: state?.panelId }).catch(
-            () => {},
-          );
+          if (activeModuleId) {
+            const state = useModuleStore.getState().getSurfaceWindow(activeModuleId);
+            emit('module:surface-window-closed', {
+              moduleId: activeModuleId,
+              panelId: state?.panelId,
+            }).catch(() => {});
+          }
         }),
       )
       .then((unlisten) => {
         detachCloseListener = unlisten;
       })
-      .catch((error) => {
-        console.error('Failed to bind surface close listener:', error);
-      });
+      .catch(() => {});
 
     return () => {
       detachCloseListener?.();
     };
-  }, [moduleId]);
+  }, [activeModuleId]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -91,12 +88,17 @@ function ModuleSurfaceWindow() {
   }, [closeWindow]);
 
   useEffect(() => {
-    if (!moduleId) {
-      console.warn('[surface] no moduleId in URL');
-      return;
-    }
-    console.log('[surface] booting moduleId:', moduleId);
     const unlisteners: (() => void)[] = [];
+
+    let label = '';
+    try {
+      label = getCurrentWebviewWindow().label;
+    } catch {
+      console.error('[surface] failed to get window label');
+      label = 'unknown';
+    }
+
+    console.log('[surface] booting, label:', label);
 
     const booted = bootPresenterModules('surface')
       .then(() => console.log('[surface] modules booted'));
@@ -108,10 +110,6 @@ function ModuleSurfaceWindow() {
       options?: SurfaceWindowOptions;
     }>('module:surface-project', (event) => {
       console.log('[surface] received module:surface-project', event.payload);
-      if (event.payload.moduleId !== moduleId) {
-        console.warn('[surface] moduleId mismatch, expected:', moduleId, 'got:', event.payload.moduleId);
-        return;
-      }
       useModuleStore
         .getState()
         .openSurfaceWindow(
@@ -120,6 +118,7 @@ function ModuleSurfaceWindow() {
           event.payload.props,
           event.payload.options,
         );
+      setActiveModuleId(event.payload.moduleId);
       void applyWindowOptions(event.payload.options);
     })
       .then((fn) => {
@@ -129,8 +128,8 @@ function ModuleSurfaceWindow() {
       .catch(() => {});
 
     const clearListener = listen<{ moduleId: string }>('module:surface-clear', (event) => {
-      if (event.payload.moduleId !== moduleId) return;
-      useModuleStore.getState().clearSurfaceWindow(moduleId);
+      useModuleStore.getState().clearSurfaceWindow(event.payload.moduleId);
+      setActiveModuleId(null);
       void closeWindow();
     })
       .then((fn) => {
@@ -141,7 +140,7 @@ function ModuleSurfaceWindow() {
     Promise.all([booted, projectListener, clearListener])
       .then(() => {
         console.log('[surface] all ready, emitting module:surface-ready');
-        return emit('module:surface-ready', { moduleId }).catch(() => {});
+        return emit('module:surface-ready', { label }).catch(() => {});
       })
       .catch(console.error);
 
@@ -152,9 +151,9 @@ function ModuleSurfaceWindow() {
         } catch {}
       });
     };
-  }, [closeWindow, moduleId]);
+  }, [closeWindow]);
 
-  if (!moduleId) return null;
+  if (!activeModuleId) return null;
 
-  return <SurfaceWindowSlot moduleId={moduleId} />;
+  return <SurfaceWindowSlot moduleId={activeModuleId} />;
 }
