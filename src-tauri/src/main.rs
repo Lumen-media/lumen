@@ -234,7 +234,6 @@ async fn create_surface_window(
     .fullscreen(options.fullscreen.unwrap_or(false))
     .inner_size(width, height)
     .min_inner_size(min_width, min_height)
-    .visible(false)
     .build()
     .map_err(|e| format!("Failed to create surface window: {}", e))?;
 
