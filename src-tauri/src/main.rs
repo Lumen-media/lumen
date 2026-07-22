@@ -223,6 +223,8 @@ async fn create_surface_window(
     let min_width = options.min_width.unwrap_or(720.0);
     let min_height = options.min_height.unwrap_or(480.0);
 
+    let maximized = options.maximized.unwrap_or(false);
+
     let window = tauri::WebviewWindowBuilder::new(
         &app_handle,
         &label,
@@ -234,16 +236,19 @@ async fn create_surface_window(
     .fullscreen(options.fullscreen.unwrap_or(false))
     .inner_size(width, height)
     .min_inner_size(min_width, min_height)
+    .maximized(maximized)
     .visible(false)
     .build()
     .map_err(|e| format!("Failed to create surface window: {}", e))?;
 
-    window
-        .set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-            x: main_position.x + 120,
-            y: main_position.y + 120,
-        }))
-        .map_err(|e| format!("Failed to set surface window position: {}", e))?;
+    if !maximized {
+        window
+            .set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                x: main_position.x + 120,
+                y: main_position.y + 120,
+            }))
+            .map_err(|e| format!("Failed to set surface window position: {}", e))?;
+    }
 
     Ok(())
 }

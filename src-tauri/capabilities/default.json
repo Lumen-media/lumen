@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "media-window",
-    "module-overlay-window"
+    "module-overlay-window",
+    "surface-*"
   ],
   "permissions": [
     "core:default",
