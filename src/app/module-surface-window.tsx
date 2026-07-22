@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useCallback, useEffect, useState } from 'react';
 import { SurfaceWindowSlot } from '@/modules/components/SurfaceWindowSlot';
-import { bootPresenterModules } from '@/modules/presenter-injector';
+import { bootSingleModule } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
 import type { SurfaceWindowOptions } from '@/modules/types';
 
@@ -86,18 +86,20 @@ function ModuleSurfaceWindow() {
       label = 'unknown';
     }
 
-    bootPresenterModules('surface')
-      .then(() => waitForSurfaceState(label))
+    waitForSurfaceState(label)
       .then((state) => {
-        if (state) {
-          useModuleStore.getState().openSurfaceWindow(
-            state.moduleId,
-            state.panelId,
-            state.props,
-            state.options,
-          );
-          setActiveModuleId(state.moduleId);
-        }
+        if (!state) return;
+        return bootSingleModule(state.moduleId, 'surface').then(() => state);
+      })
+      .then((state) => {
+        if (!state) return;
+        useModuleStore.getState().openSurfaceWindow(
+          state.moduleId,
+          state.panelId,
+          state.props,
+          state.options,
+        );
+        setActiveModuleId(state.moduleId);
       })
       .catch(console.error)
       .finally(() => {
