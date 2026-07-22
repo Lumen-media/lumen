@@ -14,24 +14,47 @@ export async function bootPresenterModules(window: 'presenter' | 'surface' = 'pr
 
   for (const { manifest } of manifests) {
     try {
-      const res = await fetch(`/__modules/${manifest.id}/${manifest.entry}?t=${Date.now()}`);
-      if (!res.ok) continue;
-
-      const code = await res.text();
-      const blob = new Blob([code], { type: 'application/javascript' });
-      const blobUrl = URL.createObjectURL(blob);
-
-      try {
-        const mod = await import(/* @vite-ignore */ blobUrl) as { default: new () => LumenPlugin };
-        const plugin = new mod.default();
-        plugin.manifest = manifest;
-        const host = await createPresenterHost(manifest, window);
-        await plugin.onload(host);
-      } finally {
-        URL.revokeObjectURL(blobUrl);
-      }
+      await loadAndBootModule(manifest, window);
     } catch (err) {
       console.error(`[presenter] failed to load module ${manifest.id}:`, err);
     }
+  }
+}
+
+export async function bootSingleModule(moduleId: string, window: 'presenter' | 'surface' = 'surface') {
+  let manifests: Array<{ manifest: ModuleManifest }> = [];
+
+  try {
+    manifests = await invoke<Array<{ manifest: ModuleManifest; source: string }>>('module_list_installed');
+  } catch (err) {
+    console.error('[surface] failed to list modules:', err);
+    return;
+  }
+
+  const target = manifests.find((m) => m.manifest.id === moduleId);
+  if (!target) {
+    console.error(`[surface] module not found: ${moduleId}`);
+    return;
+  }
+
+  await loadAndBootModule(target.manifest, window);
+}
+
+async function loadAndBootModule(manifest: ModuleManifest, window: 'presenter' | 'surface') {
+  const res = await fetch(`/__modules/${manifest.id}/${manifest.entry}?t=${Date.now()}`);
+  if (!res.ok) return;
+
+  const code = await res.text();
+  const blob = new Blob([code], { type: 'application/javascript' });
+  const blobUrl = URL.createObjectURL(blob);
+
+  try {
+    const mod = await import(/* @vite-ignore */ blobUrl) as { default: new () => LumenPlugin };
+    const plugin = new mod.default();
+    plugin.manifest = manifest;
+    const host = await createPresenterHost(manifest, window);
+    await plugin.onload(host);
+  } finally {
+    URL.revokeObjectURL(blobUrl);
   }
 }
