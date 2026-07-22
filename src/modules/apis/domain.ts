@@ -389,6 +389,8 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
     win = await WebviewWindow.getByLabel(label).catch(() => null);
     if (win) {
       await win.show().catch(() => {});
+      if (options?.maximized) await win.maximize().catch(() => {});
+      if (options?.title) await win.setTitle(options.title).catch(() => {});
     }
     return { created: true };
   }
@@ -396,6 +398,8 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
   const visible = await win.isVisible().catch(() => false);
   if (!visible) await win.show().catch(() => {});
   await win.setFocus().catch(() => {});
+  if (options?.maximized) await win.maximize().catch(() => {});
+  if (options?.title) await win.setTitle(options.title).catch(() => {});
   syncSurfaceProjection(moduleId);
   return { created: false };
 }
