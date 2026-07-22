@@ -8,34 +8,6 @@ import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
 import type { SurfaceWindowOptions } from '@/modules/types';
 
-async function applyWindowOptions(options?: SurfaceWindowOptions) {
-  if (!options) return;
-  try {
-    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-    const { PhysicalSize } = await import('@tauri-apps/api/dpi');
-    const w = getCurrentWebviewWindow();
-
-    if (options.title) await w.setTitle(options.title);
-    if (options.decorations !== undefined) await w.setDecorations(options.decorations);
-    if (options.resizable !== undefined) await w.setResizable(options.resizable);
-    if (options.width !== undefined && options.height !== undefined) {
-      await w.setSize(new PhysicalSize(options.width, options.height));
-    }
-    if (options.minWidth !== undefined || options.minHeight !== undefined) {
-      await w.setMinSize(
-        new PhysicalSize(
-          options.minWidth ?? options.width ?? 720,
-          options.minHeight ?? options.height ?? 480,
-        ),
-      );
-    }
-    if (options.maximized) await w.maximize();
-    if (options.fullscreen !== undefined) await w.setFullscreen(options.fullscreen);
-  } catch (error) {
-    console.error('Failed to apply surface window options:', error);
-  }
-}
-
 interface SurfaceProjectState {
   moduleId: string;
   panelId: string;
@@ -60,10 +32,6 @@ export const Route = createFileRoute('/module-surface-window')({
 
 function ModuleSurfaceWindow() {
   const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
-  const [status, setStatus] = useState('booting');
-
-  const surfaceWindowsSize = useModuleStore((s) => s.surfaceWindows.size);
-  const panelsSize = useModuleStore((s) => s.panels.size);
 
   const closeWindow = useCallback(async () => {
     try {
@@ -111,20 +79,15 @@ function ModuleSurfaceWindow() {
   }, [closeWindow]);
 
   useEffect(() => {
-    let label = 'unknown';
+    let label = '';
     try {
       label = getCurrentWebviewWindow().label;
     } catch {
       label = 'unknown';
     }
 
-    setStatus('loading modules');
-
     bootPresenterModules('surface')
-      .then(() => {
-        setStatus('waiting for state');
-        return waitForSurfaceState(label);
-      })
+      .then(() => waitForSurfaceState(label))
       .then((state) => {
         if (state) {
           useModuleStore.getState().openSurfaceWindow(
@@ -163,27 +126,7 @@ function ModuleSurfaceWindow() {
     };
   }, [closeWindow]);
 
-  useEffect(() => {
-    if (!activeModuleId) return;
-    const state = useModuleStore.getState().getSurfaceWindow(activeModuleId);
-    const timer = setTimeout(() => {
-      void applyWindowOptions(state?.options);
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [activeModuleId]);
-
-  if (!activeModuleId) {
-    const label = (() => { try { return getCurrentWebviewWindow().label; } catch { return 'error'; } })();
-    return (
-      <div style={{ color: 'lime', background: '#111', padding: 40, fontFamily: 'monospace', fontSize: 18 }}>
-        <p>[surface] status: {status}</p>
-        <p>label: {label}</p>
-        <p>activeModuleId: {activeModuleId ?? 'null'}</p>
-        <p>store surfaceWindows: {surfaceWindowsSize}</p>
-        <p>store panels: {panelsSize}</p>
-      </div>
-    );
-  }
+  if (!activeModuleId) return null;
 
   return <SurfaceWindowSlot moduleId={activeModuleId} />;
 }
