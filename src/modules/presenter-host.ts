@@ -4,6 +4,7 @@ import { createI18nAPI } from './apis/i18n';
 import { createLoggerAPI } from './apis/logger';
 import { createNetAPI } from './apis/net';
 import { createPanelsAPI } from './apis/panels';
+import { emit } from '@tauri-apps/api/event';
 import type { Disposable, LumenHost, ModuleManifest } from './types';
 
 const noop = () => {};
@@ -84,11 +85,21 @@ export async function createPresenterHost(
       next: noop, prev: noop,
     },
     presentation: {
-      state: stub('live' as const),
+      state: stub('idle' as const),
       onStateChange: () => noopDisposable,
-      project: noop,
-      clear: noop,
-      isWindowOpen: stub(true),
+      project:
+        window === 'surface'
+          ? (viewId: string, props?: unknown) => {
+              emit('module:surface-presenter-project', { viewId, props }).catch(() => {});
+            }
+          : noop,
+      clear:
+        window === 'surface'
+          ? () => {
+              emit('module:surface-presenter-clear').catch(() => {});
+            }
+          : noop,
+      isWindowOpen: stub(false),
     },
     overlay: {
       state: stub('idle' as const),
@@ -100,7 +111,7 @@ export async function createPresenterHost(
     surface: {
       state: stub(window === 'surface' ? 'live' as const : 'idle' as const),
       onStateChange: () => noopDisposable,
-      openWindow: noop,
+      openWindow: async () => {},
       clear: noop,
       isWindowOpen: stub(window === 'surface'),
     },

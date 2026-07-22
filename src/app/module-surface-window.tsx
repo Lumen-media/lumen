@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { emit } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SurfaceWindowSlot } from '@/modules/components/SurfaceWindowSlot';
 import { bootSingleModule } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
@@ -21,7 +21,7 @@ async function waitForSurfaceState(label: string): Promise<SurfaceProjectState |
     if (json) {
       return JSON.parse(json) as SurfaceProjectState;
     }
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 50));
   }
   return null;
 }
@@ -32,10 +32,25 @@ export const Route = createFileRoute('/module-surface-window')({
 
 function ModuleSurfaceWindow() {
   const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
+  const readyEmitted = useRef(false);
+  const booted = useRef(false);
+  const activeModuleIdRef = useRef<string | null>(null);
+  activeModuleIdRef.current = activeModuleId;
+
+  const emitReady = useCallback(() => {
+    if (readyEmitted.current) return;
+    readyEmitted.current = true;
+    let label = '';
+    try {
+      label = getCurrentWebviewWindow().label;
+    } catch {
+      return;
+    }
+    emit('module:surface-ready', { label }).catch(() => {});
+  }, []);
 
   const closeWindow = useCallback(async () => {
     try {
-      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
       await getCurrentWebviewWindow().close();
     } catch (error) {
       console.error('Failed to close surface window:', error);
@@ -44,28 +59,31 @@ function ModuleSurfaceWindow() {
 
   useEffect(() => {
     let detachCloseListener: (() => void) | undefined;
+    let cancelled = false;
 
     import('@tauri-apps/api/window')
       .then(({ getCurrentWindow }) =>
         getCurrentWindow().onCloseRequested(() => {
-          if (activeModuleId) {
-            const state = useModuleStore.getState().getSurfaceWindow(activeModuleId);
-            emit('module:surface-window-closed', {
-              moduleId: activeModuleId,
-              panelId: state?.panelId,
-            }).catch(() => {});
-          }
+          const moduleId = activeModuleIdRef.current;
+          if (!moduleId) return;
+          const state = useModuleStore.getState().getSurfaceWindow(moduleId);
+          emit('module:surface-window-closed', {
+            moduleId,
+            panelId: state?.panelId,
+          }).catch(() => {});
         }),
       )
       .then((unlisten) => {
-        detachCloseListener = unlisten;
+        if (!cancelled) detachCloseListener = unlisten;
+        else unlisten();
       })
       .catch(() => {});
 
     return () => {
+      cancelled = true;
       detachCloseListener?.();
     };
-  }, [activeModuleId]);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -79,6 +97,7 @@ function ModuleSurfaceWindow() {
   }, [closeWindow]);
 
   useEffect(() => {
+    let cancelled = false;
     let label = '';
     try {
       label = getCurrentWebviewWindow().label;
@@ -86,44 +105,69 @@ function ModuleSurfaceWindow() {
       label = 'unknown';
     }
 
-    waitForSurfaceState(label)
-      .then((state) => {
-        if (!state) return;
-        return bootSingleModule(state.moduleId, 'surface').then(() => state);
-      })
-      .then((state) => {
-        if (!state) return;
+    (async () => {
+      try {
+        const state = await waitForSurfaceState(label);
+        if (cancelled || !state) {
+          emitReady();
+          return;
+        }
+
         useModuleStore.getState().openSurfaceWindow(
           state.moduleId,
           state.panelId,
           state.props,
           state.options,
         );
+
+        await bootSingleModule(state.moduleId, 'surface');
+        if (cancelled) {
+          emitReady();
+          return;
+        }
+
+        booted.current = true;
         setActiveModuleId(state.moduleId);
-      })
-      .catch(console.error)
-      .finally(() => {
-        emit('module:surface-ready', { label }).catch(() => {});
-      });
-  }, [closeWindow]);
+      } catch (error) {
+        console.error(error);
+        emitReady();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [emitReady]);
+
+  useEffect(() => {
+    if (booted.current && activeModuleId) {
+      booted.current = false;
+      setTimeout(() => emitReady(), 0);
+    }
+  }, [activeModuleId, emitReady]);
 
   useEffect(() => {
     let detachClearListener: (() => void) | undefined;
+    let cancelled = false;
 
     import('@tauri-apps/api/event')
-      .then(({ listen }) => {
-        return listen<{ moduleId: string }>('module:surface-clear', (event) => {
+      .then(({ listen }) =>
+        listen<{ moduleId: string }>('module:surface-clear', (event) => {
+          const current = activeModuleIdRef.current;
+          if (current && event.payload.moduleId !== current) return;
           useModuleStore.getState().clearSurfaceWindow(event.payload.moduleId);
           setActiveModuleId(null);
           void closeWindow();
-        });
-      })
+        }),
+      )
       .then((fn) => {
-        detachClearListener = fn;
+        if (!cancelled) detachClearListener = fn;
+        else fn();
       })
       .catch(() => {});
 
     return () => {
+      cancelled = true;
       detachClearListener?.();
     };
   }, [closeWindow]);
