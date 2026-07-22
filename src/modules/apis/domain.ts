@@ -265,6 +265,22 @@ listen<{ moduleId: string; panelId?: string }>('module:surface-window-closed', (
   });
 }).catch(() => {});
 
+listen<{ viewId: string; props: unknown }>('module:surface-presenter-project', (event) => {
+  useModuleStore.getState().projectPanel(event.payload.viewId, event.payload.props);
+  globalBus.emit('presentation:project', event.payload);
+  ensureMediaWindow()
+    .then(({ created }) => {
+      return emit('module:presenter-project', event.payload);
+    })
+    .catch(() => {});
+}).catch(() => {});
+
+listen('module:surface-presenter-clear', () => {
+  useModuleStore.getState().clearPresenter();
+  globalBus.emit('presentation:clear');
+  emit('module:presenter-clear').catch(() => {});
+}).catch(() => {});
+
 let overlayViewId: string | null = null;
 let overlayProps: unknown;
 
@@ -343,65 +359,85 @@ function surfaceWindowLabel(moduleId: string) {
   return `surface-${moduleId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 }
 
-function syncSurfaceProjection(moduleId: string) {
+function syncSurfaceProjection(moduleId: string): Promise<void> {
   const state = useModuleStore.getState().getSurfaceWindow(moduleId);
-  if (!state) return;
+  if (!state) return Promise.resolve();
   const label = surfaceWindowLabel(moduleId);
-  invoke('set_surface_state', {
+  return invoke('set_surface_state', {
     label,
     stateJson: JSON.stringify(state),
-  }).catch(() => {});
+  }).then(() => undefined).catch(() => {});
+}
+
+const surfaceWindowInflight = new Map<string, Promise<{ created: boolean }>>();
+
+async function applySurfaceWindowOptions(win: WebviewWindow, options?: SurfaceWindowOptions) {
+  if (options?.title) await win.setTitle(options.title).catch(() => {});
+  if (options?.decorations !== undefined) await win.setDecorations(options.decorations).catch(() => {});
+  if (options?.resizable !== undefined) await win.setResizable(options.resizable).catch(() => {});
+  if (options?.maximized) await win.maximize().catch(() => {});
+  if (options?.fullscreen) await win.setFullscreen(true).catch(() => {});
 }
 
 async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOptions) {
   const label = surfaceWindowLabel(moduleId);
+  const existing = surfaceWindowInflight.get(label);
+  if (existing) return existing;
 
-  let win = await WebviewWindow.getByLabel(label).catch(() => null);
-  if (!win) {
-    const readyPromise = new Promise<void>((resolve) => {
+  const task = (async () => {
+    let win = await WebviewWindow.getByLabel(label).catch(() => null);
+
+    if (!win) {
       let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        resolve();
-      };
-      listen<{ label: string }>('module:surface-ready', (event) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let finish = () => {};
+
+      const readyPromise = new Promise<void>((resolve) => {
+        finish = () => {
+          if (settled) return;
+          settled = true;
+          if (timer) clearTimeout(timer);
+          resolve();
+        };
+      });
+
+      const unlisten = await listen<{ label: string }>('module:surface-ready', (event) => {
         if (event.payload.label === label) finish();
-      })
-        .then((unlisten) => {
-          setTimeout(() => {
-            unlisten();
-            finish();
-          }, 8000);
-        })
-        .catch(() => finish());
-    });
+      }).catch(() => () => {});
 
-    await invoke('create_surface_window', {
-      label,
-      title: options?.title ?? 'Module Window',
-      route: '/module-surface-window',
-      options,
-    }).catch(() => {});
+      timer = setTimeout(finish, 8000);
 
-    await readyPromise;
+      await invoke('create_surface_window', {
+        label,
+        title: options?.title ?? 'Module Window',
+        route: '/module-surface-window',
+        options,
+      }).catch(() => {});
 
-    win = await WebviewWindow.getByLabel(label).catch(() => null);
-    if (win) {
-      await win.show().catch(() => {});
-      if (options?.maximized) await win.maximize().catch(() => {});
-      if (options?.title) await win.setTitle(options.title).catch(() => {});
+      await readyPromise;
+      unlisten();
+
+      win = await WebviewWindow.getByLabel(label).catch(() => null);
+      if (win) {
+        if (options?.maximized) await win.maximize().catch(() => {});
+        await win.show().catch(() => {});
+        await win.setFocus().catch(() => {});
+      }
+      return { created: true };
     }
-    return { created: true };
-  }
 
-  const visible = await win.isVisible().catch(() => false);
-  if (!visible) await win.show().catch(() => {});
-  await win.setFocus().catch(() => {});
-  if (options?.maximized) await win.maximize().catch(() => {});
-  if (options?.title) await win.setTitle(options.title).catch(() => {});
-  syncSurfaceProjection(moduleId);
-  return { created: false };
+    await applySurfaceWindowOptions(win, options);
+    const visible = await win.isVisible().catch(() => false);
+    if (!visible) await win.show().catch(() => {});
+    await win.setFocus().catch(() => {});
+    await syncSurfaceProjection(moduleId);
+    return { created: false };
+  })().finally(() => {
+    surfaceWindowInflight.delete(label);
+  });
+
+  surfaceWindowInflight.set(label, task);
+  return task;
 }
 
 export function createPresentationHostAPI(): PresentationHostAPI {
@@ -470,11 +506,11 @@ export function createSurfaceHostAPI(moduleId: string): SurfaceHostAPI {
         },
       };
     },
-    openWindow(panelId, props, options) {
+    async openWindow(panelId, props, options) {
       useModuleStore.getState().openSurfaceWindow(moduleId, panelId, props, options);
       globalBus.emit('surface:window-opened', { moduleId, panelId });
-      syncSurfaceProjection(moduleId);
-      ensureSurfaceWindow(moduleId, options).catch(() => {});
+      await syncSurfaceProjection(moduleId);
+      await ensureSurfaceWindow(moduleId, options);
     },
     clear() {
       const state = useModuleStore.getState().getSurfaceWindow(moduleId);

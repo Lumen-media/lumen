@@ -359,7 +359,7 @@ export interface SurfaceWindowOptions {
 export interface SurfaceHostAPI {
   state(): 'idle' | 'live';
   onStateChange(handler: (state: 'idle' | 'live') => void): Disposable;
-  openWindow(panelId: string, props?: unknown, options?: SurfaceWindowOptions): void;
+  openWindow(panelId: string, props?: unknown, options?: SurfaceWindowOptions): Promise<void>;
   clear(): void;
   isWindowOpen(): boolean;
 }
