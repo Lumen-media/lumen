@@ -20,8 +20,6 @@ export function SurfaceWindowSlot({ moduleId }: SurfaceWindowSlotProps) {
 
   const clearSurfaceWindow = useModuleStore((s) => s.clearSurfaceWindow);
 
-  if (!state || !spec) return null;
-
   const close = useCallback(async () => {
     clearSurfaceWindow(moduleId);
     await emit('module:surface-window-closed', {
