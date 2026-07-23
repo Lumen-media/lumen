@@ -86,17 +86,6 @@ function ModuleSurfaceWindow() {
   }, []);
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      void closeWindow();
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [closeWindow]);
-
-  useEffect(() => {
     let cancelled = false;
     let label = '';
     try {
