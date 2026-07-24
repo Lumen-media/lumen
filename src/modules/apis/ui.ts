@@ -9,6 +9,13 @@ export function setBackgroundPickerOpener(fn: BgPickerOpener) {
   _bgPickerOpener = fn;
 }
 
+export function getBackgroundPickerOpener(): BgPickerOpener {
+  return (onSelect) => {
+    if (!_bgPickerOpener) return;
+    _bgPickerOpener(onSelect);
+  };
+}
+
 export function createUIAPI(openCommandPaletteFn: (prefilter?: string) => void): UIAPI {
   return {
     notify({ title, message, level = 'info', ...rest }) {

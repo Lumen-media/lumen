@@ -16,9 +16,11 @@ export const Route = createRootRoute({
 });
 
 const AUXILIARY_WINDOW_PATHS = new Set(['/media-window', '/module-overlay-window', '/module-surface-window']);
+const SURFACE_WINDOW_PATH = '/module-surface-window';
 
 function RootComponent() {
   const isAuxiliaryWindow = AUXILIARY_WINDOW_PATHS.has(window.location.pathname);
+  const isSurfaceWindow = window.location.pathname === SURFACE_WINDOW_PATH;
 
   useSingleInstance(!isAuxiliaryWindow);
   useTheme();
@@ -38,6 +40,7 @@ function RootComponent() {
           <BackgroundPickerSlot />
         </React.Fragment>
       )}
+      {isSurfaceWindow && <BackgroundPickerSlot />}
     </React.Fragment>
   );
 }

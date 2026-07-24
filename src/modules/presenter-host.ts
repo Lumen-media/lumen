@@ -4,6 +4,7 @@ import { createI18nAPI } from './apis/i18n';
 import { createLoggerAPI } from './apis/logger';
 import { createNetAPI } from './apis/net';
 import { createPanelsAPI } from './apis/panels';
+import { getBackgroundPickerOpener } from './apis/ui';
 import { emit } from '@tauri-apps/api/event';
 import type { Disposable, LumenHost, ModuleManifest } from './types';
 
@@ -39,7 +40,7 @@ export async function createPresenterHost(
       prompt: stub(Promise.resolve(null)),
       openCommandPalette: noop,
       openDialog: noop,
-      openBackgroundPicker: noop,
+      openBackgroundPicker: window === 'surface' ? getBackgroundPickerOpener() : noop,
     },
 
     bus: { emit: noop, on: () => noopDisposable },

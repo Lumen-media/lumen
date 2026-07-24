@@ -269,7 +269,7 @@ listen<{ viewId: string; props: unknown }>('module:surface-presenter-project', (
   useModuleStore.getState().projectPanel(event.payload.viewId, event.payload.props);
   globalBus.emit('presentation:project', event.payload);
   ensureMediaWindow()
-    .then(({ created }) => {
+    .then(() => {
       return emit('module:presenter-project', event.payload);
     })
     .catch(() => {});
