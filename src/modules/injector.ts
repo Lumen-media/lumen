@@ -194,6 +194,11 @@ export async function unloadModule(id: string) {
   }
 
   loaded.delete(id);
+  try {
+    await invoke('module_data_sqlite_close', { moduleId: id });
+  } catch {
+    // connection may not have been opened
+  }
   useModuleStore.getState().removePanelsForModule(id);
   useModuleStore.getState().setStatus(id, 'disabled');
 }
