@@ -6,7 +6,7 @@ Lumen modules can use the planned `surface.window` slot to render operator-facin
 
 This surface is meant for workflows that feel like a modal, but need more room or should stay visible while the main Lumen window remains usable. It is not audience-facing output, and it does not replace the presenter/media window.
 
-> **Status:** planned contract. Runtime and SDK implementation still need to be added.
+> **Status:** implemented. The surface window slot is available for modules.
 
 ## How to use
 
@@ -248,3 +248,34 @@ export default class MyModule extends LumenPlugin {
 - Use the overlay surface for separate overlay output.
 - Do not call Tauri window APIs directly from modules.
 - The v1 contract intentionally exposes a small window option set instead of the full Tauri `WebviewWindow` API.
+
+## Module lifecycle per window
+
+Each window runs its own JavaScript context. When a module registers a `surface.window` panel, the module's `onload()` is called separately in each window (main, presenter, surface).
+
+```ts
+async onload(host: LumenHost) {
+  // host.window === 'main'     → main UI window
+  // host.window === 'presenter' → presenter/media window
+  // host.window === 'surface'  → this module's surface window
+}
+```
+
+### Per-window initialization
+
+Different windows need different initialization. For example, heavy database operations (schema creation, data import) only need to run in the main window:
+
+```ts
+async onload(host: LumenHost) {
+  // Register UI panels — available in all windows
+  host.panels.add({ slot: 'surface.window', ... });
+
+  // Heavy init only in main window
+  if (host.window === 'main') {
+    await initDatabase(db);
+    await downloadData();
+  }
+}
+```
+
+Surface windows reuse the same SQLite database file as the main window. Connections are cached per module and reused across all IPC calls (see SQLite connection caching).
