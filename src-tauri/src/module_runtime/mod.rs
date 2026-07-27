@@ -5,6 +5,7 @@ pub mod net;
 pub mod protocol;
 pub mod registry;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -312,6 +313,44 @@ pub struct Migration {
     pub up: String,
 }
 
+/// Holds cached SQLite connections per module so each `exec`/`query`/`migrate`
+/// call reuses the same connection instead of opening a new one every time.
+/// Eliminates the overhead of `rusqlite::Connection::open()` + PRAGMA setup
+/// on every Tauri IPC call.
+pub struct SqliteConnectionCache {
+    connections: Mutex<HashMap<String, rusqlite::Connection>>,
+}
+
+impl SqliteConnectionCache {
+    pub fn new() -> Self {
+        Self {
+            connections: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+/// Runs `f` against the cached (or newly-opened) SQLite connection for `module_id`.
+/// The Mutex lock is held for the duration of the operation, serializing access
+/// per module. This is safe because Tauri commands for a single module naturally
+/// queue up — there is no concurrent write contention.
+fn with_sqlite_conn<T>(
+    cache: &SqliteConnectionCache,
+    app: &AppHandle,
+    module_id: &str,
+    f: impl FnOnce(&rusqlite::Connection) -> Result<T, String>,
+) -> Result<T, String> {
+    let mut map = cache.connections.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+    if !map.contains_key(module_id) {
+        let path = module_data_sqlite_path(app, module_id)?;
+        let conn = rusqlite::Connection::open(&path).map_err(|e| e.to_string())?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
+            .map_err(|e| e.to_string())?;
+        map.insert(module_id.to_string(), conn);
+    }
+    let conn = map.get(module_id).ok_or("connection not found")?;
+    f(conn)
+}
+
 fn module_data_sqlite_path(app: &AppHandle, module_id: &str) -> Result<PathBuf, String> {
     let dir = app
         .path()
@@ -323,21 +362,13 @@ fn module_data_sqlite_path(app: &AppHandle, module_id: &str) -> Result<PathBuf, 
     Ok(dir.join("data.sqlite"))
 }
 
-fn open_sqlite(app: &AppHandle, module_id: &str) -> Result<rusqlite::Connection, String> {
-    let path = module_data_sqlite_path(app, module_id)?;
-    let conn = rusqlite::Connection::open(&path).map_err(|e| e.to_string())?;
-    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
-        .map_err(|e| e.to_string())?;
-    Ok(conn)
-}
-
 #[tauri::command]
 pub fn module_data_sqlite_open(
     app: AppHandle,
+    state: tauri::State<'_, SqliteConnectionCache>,
     module_id: String,
 ) -> Result<(), String> {
-    open_sqlite(&app, &module_id)?;
-    Ok(())
+    with_sqlite_conn(&state, &app, &module_id, |_| Ok(()))
 }
 
 fn params_to_rusqlite(params: &[serde_json::Value]) -> Vec<Box<dyn rusqlite::types::ToSql>> {
@@ -371,53 +402,57 @@ fn params_to_rusqlite(params: &[serde_json::Value]) -> Vec<Box<dyn rusqlite::typ
 #[tauri::command]
 pub fn module_data_sqlite_exec(
     app: AppHandle,
+    state: tauri::State<'_, SqliteConnectionCache>,
     module_id: String,
     sql: String,
     params: Vec<serde_json::Value>,
 ) -> Result<(), String> {
-    let conn = open_sqlite(&app, &module_id)?;
-    let rusqlite_params = params_to_rusqlite(&params);
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-        rusqlite_params.iter().map(|p| p.as_ref()).collect();
-    conn.execute(&sql, param_refs.as_slice())
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    with_sqlite_conn(&state, &app, &module_id, |conn| {
+        let rusqlite_params = params_to_rusqlite(&params);
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            rusqlite_params.iter().map(|p| p.as_ref()).collect();
+        conn.execute(&sql, param_refs.as_slice())
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })
 }
 
 #[tauri::command]
 pub fn module_data_sqlite_query(
     app: AppHandle,
+    state: tauri::State<'_, SqliteConnectionCache>,
     module_id: String,
     sql: String,
     params: Vec<serde_json::Value>,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let conn = open_sqlite(&app, &module_id)?;
-    let rusqlite_params = params_to_rusqlite(&params);
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-        rusqlite_params.iter().map(|p| p.as_ref()).collect();
+    with_sqlite_conn(&state, &app, &module_id, |conn| {
+        let rusqlite_params = params_to_rusqlite(&params);
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            rusqlite_params.iter().map(|p| p.as_ref()).collect();
 
-    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
-    let col_count = stmt.column_count();
-    let col_names: Vec<String> = (0..col_count)
-        .map(|i| stmt.column_name(i).unwrap_or("").to_string())
-        .collect();
+        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let col_count = stmt.column_count();
+        let col_names: Vec<String> = (0..col_count)
+            .map(|i| stmt.column_name(i).unwrap_or("").to_string())
+            .collect();
 
-    let rows = stmt
-        .query_map(param_refs.as_slice(), |row| {
-            let mut map = serde_json::Map::new();
-            for (i, name) in col_names.iter().enumerate() {
-                let value = row_to_json(row, i);
-                map.insert(name.clone(), value);
-            }
-            Ok(serde_json::Value::Object(map))
-        })
-        .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                let mut map = serde_json::Map::new();
+                for (i, name) in col_names.iter().enumerate() {
+                    let value = row_to_json(row, i);
+                    map.insert(name.clone(), value);
+                }
+                Ok(serde_json::Value::Object(map))
+            })
+            .map_err(|e| e.to_string())?;
 
-    let mut result = Vec::new();
-    for row in rows {
-        result.push(row.map_err(|e| e.to_string())?);
-    }
-    Ok(result)
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| e.to_string())?);
+        }
+        Ok(result)
+    })
 }
 
 fn row_to_json(row: &rusqlite::Row<'_>, i: usize) -> serde_json::Value {
@@ -449,42 +484,53 @@ fn base64_encode(bytes: &[u8]) -> String {
 #[tauri::command]
 pub fn module_data_sqlite_migrate(
     app: AppHandle,
+    state: tauri::State<'_, SqliteConnectionCache>,
     module_id: String,
     versions: Vec<Migration>,
 ) -> Result<(), String> {
-    let conn = open_sqlite(&app, &module_id)?;
-
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS _migrations (
+    with_sqlite_conn(&state, &app, &module_id, |conn| {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS _migrations (
             version INTEGER PRIMARY KEY,
             applied_at TEXT NOT NULL DEFAULT (datetime('now'))
         );",
-    )
-    .map_err(|e| e.to_string())?;
-
-    for migration in &versions {
-        let exists: bool = conn
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM _migrations WHERE version = ?",
-                [migration.version],
-                |row| row.get(0),
-            )
-            .map_err(|e| e.to_string())?;
-
-        if exists {
-            continue;
-        }
-
-        conn.execute_batch(&migration.up)
-            .map_err(|e| format!("migration v{} failed: {}", migration.version, e))?;
-
-        conn.execute(
-            "INSERT INTO _migrations (version) VALUES (?)",
-            [migration.version],
         )
         .map_err(|e| e.to_string())?;
-    }
 
+        for migration in &versions {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM _migrations WHERE version = ?",
+                    [migration.version],
+                    |row| row.get(0),
+                )
+                .map_err(|e| e.to_string())?;
+
+            if exists {
+                continue;
+            }
+
+            conn.execute_batch(&migration.up)
+                .map_err(|e| format!("migration v{} failed: {}", migration.version, e))?;
+
+            conn.execute(
+                "INSERT INTO _migrations (version) VALUES (?)",
+                [migration.version],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+
+        Ok(())
+    })
+}
+
+#[tauri::command]
+pub fn module_data_sqlite_close(
+    state: tauri::State<'_, SqliteConnectionCache>,
+    module_id: String,
+) -> Result<(), String> {
+    let mut map = state.connections.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+    map.remove(&module_id);
     Ok(())
 }
 

@@ -393,6 +393,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             states: Mutex::new(HashMap::new()),
         })
         .manage(devices::default_device_state())
+        .manage(module_runtime::SqliteConnectionCache::new())
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             println!("Single instance callback:");
             println!("  args: {:?}", args);
@@ -582,6 +583,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             module_runtime::module_data_sqlite_exec,
             module_runtime::module_data_sqlite_query,
             module_runtime::module_data_sqlite_migrate,
+            module_runtime::module_data_sqlite_close,
             module_runtime::net::module_net_request,
             presentation::extract_presentation_metadata,
         ])
