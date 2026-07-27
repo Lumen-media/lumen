@@ -6,7 +6,7 @@ The module window surface slot adds a module-owned native window for operator-fa
 
 It fills the gap between an in-app `dialog` and the existing output windows. A module registers React content in `surface.window`, then asks Lumen to open that content in a separate Tauri window through `host.surface.openWindow()`.
 
-> **Status:** planned contract. Runtime and SDK implementation still need to be added.
+> **Status:** implemented.
 
 ## Goals
 
@@ -200,7 +200,9 @@ These events are for synchronization and cleanup. Rendering remains controlled b
 | `src/modules/host.ts` | Add `host.surface` for the main module context |
 | `src/modules/presenter-host.ts` | Add safe surface stubs for non-main contexts |
 | `src/modules/store.ts` | Track active surface state per module id |
-| `src-tauri/src/main.rs` | Add or generalize a command for creating surface windows |
+| `src/modules/injector.ts` | Added `module_data_sqlite_close` call on `unloadModule()` |
+| `src-tauri/src/main.rs` | Create surface windows, register `SqliteConnectionCache` state |
+| `src-tauri/src/module_runtime/mod.rs` | Added `SqliteConnectionCache`, `with_sqlite_conn`, updated SQLite commands, added `module_data_sqlite_close` |
 | `src/routeTree.gen.ts` | Regenerated after adding the new route |
 
 ## Window Options Policy
@@ -258,18 +260,49 @@ The app implementation and docs should stay aligned with the SDK contract.
 
 ## Implementation Checklist
 
-- [ ] Add `surface.window` to app module types.
-- [ ] Add `SurfaceHostAPI` and `SurfaceWindowOptions`.
-- [ ] Add `host.surface` in the main host.
-- [ ] Add safe `host.surface` stubs in non-main hosts.
-- [ ] Add per-module surface state to the module store.
-- [ ] Add Tauri surface window creation.
-- [ ] Add `/module-surface-window` route.
-- [ ] Add `SurfaceWindowSlot`.
-- [ ] Wire open, project, ready, clear, and close events.
-- [ ] Emit public `surface:window-opened` and `surface:window-closed` bus events.
+- [x] Add `surface.window` to app module types.
+- [x] Add `SurfaceHostAPI` and `SurfaceWindowOptions`.
+- [x] Add `host.surface` in the main host.
+- [x] Add safe `host.surface` stubs in non-main hosts.
+- [x] Add per-module surface state to the module store.
+- [x] Add Tauri surface window creation.
+- [x] Add `/module-surface-window` route.
+- [x] Add `SurfaceWindowSlot`.
+- [x] Wire open, project, ready, clear, and close events.
+- [x] Emit public `surface:window-opened` and `surface:window-closed` bus events.
 - [ ] Update `docs/module-api-reference.md`.
 - [ ] Update SDK types and SDK README.
+
+## SQLite connection caching
+
+Each surface window runs its own JavaScript context with a separate module instance. Without caching, every `db.exec()`/`db.query()`/`db.migrate()` call opened a fresh `rusqlite::Connection`, ran PRAGMAs (WAL, foreign keys), and closed immediately. This caused lock contention when multiple windows accessed the same database file.
+
+`SqliteConnectionCache` (Tauri managed state) caches connections per `module_id` in a `Mutex<HashMap<String, Connection>>`. The connection is created once, PRAGMAs applied once, and reused for all subsequent IPC calls. The Mutex lock is held only during each operation.
+
+```rust
+// src-tauri/src/module_runtime/mod.rs
+pub struct SqliteConnectionCache {
+    connections: Mutex<HashMap<String, rusqlite::Connection>>,
+}
+
+fn with_sqlite_conn<T>(
+    cache: &SqliteConnectionCache,
+    app: &AppHandle,
+    module_id: &str,
+    f: impl FnOnce(&rusqlite::Connection) -> Result<T, String>,
+) -> Result<T, String> {
+    // Look up or create cached connection, then execute f
+}
+```
+
+When a module is unloaded, `module_data_sqlite_close` removes the cached connection.
+
+### Impact
+
+- Zero breaking changes to `SqliteHandle` API
+- Modules use `db.exec()`/`db.query()` identically
+- Connection + PRAGMA overhead eliminated after first call per module window
+- No connection file-lock conflicts between main/surface/presenter windows
 
 ## Considerations
 
