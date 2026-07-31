@@ -338,7 +338,7 @@ export const LyricModal = () => {
                 <>
                   <Card className="flex-1 p-0 gap-0 overflow-hidden">
                     <CardHeader className="p-4 flex-row items-center gap-7">
-                      <h4 className="uppercase">{t('Theme Settings')}</h4>
+                      <h4 className="uppercase">{t('Lyric Editor')}</h4>
 
                       <Combobox
                         value={selectedFont}

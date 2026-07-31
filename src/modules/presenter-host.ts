@@ -5,12 +5,46 @@ import { createLoggerAPI } from './apis/logger';
 import { createNetAPI } from './apis/net';
 import { createPanelsAPI } from './apis/panels';
 import { getBackgroundPickerOpener } from './apis/ui';
-import { emit } from '@tauri-apps/api/event';
-import type { Disposable, LumenHost, ModuleManifest } from './types';
+import { emit, listen } from '@tauri-apps/api/event';
+import type { BusAPI, Disposable, LumenHost, ModuleManifest } from './types';
 
 const noop = () => {};
 const stub = <T>(v: T) => () => v;
 const noopDisposable: Disposable = { dispose: noop };
+
+type Handler = (payload: unknown) => void;
+
+function createPresenterEvents(): BusAPI {
+  const subscribers = new Map<string, Set<Handler>>();
+
+  const localBus: BusAPI = {
+    emit<T = unknown>(topic: string, payload?: T): void {
+      const handlers = subscribers.get(topic);
+      if (!handlers) return;
+      for (const handler of handlers) {
+        try { handler(payload as unknown); } catch {}
+      }
+    },
+    on<T = unknown>(topic: string, handler: (payload: T) => void): Disposable {
+      if (!subscribers.has(topic)) subscribers.set(topic, new Set());
+      subscribers.get(topic)!.add(handler as Handler);
+      return {
+        dispose() { subscribers.get(topic)?.delete(handler as Handler); },
+      };
+    },
+  };
+
+  void (async () => {
+    const presenterEvents = ['module:presenter-clear', 'module:presenter-window-closed'];
+    for (const t of presenterEvents) {
+      try {
+        await listen(t, () => localBus.emit(t));
+      } catch {}
+    }
+  })();
+
+  return localBus;
+}
 
 export async function createPresenterHost(
   manifest: ModuleManifest,
@@ -44,7 +78,7 @@ export async function createPresenterHost(
     },
 
     bus: { emit: noop, on: () => noopDisposable },
-    events: { emit: noop, on: () => noopDisposable },
+    events: createPresenterEvents(),
 
     data: createDataAPI(id),
     settings: {
