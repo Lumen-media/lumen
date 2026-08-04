@@ -5,7 +5,7 @@ import type { PanelSpec } from '../types';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 
 export interface PresenterControlsSlotProps {
-  kind: 'lyrics' | 'image' | 'presentation' | null;
+  kind: 'lyrics' | 'image' | 'presentation' | 'module' | null;
   active: boolean;
   slideIndex: number;
   totalSlides: number;

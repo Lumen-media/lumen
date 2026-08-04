@@ -10,7 +10,7 @@ import {
   SkipForward,
 } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEventListener, useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -27,7 +27,7 @@ import { usePresentationStore } from '@/stores/presentation-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { Card } from './ui/card';
 
-type PresenterKind = 'lyrics' | 'image' | 'presentation';
+type PresenterKind = 'lyrics' | 'image' | 'presentation' | 'module';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -49,6 +49,37 @@ interface FallbackSlide {
   active: boolean;
   image: boolean;
   source?: string | null;
+}
+
+interface ModuleSlideData {
+  text?: string;
+  bookName?: string;
+  chapter?: number;
+  verses?: number[];
+  fontColor?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string;
+  fontStyle?: string;
+  background?: { src?: string; type?: string; name?: string } | null;
+  profileBackground?: { src?: string; type?: string; name?: string } | null;
+  backgroundOpacity?: number;
+  showReferenceOnly?: boolean;
+  showVersion?: boolean;
+  uppercase?: boolean;
+  version?: string;
+}
+
+function buildModuleSlideRef(data: ModuleSlideData | null | undefined): string | null {
+  if (!data) return null;
+  const book = data.bookName?.trim();
+  if (book && typeof data.chapter === 'number' && Array.isArray(data.verses) && data.verses.length > 0) {
+    return `${book} ${data.chapter}:${data.verses.join('-')}`;
+  }
+  if (data.text) {
+    return data.text.split('\n')[0]?.slice(0, 60) || null;
+  }
+  return null;
 }
 
 interface PresenterDisplayState {
@@ -97,10 +128,11 @@ function getInitialPresenterState(): PresenterState {
   }
 
   if (moduleStore.presenterViewId) {
+    const slideData = (moduleStore.presenterProps as { data?: ModuleSlideData } | undefined)?.data;
     return {
       active: true,
-      kind: 'presentation',
-      name: 'Presentation',
+      kind: 'module',
+      name: buildModuleSlideRef(slideData) ?? 'Presentation',
     };
   }
 
@@ -137,7 +169,7 @@ function stateFromBackdrop(detail: StageBackdropChangeDetail): PresenterState {
   return { active: false, kind: null };
 }
 
-function getKindMeta(kind: PresenterKind | null, t: Translate) {
+function getKindMeta(kind: PresenterKind | null, t: Translate, moduleLabel?: string | null) {
   if (kind === 'image') {
     return {
       icon: ImageIcon,
@@ -151,6 +183,15 @@ function getKindMeta(kind: PresenterKind | null, t: Translate) {
     return {
       icon: Presentation,
       label: t('PPT'),
+      title: t('Presentation'),
+      subtitle: t('Slides'),
+    };
+  }
+
+  if (kind === 'module') {
+    return {
+      icon: Presentation,
+      label: moduleLabel ?? t('Module'),
       title: t('Presentation'),
       subtitle: t('Slides'),
     };
@@ -243,7 +284,11 @@ function useBackgroundSrc(path?: string) {
   return src;
 }
 
-function usePresenterStageState(lyricPath: string | null, presenterViewId: string | null) {
+function usePresenterStageState(
+  lyricPath: string | null,
+  presenterViewId: string | null,
+  presenterProps: unknown
+) {
   const [presenter, setPresenter] = useState<PresenterState>(() => getInitialPresenterState());
 
   useEffect(() => {
@@ -252,7 +297,12 @@ function usePresenterStageState(lyricPath: string | null, presenterViewId: strin
     });
 
     const unlistenProject = listen('module:presenter-project', () => {
-      setPresenter({ active: true, kind: 'presentation', name: 'Presentation' });
+      const slideData = (useModuleStore.getState().presenterProps as { data?: ModuleSlideData } | undefined)?.data;
+      setPresenter({
+        active: true,
+        kind: 'module',
+        name: buildModuleSlideRef(slideData) ?? 'Presentation',
+      });
     });
 
     const unlistenClear = listen('module:presenter-clear', () => {
@@ -278,9 +328,14 @@ function usePresenterStageState(lyricPath: string | null, presenterViewId: strin
 
   useEffect(() => {
     if (presenterViewId) {
-      setPresenter({ active: true, kind: 'presentation', name: 'Presentation' });
+      const slideData = (presenterProps as { data?: ModuleSlideData } | undefined)?.data;
+      setPresenter({
+        active: true,
+        kind: 'module',
+        name: buildModuleSlideRef(slideData) ?? 'Presentation',
+      });
     }
-  }, [presenterViewId]);
+  }, [presenterViewId, presenterProps]);
 
   return presenter;
 }
@@ -571,24 +626,24 @@ function FallbackSequenceThumbnail({
       ref={ref}
       type="button"
       className={cn(
-        'relative h-[90px] w-40 shrink-0 overflow-hidden rounded-lg border bg-muted/30 text-left transition-colors',
+        'relative h-22.5 w-40 shrink-0 overflow-hidden rounded-lg border bg-muted/30 text-left transition-colors',
         slide.active
           ? 'border-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.45)]'
           : 'border-border/60 hover:border-border'
       )}
       onClick={onClick}
     >
-        {slide.image ? (
-          imageSrc ? (
-            <img
-              src={imageSrc}
-              alt=""
-              className="absolute inset-0 h-full w-full bg-black object-contain"
-            />
-          ) : (
-            <div className="absolute inset-0 animate-pulse bg-muted opacity-60" />
-          )
+      {slide.image ? (
+        imageSrc ? (
+          <img
+            src={imageSrc}
+            alt=""
+            className="absolute inset-0 h-full w-full bg-black object-contain"
+          />
         ) : (
+          <div className="absolute inset-0 animate-pulse bg-muted opacity-60" />
+        )
+      ) : (
         <div className="flex h-full items-center justify-center px-3 text-center text-[10px] font-semibold text-muted-foreground">
           {slide.label}
         </div>
@@ -596,6 +651,172 @@ function FallbackSequenceThumbnail({
     </button>
   );
 }
+
+const VERSION_PREFIX = /^[a-z]{2}_/;
+
+function displayModuleVersion(id?: string): string {
+  if (!id) return '';
+  return id.replace(VERSION_PREFIX, '').toUpperCase();
+}
+
+const FONT_WEIGHT_MAP: Record<string, number> = {
+  Thin: 100,
+  Light: 300,
+  Regular: 400,
+  Medium: 500,
+  Bold: 700,
+  Black: 900,
+};
+
+const ModuleSequenceThumbnail = memo(function ModuleSequenceThumbnail({
+  data,
+  isSelected,
+  onClick,
+}: {
+  data: ModuleSlideData;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null!);
+  const textRef = useRef<HTMLDivElement>(null);
+  const { width: containerWidth = 0 } = useResizeObserver({ ref: containerRef });
+  const scale = containerWidth / THUMB_VIRTUAL_W;
+
+  const bgPath = data.background?.src ?? data.profileBackground?.src ?? undefined;
+  const bgSrc = useBackgroundSrc(bgPath);
+  const color = data.fontColor || '#FFFFFF';
+  const overlayOpacity = (data.backgroundOpacity ?? 30) / 100;
+
+  const verseStr =
+    data.verses && data.verses.length > 0
+      ? data.verses.length === 1
+        ? String(data.verses[0])
+        : `${data.verses[0]}-${data.verses[data.verses.length - 1]}`
+      : null;
+
+  const versionLabel = data.showVersion ? displayModuleVersion(data.version) : null;
+  const lines = data.text ? data.text.split('\n').filter(Boolean) : [];
+  const fontWeight = FONT_WEIGHT_MAP[data.fontWeight ?? 'Regular'] ?? 400;
+  const fontStyle = data.fontStyle === 'Italic' ? 'italic' : 'normal';
+  const uppercaseStyle = data.uppercase ? { textTransform: 'uppercase' as const } : undefined;
+  const hi = data.fontSize ?? 120;
+
+  useIsomorphicLayoutEffect(() => {
+    const text = textRef.current;
+    if (!text) return;
+
+    if (data.showReferenceOnly) {
+      text.style.fontSize = '';
+      return;
+    }
+
+    let lo = 1;
+    let best = 1;
+    let upper = hi;
+
+    while (upper - lo > 1) {
+      const mid = Math.floor((lo + upper) / 2);
+      text.style.fontSize = `${mid}px`;
+      if (text.scrollHeight <= THUMB_AVAILABLE_H) {
+        best = mid;
+        lo = mid;
+      } else {
+        upper = mid;
+      }
+    }
+
+    text.style.fontSize = `${best}px`;
+    if (text.scrollHeight > THUMB_AVAILABLE_H) {
+      text.style.fontSize = `${Math.max(best - 1, 1)}px`;
+    }
+  }, [data.text, data.uppercase, data.showReferenceOnly, hi, containerWidth]);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'shrink-0 w-40 rounded-lg overflow-hidden transition-all outline-none',
+        isSelected ? 'ring-2 ring-primary' : 'ring-1 ring-border/40 hover:ring-border/70'
+      )}
+    >
+      <div ref={containerRef} className="relative aspect-video bg-black">
+        {bgSrc && (
+          <img
+            src={bgSrc}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+            aria-hidden
+          />
+        )}
+        <div className="absolute inset-0 bg-black" style={{ opacity: overlayOpacity }} />
+
+        {data.showReferenceOnly ? (
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{
+              transform: `scale(${scale * 2.5})`,
+              opacity: scale > 0 ? 1 : 0,
+            }}
+          >
+            <div
+              className="flex items-center gap-3"
+              style={{ fontFamily: data.fontFamily, color }}
+            >
+              <div className="flex min-w-0 flex-col items-center leading-tight">
+                <span className="text-2xl font-bold" style={uppercaseStyle}>
+                  {data.bookName} {data.chapter}
+                </span>
+                {versionLabel && (
+                  <span className="text-sm self-start opacity-60">{versionLabel}</span>
+                )}
+              </div>
+              <div
+                className="h-10 w-px shrink-0 opacity-25"
+                style={{ backgroundColor: color }}
+              />
+              <span className="shrink-0 text-4xl font-bold">{verseStr}</span>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="absolute left-1/2 top-1/2 flex items-center justify-center overflow-hidden pointer-events-none"
+            style={{
+              width: `${THUMB_VIRTUAL_W}px`,
+              height: `${THUMB_VIRTUAL_H}px`,
+              padding: '5%',
+              transform: `translate(-50%, -50%) scale(${scale})`,
+              opacity: scale > 0 ? 1 : 0,
+            }}
+          >
+            <div
+              ref={textRef}
+              className="w-full text-center"
+              style={{
+                fontFamily: data.fontFamily,
+                color,
+                fontWeight,
+                fontStyle,
+                ...uppercaseStyle,
+              }}
+            >
+              <div
+                className="font-medium"
+                style={{ fontSize: '0.25em', opacity: 0.6, marginBottom: '0.5em' }}
+              >
+                {data.bookName} {data.chapter}:{verseStr}
+                {versionLabel ? ` ${versionLabel}` : ''}
+              </div>
+              {lines.map((line, index) => (
+                <div key={`${index}-${line}`}>{line}</div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </button>
+  );
+});
 
 function PresenterHeader({
   meta,
@@ -796,6 +1017,7 @@ function PresenterSequence({
   lyricSlideIndex,
   profileBackground,
   fallbackSlides,
+  moduleData,
   sequenceRef,
   sequenceContentRef,
   isMinimized,
@@ -809,6 +1031,7 @@ function PresenterSequence({
   lyricSlideIndex: number;
   profileBackground?: string;
   fallbackSlides: FallbackSlide[];
+  moduleData: ModuleSlideData | null;
   sequenceRef: React.RefObject<HTMLDivElement | null>;
   sequenceContentRef: React.RefObject<HTMLDivElement | null>;
   isMinimized: boolean;
@@ -845,13 +1068,21 @@ function PresenterSequence({
                   }}
                 />
               ))
-              : fallbackSlides.map((slide, index) => (
-                <FallbackSequenceThumbnail
-                  key={slide.id}
-                  slide={slide}
-                  onClick={() => onSelectSlide?.(index)}
-                />
-              ))}
+              : kind === 'module' && moduleData
+                ? (
+                  <ModuleSequenceThumbnail
+                    data={moduleData}
+                    isSelected={true}
+                    onClick={() => onSelectSlide?.(0)}
+                  />
+                )
+                : fallbackSlides.map((slide, index) => (
+                  <FallbackSequenceThumbnail
+                    key={slide.id}
+                    slide={slide}
+                    onClick={() => onSelectSlide?.(index)}
+                  />
+                ))}
           </div>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
@@ -873,7 +1104,22 @@ export function PresenterControls({ className }: PresenterControlsProps) {
   const lyricPath = usePlayerStore((s) => s.currentLyricPath);
   const imagePath = usePlayerStore((s) => s.currentImagePath);
   const presenterViewId = useModuleStore((s) => s.presenterViewId);
-  const presenter = usePresenterStageState(lyricPath, presenterViewId);
+  const presenterProps = useModuleStore((s) => s.presenterProps);
+  const moduleName = useModuleStore((s) => {
+    if (!s.presenterViewId) return null;
+    for (const [moduleId, specs] of s.panels.entries()) {
+      if (specs.some((p) => p.id === s.presenterViewId && p.slot === 'presenter.content')) {
+        return s.modules.get(moduleId)?.manifest.name ?? null;
+      }
+    }
+    return null;
+  });
+  const moduleData = useMemo<ModuleSlideData | null>(() => {
+    if (!presenterProps) return null;
+    const p = presenterProps as { data?: ModuleSlideData } | undefined;
+    return p?.data ?? null;
+  }, [presenterProps]);
+  const presenter = usePresenterStageState(lyricPath, presenterViewId, presenterProps);
   const lyricData = usePresentedLyricData(lyricPath, presenter.kind);
   const profileBackground = useProfileBackground();
   const { isMinimized, sequenceRef, sequenceContentRef, toggle } = usePresenterCollapseAnimation();
@@ -910,7 +1156,9 @@ export function PresenterControls({ className }: PresenterControlsProps) {
       ? lyricData?.slides.length || lyricTotalSlides || 0
       : presenter.kind === 'presentation'
         ? presentationState.totalSlides
-        : fallbackSlides.length;
+        : presenter.kind === 'module'
+          ? 1
+          : fallbackSlides.length;
   const currentIndex =
     presenter.kind === 'lyrics'
       ? lyricSlideIndex
@@ -932,6 +1180,10 @@ export function PresenterControls({ className }: PresenterControlsProps) {
 
       if (presenter.kind === 'presentation') {
         usePresentationStore.getState().setSlide(nextIndex);
+        return;
+      }
+
+      if (presenter.kind === 'module') {
         return;
       }
 
@@ -978,8 +1230,13 @@ export function PresenterControls({ className }: PresenterControlsProps) {
     { capture: true }
   );
 
-  const meta = getKindMeta(presenter.kind, t);
-  const presenterName = presenter.name === 'Presentation' ? (presentationState.fileName ?? t('Presentation')) : presenter.name;
+  const meta = getKindMeta(presenter.kind, t, moduleName);
+  const presenterName =
+    presenter.name === 'Presentation'
+      ? (presenter.kind === 'module'
+        ? moduleName ?? t('Presentation')
+        : presentationState.fileName ?? t('Presentation'))
+      : presenter.name;
   const displayTitle =
     presenterName ??
     lyricData?.metadata.name ??
@@ -1025,6 +1282,7 @@ export function PresenterControls({ className }: PresenterControlsProps) {
         lyricSlideIndex={lyricSlideIndex}
         profileBackground={profileBackground}
         fallbackSlides={fallbackSlides}
+        moduleData={moduleData}
         sequenceRef={sequenceRef}
         sequenceContentRef={sequenceContentRef}
         isMinimized={isMinimized}
