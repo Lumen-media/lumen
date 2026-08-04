@@ -158,7 +158,7 @@ function PresentationPreviewRenderer({
     <div
       ref={containerRef}
       aria-hidden="true"
-      className="pointer-events-none fixed left-[-10000px] top-0 h-[180px] w-[320px] overflow-hidden opacity-0"
+      className="pointer-events-none fixed left-[-10000px] top-0 h-45 w-[320px] overflow-hidden opacity-0"
     />
   );
 }
