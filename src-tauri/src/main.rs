@@ -209,23 +209,29 @@ async fn create_surface_window(
     route: Option<String>,
     options: Option<SurfaceWindowOptions>,
 ) -> Result<(), String> {
-    let main_window = app_handle
-        .get_webview_window("main")
-        .ok_or_else(|| "Main window not found".to_string())?;
-
-    let main_position = main_window
-        .outer_position()
-        .map_err(|e| format!("Failed to get main window position: {}", e))?;
-
     let options = options.unwrap_or_default();
-    let width = options.width.unwrap_or(960.0);
-    let height = options.height.unwrap_or(640.0);
     let min_width = options.min_width.unwrap_or(720.0);
     let min_height = options.min_height.unwrap_or(480.0);
 
+    let (width, height) = {
+        let w = options.width;
+        let h = options.height;
+        if w.is_some() && h.is_some() {
+            (w.unwrap(), h.unwrap())
+        } else {
+            match app_handle.primary_monitor().ok().flatten() {
+                Some(monitor) => {
+                    let size = monitor.size();
+                    (w.unwrap_or(size.width as f64), h.unwrap_or(size.height as f64))
+                }
+                None => (w.unwrap_or(960.0), h.unwrap_or(640.0))
+            }
+        }
+    };
+
     let maximized = options.maximized.unwrap_or(false);
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let _ = tauri::WebviewWindowBuilder::new(
         &app_handle,
         &label,
         tauri::WebviewUrl::App(route.unwrap_or_else(|| "/module-surface-window".to_string()).into()),
@@ -238,17 +244,9 @@ async fn create_surface_window(
     .min_inner_size(min_width, min_height)
     .maximized(maximized)
     .visible(false)
+    .center()
     .build()
     .map_err(|e| format!("Failed to create surface window: {}", e))?;
-
-    if !maximized {
-        window
-            .set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                x: main_position.x + 120,
-                y: main_position.y + 120,
-            }))
-            .map_err(|e| format!("Failed to set surface window position: {}", e))?;
-    }
 
     Ok(())
 }
