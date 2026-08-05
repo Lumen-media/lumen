@@ -23,6 +23,7 @@ pub struct ModuleRuntime {
     pub modules_dir: PathBuf,
     pub registry: Arc<Mutex<Registry>>,
     pub http_client: Client,
+    pub manifest_cache: Mutex<HashMap<String, ModuleManifest>>,
 }
 
 impl ModuleRuntime {
@@ -55,7 +56,24 @@ impl ModuleRuntime {
             modules_dir: data_dir,
             registry: Arc::new(Mutex::new(registry)),
             http_client,
+            manifest_cache: Mutex::new(HashMap::new()),
         })
+    }
+
+    fn cached_manifest(&self, module_id: &str, path: &std::path::Path) -> Result<ModuleManifest, String> {
+        let mut cache = self.manifest_cache.lock().map_err(|e| e.to_string())?;
+        if let Some(manifest) = cache.get(module_id) {
+            return Ok(manifest.clone());
+        }
+        let manifest = manifest::load_manifest(path)?;
+        cache.insert(module_id.to_string(), manifest.clone());
+        Ok(manifest)
+    }
+
+    fn invalidate_manifest_cache(&self, module_id: &str) {
+        if let Ok(mut cache) = self.manifest_cache.lock() {
+            cache.remove(module_id);
+        }
     }
 }
 
@@ -76,7 +94,7 @@ pub fn module_list_installed(
 
     let mut result = Vec::new();
     for entry in entries {
-        match manifest::load_manifest(&entry.path) {
+        match runtime.cached_manifest(&entry.id, &entry.path) {
             Ok(manifest) => {
                 result.push(InstalledModule {
                     manifest,
@@ -126,6 +144,8 @@ pub fn module_install(
         enabled: true,
     };
 
+    runtime.invalidate_manifest_cache(&installed.manifest.id);
+
     let _ = app.emit("module:installed", &installed);
 
     Ok(installed)
@@ -141,7 +161,7 @@ pub fn module_get(app: AppHandle, id: String) -> Result<Option<InstalledModule>,
         return Ok(None);
     };
 
-    let manifest = manifest::load_manifest(&entry.path)?;
+    let manifest = runtime.cached_manifest(&id, &entry.path)?;
     Ok(Some(InstalledModule {
         manifest,
         source: entry.source,
@@ -181,6 +201,10 @@ pub fn module_uninstall(app: AppHandle, id: String) -> Result<(), String> {
     }
 
     reg.remove(&id).map_err(|e| e.to_string())?;
+
+    drop(reg);
+
+    runtime.invalidate_manifest_cache(&id);
 
     let _ = app.emit("module:uninstalled", &id);
 

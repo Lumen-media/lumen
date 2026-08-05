@@ -22,22 +22,21 @@ export async function bootPresenterModules(window: 'presenter' | 'surface' = 'pr
 }
 
 export async function bootSingleModule(moduleId: string, window: 'presenter' | 'surface' = 'surface') {
-  let manifests: Array<{ manifest: ModuleManifest }> = [];
+  let installed: { manifest: ModuleManifest; source: string; enabled: boolean } | null = null;
 
   try {
-    manifests = await invoke<Array<{ manifest: ModuleManifest; source: string }>>('module_list_installed');
+    installed = await invoke<{ manifest: ModuleManifest; source: string; enabled: boolean } | null>('module_get', { id: moduleId });
   } catch (err) {
-    console.error('[surface] failed to list modules:', err);
+    console.error('[surface] failed to get module:', err);
     return;
   }
 
-  const target = manifests.find((m) => m.manifest.id === moduleId);
-  if (!target) {
+  if (!installed) {
     console.error(`[surface] module not found: ${moduleId}`);
     return;
   }
 
-  await loadAndBootModule(target.manifest, window);
+  await loadAndBootModule(installed.manifest, window);
 }
 
 async function loadAndBootModule(manifest: ModuleManifest, window: 'presenter' | 'surface') {
