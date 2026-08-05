@@ -1,5 +1,5 @@
 import { emit } from '@tauri-apps/api/event';
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useModuleStore } from '../store';
 import type { PanelSpec } from '../types';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';
@@ -9,7 +9,8 @@ interface SurfaceWindowSlotProps {
 }
 
 export function SurfaceWindowSlot({ moduleId }: SurfaceWindowSlotProps) {
-  const state = useModuleStore((s) => s.surfaceWindows.get(moduleId) ?? null);
+  const panelId = useModuleStore((s) => s.surfaceWindows.get(moduleId)?.panelId ?? null);
+  const props = useModuleStore((s) => s.surfaceWindows.get(moduleId)?.props ?? null);
 
   const spec = useModuleStore<PanelSpec | null>((s) => {
     const active = s.surfaceWindows.get(moduleId);
@@ -20,11 +21,14 @@ export function SurfaceWindowSlot({ moduleId }: SurfaceWindowSlotProps) {
 
   const clearSurfaceWindow = useModuleStore((s) => s.clearSurfaceWindow);
 
+  const panelIdRef = useRef(panelId);
+  panelIdRef.current = panelId;
+
   const close = useCallback(async () => {
     clearSurfaceWindow(moduleId);
     await emit('module:surface-window-closed', {
       moduleId,
-      panelId: state?.panelId,
+      panelId: panelIdRef.current,
     }).catch(() => {});
 
     try {
@@ -33,18 +37,17 @@ export function SurfaceWindowSlot({ moduleId }: SurfaceWindowSlotProps) {
     } catch (error) {
       console.error('Failed to close surface window:', error);
     }
-  }, [clearSurfaceWindow, moduleId, state?.panelId]);
+  }, [clearSurfaceWindow, moduleId]);
 
-  if (!state || !spec) return null;
+  if (!panelId || !spec) return null;
 
   const Component = spec.component;
-  const props = (state.props ?? {}) as Record<string, unknown>;
 
   return (
     <div className="fixed inset-0 h-dvh w-dvw overflow-hidden bg-background text-foreground">
       <ModuleErrorBoundary moduleId={moduleId} panelId={spec.id}>
         <div data-module-scope={moduleId} className="h-full w-full overflow-hidden">
-          <Component {...props} close={close} onClose={close} />
+          <Component {...(props as Record<string, unknown>)} close={close} onClose={close} />
         </div>
       </ModuleErrorBoundary>
     </div>
