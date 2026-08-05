@@ -16,14 +16,8 @@ interface SurfaceProjectState {
 }
 
 async function waitForSurfaceState(label: string): Promise<SurfaceProjectState | null> {
-  for (let i = 0; i < 150; i++) {
-    const json = await invoke<string | null>('get_surface_state', { label }).catch(() => null);
-    if (json) {
-      return JSON.parse(json) as SurfaceProjectState;
-    }
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  return null;
+  const json = await invoke<string | null>('get_surface_state', { label }).catch(() => null);
+  return json ? (JSON.parse(json) as SurfaceProjectState) : null;
 }
 
 export const Route = createFileRoute('/module-surface-window')({
