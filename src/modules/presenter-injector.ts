@@ -40,7 +40,7 @@ export async function bootSingleModule(moduleId: string, window: 'presenter' | '
 }
 
 async function loadAndBootModule(manifest: ModuleManifest, window: 'presenter' | 'surface') {
-  const res = await fetch(`/__modules/${manifest.id}/${manifest.entry}?t=${Date.now()}`);
+  const res = await fetch(`/__modules/${manifest.id}/${manifest.entry}`);
   if (!res.ok) return;
 
   const code = await res.text();
