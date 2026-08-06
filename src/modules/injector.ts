@@ -136,7 +136,7 @@ export async function loadModule(manifest: ModuleManifest) {
   try {
     let mod: unknown;
     if (import.meta.env.DEV) {
-      const res = await fetch(`/__modules/${manifest.id}/${manifest.entry}?t=${Date.now()}`);
+      const res = await fetch(`/__modules/${manifest.id}/${manifest.entry}`);
       if (!res.ok) throw new Error(`module fetch failed: ${res.status}`);
       const code = await res.text();
       const blob = new Blob([code], { type: 'application/javascript' });
