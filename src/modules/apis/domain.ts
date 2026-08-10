@@ -125,6 +125,16 @@ export function createQueueHostAPI(): QueueHostAPI {
       const dispose = useModuleStore.getState().registerQueueTrigger(spec);
       return { dispose };
     },
+    addTrigger(triggerId, config) {
+      const id = crypto.randomUUID();
+      const entry = {
+        kind: 'trigger' as const,
+        id,
+        inst: { id, triggerId, config, showLabel: true },
+      };
+      const store = useQueueEntriesStore.getState();
+      store.setEntries([...store.entries, entry]);
+    },
     async addUrl(input) {
       if (input.position === 'next') {
         await useQueueStore.getState().playUrlNext(input.url, input.duration);
