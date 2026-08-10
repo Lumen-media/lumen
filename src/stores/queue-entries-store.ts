@@ -1,11 +1,11 @@
 import { toast } from 'sonner';
 import { create } from 'zustand';
 import { useModuleStore } from '@/modules/store';
-import { queueDbService } from '@/services/queue-db-service';
+import { queueDbService, rowToItem } from '@/services/queue-db-service';
 import type { FileInfo } from '@/services/types';
 import { useQueueStore, type QueueItem } from './queue-store';
 
-export type TriggerInstance = { id: string; triggerId: string; config: unknown; showLabel: boolean };
+export type TriggerInstance = { id: string; triggerId: string; config: unknown; showLabel: boolean; played: boolean };
 
 export type ListEntry =
   | { kind: 'item'; id: string; item: QueueItem }
@@ -21,8 +21,10 @@ interface QueueEntriesStore {
   pendingIndex: number;
   dropTargetIndex: number | null;
   dragFileInfo: FileInfo | null;
+  loadFromDb: () => Promise<void>;
   syncQueue: (queue: QueueItem[]) => void;
   setEntries: (entries: ListEntry[]) => void;
+  persistOrder: () => Promise<void>;
   setDropTargetIndex: (index: number | null) => void;
   setDragFileInfo: (file: FileInfo | null) => void;
   insertFileAtItemIndex: (file: FileInfo, itemIndex: number) => Promise<void>;
@@ -34,6 +36,44 @@ export const useQueueEntriesStore = create<QueueEntriesStore>((set, get) => ({
   pendingIndex: -1,
   dropTargetIndex: null,
   dragFileInfo: null,
+
+  loadFromDb: async () => {
+    try {
+      const rows = await queueDbService.loadAllRows();
+      const entries: ListEntry[] = [];
+      const seenPaths = new Set<string>();
+      const seenIds = new Set<string>();
+      for (const row of rows) {
+        if (seenPaths.has(row.file_path)) continue;
+        if (seenIds.has(String(row.id)) && !row.file_path.startsWith('trigger://')) continue;
+        seenPaths.add(row.file_path);
+        if (row.file_path.startsWith('trigger://')) {
+          const config = row.original_url ? JSON.parse(row.original_url) : {};
+          entries.push({
+            kind: 'trigger' as const,
+            id: row.file_path.slice('trigger://'.length),
+            inst: {
+              id: row.file_path.slice('trigger://'.length),
+              triggerId: row.file_name,
+              config,
+              showLabel: true,
+              played: row.played === 1,
+            },
+          });
+          seenIds.add(row.file_path);
+        } else {
+          const item = rowToItem(row);
+          entries.push({
+            kind: 'item' as const,
+            id: String(item.id),
+            item: { id: item.id, file: item, played: item.played },
+          });
+          seenIds.add(String(item.id));
+        }
+      }
+      set({ entries });
+    } catch {}
+  },
 
   syncQueue: (queue) => {
     set((state) => {
@@ -63,6 +103,21 @@ export const useQueueEntriesStore = create<QueueEntriesStore>((set, get) => ({
   },
 
   setEntries: (entries) => set({ entries }),
+
+  persistOrder: () => {
+    const { entries } = get();
+    const pathUpdates: { path: string; position: number }[] = [];
+    const idUpdates: { id: number; position: number }[] = [];
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      if (e.kind === 'trigger') {
+        pathUpdates.push({ path: `trigger://${e.id}`, position: i });
+      } else {
+        idUpdates.push({ id: e.item.id, position: i });
+      }
+    }
+    return queueDbService.updateAllPositions(idUpdates, pathUpdates);
+  },
 
   setDropTargetIndex: (index) => set({ dropTargetIndex: index }),
   setDragFileInfo: (file) => set({ dragFileInfo: file }),
@@ -112,6 +167,19 @@ export const useQueueEntriesStore = create<QueueEntriesStore>((set, get) => ({
   advanceQueue: (currentFilePath) => {
     const { entries, pendingIndex } = get();
 
+    const markTriggerPlayed = (index: number) => {
+      const entry = entries[index];
+      if (entry.kind !== 'trigger') return;
+      set({
+        entries: entries.map((e, idx) =>
+          idx === index && e.kind === 'trigger'
+            ? { ...e, inst: { ...e.inst, played: true } }
+            : e
+        ),
+      });
+      queueDbService.toggleTriggerPlayed(entry.id).catch(() => {});
+    };
+
     let startIdx: number;
     if (pendingIndex >= 0) {
       startIdx = pendingIndex;
@@ -129,11 +197,20 @@ export const useQueueEntriesStore = create<QueueEntriesStore>((set, get) => ({
         return { type: 'play', path: entry.item.file.path };
       }
       if (entry.kind === 'trigger') {
-        const specs = useModuleStore.getState().getQueueTriggerSpecs();
-        const spec = specs.find((s) => s.id === entry.inst.triggerId);
-        if (spec) {
+        const triggerSpecs = useModuleStore.getState().getQueueTriggerSpecs();
+        const triggerSpec = triggerSpecs.find((s) => s.id === entry.inst.triggerId);
+        if (triggerSpec) {
+          markTriggerPlayed(i);
           set({ pendingIndex: i });
-          spec.onFire(entry.inst.config);
+          triggerSpec.onFire(entry.inst.config);
+          return { type: 'triggered' };
+        }
+        const actionSpecs = useModuleStore.getState().getQueueActionSpecs();
+        const actionSpec = actionSpecs.find((s) => s.id === entry.inst.triggerId);
+        if (actionSpec) {
+          markTriggerPlayed(i);
+          set({ pendingIndex: i });
+          actionSpec.onFire(entry.inst.config);
           return { type: 'triggered' };
         }
       }
