@@ -125,12 +125,16 @@ export function createQueueHostAPI(): QueueHostAPI {
       const dispose = useModuleStore.getState().registerQueueTrigger(spec);
       return { dispose };
     },
+    registerAction(spec) {
+      const dispose = useModuleStore.getState().registerQueueAction(spec);
+      return { dispose };
+    },
     addTrigger(triggerId, config) {
       const id = crypto.randomUUID();
       const entry = {
         kind: 'trigger' as const,
         id,
-        inst: { id, triggerId, config, showLabel: true },
+        inst: { id, triggerId, config, showLabel: true, played: false },
       };
       const store = useQueueEntriesStore.getState();
       store.setEntries([...store.entries, entry]);
@@ -690,5 +694,7 @@ export function createThemesHostAPI(): ThemesHostAPI {
     },
   };
 }
+
+
 
 
