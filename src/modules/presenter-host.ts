@@ -105,6 +105,14 @@ export async function createPresenterHost(
       previous: noop,
       goTo: noop,
       registerTrigger: () => noopDisposable,
+      registerAction: () => noopDisposable,
+      addTrigger: (triggerId: string, config: unknown) => {
+        emit('module:queue-add-trigger', { triggerId, config }).catch(() => {});
+      },
+      addUrl: (input: { url: string; position?: 'end' | 'next'; duration?: number }) => {
+        emit('module:queue-add-url', input).catch(() => {});
+        return Promise.resolve();
+      },
     },
     library: {
       list: stub(Promise.resolve([])),

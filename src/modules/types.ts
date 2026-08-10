@@ -243,6 +243,11 @@ export interface QueueTriggerSpec {
   onFire(config: unknown): void;
 }
 
+export interface QueueActionSpec {
+  id: string;
+  onFire(config: unknown): void;
+}
+
 export interface QueueHostAPI {
   items(): QueueItem[];
   currentIndex(): number;
@@ -257,6 +262,7 @@ export interface QueueHostAPI {
   previous(): void;
   goTo(index: number): void;
   registerTrigger(spec: QueueTriggerSpec): Disposable;
+  registerAction(spec: QueueActionSpec): Disposable;
   addTrigger(triggerId: string, config: unknown): void;
   addUrl?(input: { url: string; position?: 'end' | 'next'; duration?: number }): Promise<void>;
 }

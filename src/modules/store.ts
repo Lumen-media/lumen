@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ModuleRecord, ModuleStatus, PanelSpec, QueueTriggerSpec, SurfaceWindowOptions } from './types';
+import type { ModuleRecord, ModuleStatus, PanelSpec, QueueActionSpec, QueueTriggerSpec, SurfaceWindowOptions } from './types';
 
 export interface ModuleSurfaceState {
   moduleId: string;
@@ -12,6 +12,7 @@ interface ModuleStore {
   modules: Map<string, ModuleRecord>;
   panels: Map<string, PanelSpec[]>;
   queueTriggerSpecs: Map<string, QueueTriggerSpec>;
+  queueActionSpecs: Map<string, QueueActionSpec>;
   openDialogId: string | null;
   presenterViewId: string | null;
   presenterProps: unknown;
@@ -29,6 +30,8 @@ interface ModuleStore {
 
   registerQueueTrigger(spec: QueueTriggerSpec): () => void;
   getQueueTriggerSpecs(): QueueTriggerSpec[];
+  registerQueueAction(spec: QueueActionSpec): () => void;
+  getQueueActionSpecs(): QueueActionSpec[];
 
   openDialog(id: string): void;
   closeDialog(): void;
@@ -43,6 +46,7 @@ export const useModuleStore = create<ModuleStore>((set, get) => ({
   modules: new Map(),
   panels: new Map(),
   queueTriggerSpecs: new Map(),
+  queueActionSpecs: new Map(),
   openDialogId: null,
   presenterViewId: null,
   presenterProps: undefined,
@@ -136,6 +140,25 @@ export const useModuleStore = create<ModuleStore>((set, get) => ({
 
   getQueueTriggerSpecs() {
     return Array.from(get().queueTriggerSpecs.values());
+  },
+
+  registerQueueAction(spec) {
+    set((s) => {
+      const next = new Map(s.queueActionSpecs);
+      next.set(spec.id, spec);
+      return { queueActionSpecs: next };
+    });
+    return () => {
+      set((s) => {
+        const next = new Map(s.queueActionSpecs);
+        next.delete(spec.id);
+        return { queueActionSpecs: next };
+      });
+    };
+  },
+
+  getQueueActionSpecs() {
+    return Array.from(get().queueActionSpecs.values());
   },
 
   openDialog(id) {

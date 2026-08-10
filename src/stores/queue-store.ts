@@ -42,7 +42,11 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
 
   loadFromDb: async () => {
     const items = await queueDbService.loadQueue();
-    set({ queue: items.map((item) => ({ id: item.id, file: item, played: item.played })) });
+    set({
+      queue: items
+        .filter((item) => !item.path.startsWith('trigger://'))
+        .map((item) => ({ id: item.id, file: item, played: item.played })),
+    });
   },
 
   addToQueue: async (file) => {
