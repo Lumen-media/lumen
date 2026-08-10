@@ -88,8 +88,8 @@ import { thumbnailService } from '@/services/thumbnail-service';
 import type { FileInfo } from '@/services/types';
 import { usePlayerStore } from '@/stores/player-store';
 import { useProfileStore } from '@/stores/profile-store';
+import { queueDbService } from '@/services/queue-db-service';
 import {
-  type ListEntry,
   type TriggerInstance,
   useQueueEntriesStore,
 } from '@/stores/queue-entries-store';
@@ -130,7 +130,6 @@ export function AsidePanel() {
     loadFromDb,
     clearQueue,
     shuffleQueue,
-    reorderQueue,
   } = useQueueStore();
   const loadFile = usePlayerStore((s) => s.loadFile);
 
@@ -172,7 +171,6 @@ export function AsidePanel() {
             onTogglePlayed={togglePlayed}
             onClear={clearQueue}
             onShuffle={shuffleQueue}
-            onReorder={reorderQueue}
             onPlay={(item) => {
               loadFile(item.file.path);
               markPlayed(item.id);
@@ -205,7 +203,6 @@ function QueueTab({
   onTogglePlayed,
   onClear,
   onShuffle,
-  onReorder,
   onPlay,
 }: {
   queue: QueueItem[];
@@ -213,19 +210,24 @@ function QueueTab({
   onTogglePlayed: (id: number) => void;
   onClear: () => Promise<void>;
   onShuffle: () => Promise<void>;
-  onReorder: (orderedIds: number[]) => Promise<void>;
   onPlay: (item: QueueItem) => void;
 }) {
   const currentFilePath = usePlayerStore((s) => s.currentFilePath);
   const triggerSpecsMap = useModuleStore((s) => s.queueTriggerSpecs);
   const triggerSpecs = Array.from(triggerSpecsMap.values());
+  const actionSpecsMap = useModuleStore((s) => s.queueActionSpecs);
+  const actionSpecs = Array.from(actionSpecsMap.values());
 
   const entries = useQueueEntriesStore((s) => s.entries);
   const dropTargetIndex = useQueueEntriesStore((s) => s.dropTargetIndex);
-  const { syncQueue, setEntries } = useQueueEntriesStore.getState();
+  const { syncQueue, setEntries, loadFromDb, persistOrder } = useQueueEntriesStore.getState();
 
   const [triggerDialog, setTriggerDialog] = useState<TriggerDialog>(null);
   const [contextTargetItem, setContextTargetItem] = useState<QueueItem | null>(null);
+
+  useEffect(() => {
+    loadFromDb();
+  }, [loadFromDb]);
 
   useEffect(() => {
     syncQueue(queue);
@@ -244,10 +246,9 @@ function QueueTab({
     if (oldIdx === -1 || newIdx === -1) return;
     const next = arrayMove(entries, oldIdx, newIdx);
     setEntries(next);
-    const orderedQueueIds = next
-      .filter((e): e is Extract<ListEntry, { kind: 'item' }> => e.kind === 'item')
-      .map((e) => e.item.id);
-    onReorder(orderedQueueIds);
+    persistOrder().then(() => {
+      useQueueStore.getState().loadFromDb();
+    }).catch(() => {});
   }
 
   function openAddTrigger(triggerId: string) {
@@ -275,6 +276,7 @@ function QueueTab({
         triggerId,
         config,
         showLabel: false,
+        played: false,
       };
       setEntries([...entries, { kind: 'trigger', id: newInst.id, inst: newInst }]);
     }
@@ -283,6 +285,7 @@ function QueueTab({
 
   function removeTriggerInstance(entryId: string) {
     setEntries(entries.filter((e) => e.id !== entryId));
+    queueDbService.removeTriggerEntry(entryId).catch(() => {});
   }
 
   const dialogSpec = triggerDialog
@@ -295,7 +298,7 @@ function QueueTab({
   const itemPositions = new Map<string, number>();
   let pos = 0;
   for (const entry of entries) {
-    if (entry.kind === 'item') itemPositions.set(entry.id, pos++);
+    itemPositions.set(entry.id, pos++);
   }
 
   const { setNodeRef: setQueueDropRef } = useDroppable({ id: 'queue-drop-zone' });
@@ -326,8 +329,8 @@ function QueueTab({
           </div>
         </ContextMenuTrigger>
       </ContextMenu>
-    );
-  }
+  );
+}
 
   return (
     <>
@@ -382,24 +385,102 @@ function QueueTab({
                                   onContextMenu={() => setContextTargetItem(entry.item)}
                                   formatDuration={formatDuration}
                                 />
-                              ) : (() => {
-                                const spec = triggerSpecs.find((s) => s.id === entry.inst.triggerId);
-                                if (!spec) return null;
-                                return (
-                                  <SortableTriggerItem
-                                    inst={entry.inst}
-                                    spec={spec}
-                                    onEdit={() => openEditTrigger(entry.inst)}
-                                    onRemove={() => removeTriggerInstance(entry.id)}
-                                    onToggleLabel={() =>
-                                      setEntries(
-                                        entries.map((e) =>
-                                          e.id === entry.id && e.kind === 'trigger'
-                                            ? { ...e, inst: { ...e.inst, showLabel: !e.inst.showLabel } }
-                                            : e
+                              ) : entry.kind === 'trigger' && (() => {
+                                const triggerSpec = triggerSpecs.find((s) => s.id === entry.inst.triggerId);
+                                if (triggerSpec) {
+                                  return (
+                                    <SortableTriggerItem
+                                      inst={entry.inst}
+                                      spec={triggerSpec}
+                                      onEdit={() => openEditTrigger(entry.inst)}
+                                      onRemove={() => removeTriggerInstance(entry.id)}
+                                      onToggleLabel={() =>
+                                        setEntries(
+                                          entries.map((e) =>
+                                            e.id === entry.id && e.kind === 'trigger'
+                                              ? { ...e, inst: { ...e.inst, showLabel: !e.inst.showLabel } }
+                                              : e
+                                          )
                                         )
-                                      )
-                                    }
+                                      }
+                                    />
+                                  );
+                                }
+                                const foundSpec = actionSpecs.find((s) => s.id === entry.inst.triggerId);
+                                if (!triggerSpec && foundSpec) {
+                                  const cfg = entry.inst.config as Record<string, unknown> | undefined;
+                                  const title =
+                                    cfg?.bookName != null && cfg?.chapter != null && cfg?.verse != null
+                                      ? `${cfg.bookName} ${cfg.chapter}:${cfg.verse}`
+                                      : entry.inst.triggerId;
+                                  const tag = cfg?.versionDisplayName != null
+                                    ? String(cfg.versionDisplayName)
+                                    : '';
+                                  const actionQueueItem: QueueItem = {
+                                    id: 1000000 + idx,
+                                    file: {
+                                      name: tag,
+                                      path: `action://${entry.id}`,
+                                      size: 0,
+                                      modifiedAt: new Date(),
+                                      extension: '',
+                                      title,
+                                    },
+                                    played: entry.inst.played,
+                                  };
+                                  return (
+                                    <SortableQueueItem
+                                      sortableId={entry.id}
+                                      item={actionQueueItem}
+                                      isCurrent={false}
+                                      index={itemPositions.get(entry.id) ?? 0}
+                                      onPlay={() => {
+                                        const spec = actionSpecs.find((s) => s.id === entry.inst.triggerId);
+                                        if (spec) {
+                                          setEntries(
+                                            entries.map((e) =>
+                                              e.id === entry.id && e.kind === 'trigger'
+                                                ? { ...e, inst: { ...e.inst, played: true } }
+                                                : e
+                                            )
+                                          );
+                                          spec.onFire(entry.inst.config);
+                                        }
+                                      }}
+                                      onContextMenu={() => setContextTargetItem(actionQueueItem)}
+                                      formatDuration={() => ''}
+                                    />
+                                  );
+                                }
+                                const cfg = entry.inst.config as Record<string, unknown> | undefined;
+                                const title =
+                                  cfg?.bookName != null && cfg?.chapter != null && cfg?.verse != null
+                                    ? `${cfg.bookName} ${cfg.chapter}:${cfg.verse}`
+                                    : entry.inst.triggerId;
+                                const tag = cfg?.versionDisplayName != null
+                                  ? String(cfg.versionDisplayName)
+                                  : '';
+                                const fallbackItem: QueueItem = {
+                                  id: 1000000 + idx,
+                                  file: {
+                                    name: tag,
+                                    path: `action://${entry.id}`,
+                                    size: 0,
+                                    modifiedAt: new Date(),
+                                    extension: '',
+                                    title,
+                                  },
+                                  played: entry.inst.played,
+                                };
+                                return (
+                                  <SortableQueueItem
+                                    sortableId={entry.id}
+                                    item={fallbackItem}
+                                    isCurrent={false}
+                                    index={itemPositions.get(entry.id) ?? 0}
+                                    onPlay={() => {}}
+                                    onContextMenu={() => setContextTargetItem(fallbackItem)}
+                                    formatDuration={() => ''}
                                   />
                                 );
                               })()}
@@ -426,18 +507,46 @@ function QueueTab({
         </ContextMenuTrigger>
 
         <ContextMenuContent>
-          {contextTargetItem && (
-            <>
-              <ContextMenuItem onClick={() => onTogglePlayed(contextTargetItem.id)}>
-                <CheckCircle2 className="h-4 w-4" />
-                {contextTargetItem.played ? 'Mark as unplayed' : 'Mark as played'}
-              </ContextMenuItem>
-              <ContextMenuItem onClick={() => onRemove(contextTargetItem.id)} variant="destructive">
-                <ListX className="h-4 w-4" />
-                Remove from queue
-              </ContextMenuItem>
-            </>
-          )}
+          {contextTargetItem && (() => {
+            const isAction = contextTargetItem.file.path.startsWith('action://');
+            const actionEntryId = isAction ? contextTargetItem.file.path.slice('action://'.length) : null;
+            return (
+              <>
+                <ContextMenuItem
+                  onClick={() => {
+                    if (isAction && actionEntryId) {
+                      setEntries(
+                        entries.map((e) =>
+                          e.id === actionEntryId && e.kind === 'trigger'
+                            ? { ...e, inst: { ...e.inst, played: !e.inst.played } }
+                            : e
+                        )
+                      );
+                      queueDbService.toggleTriggerPlayed(actionEntryId).catch(() => {});
+                    } else {
+                      onTogglePlayed(contextTargetItem.id);
+                    }
+                  }}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {contextTargetItem.played ? 'Mark as unplayed' : 'Mark as played'}
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onClick={() => {
+                    if (isAction && actionEntryId) {
+                      removeTriggerInstance(actionEntryId);
+                    } else {
+                      onRemove(contextTargetItem.id);
+                    }
+                  }}
+                  variant="destructive"
+                >
+                  <ListX className="h-4 w-4" />
+                  Remove from queue
+                </ContextMenuItem>
+              </>
+            );
+          })()}
           {!contextTargetItem && triggerSpecs.length > 0 && triggerSpecs.length <= 6 && (
             <ContextMenuGroup>
               <ContextMenuLabel>Queue Triggers</ContextMenuLabel>

@@ -1094,6 +1094,54 @@ function TimerSummary({ value, onEdit }: { value: TimerConfig; onEdit: () => voi
 Returns a `Disposable` — registered trigger is removed on module unload.
 
 
+## `host.queue.registerAction`
+
+Registers a module-only action for programmatic use via `addTrigger`. Unlike `registerTrigger`, actions do **not** appear in the queue panel context menu — only the module itself can create queue instances through `addTrigger`.
+
+Actions serve as pure execution triggers controlled entirely by module code. The operator never sees or configures them.
+
+```ts
+host.queue.registerAction({
+  id: 'my-module.show-slide',
+  onFire(config) {
+    host.presentation.project('my-module-slide', { data: config });
+  },
+})
+
+// Later, from a component or handler:
+host.queue.addTrigger?.('my-module.show-slide', {
+  slideIndex: 3,
+  title: 'Announcements',
+})
+```
+
+### When to use `registerAction` vs `registerTrigger`
+
+| Use `registerAction` when... | Use `registerTrigger` when... |
+|---|---|
+| The module decides what and when to add | The operator decides what and when to add |
+| Config is pre-determined by module logic | Config must be chosen by the operator (dialog) |
+| No operator-facing UI is needed | Full config UI (`ConfigComponent`, `SummaryComponent`) is needed |
+| Examples: verse bookmark, quick-slide, auto-generated items | Examples: countdown timer, custom announcement builder |
+
+### `QueueActionSpec<T>`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | ✓ | Unique identifier (`module-id.name`) |
+| `onFire` | `(config: T) => void` | ✓ | Called when the queue auto-advances past this action |
+
+Returns a `Disposable` — registered action is removed on module unload.
+
+### Auto-advance flow
+
+Same as triggers: when the queue auto-advances and encounters an action instance, `onFire` is called with the config passed via `addTrigger`. The action is responsible for calling `host.queue.next()` when done to unblock the queue.
+
+### How trigger entries are resolved
+
+When the queue encounters a `kind: 'trigger'` entry, it looks up the `triggerId` in both `queueTriggerSpecs` and `queueActionSpecs`. If found in either, the corresponding `onFire` is called. This means actions and triggers share the same entry format — the only difference is visibility in the queue panel.
+
+
 ---
 
 ## Full example
