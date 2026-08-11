@@ -3,6 +3,7 @@ import { emit } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Toaster } from '@/components/ui/sonner';
 import { SurfaceWindowSlot } from '@/modules/components/SurfaceWindowSlot';
 import { bootSingleModule } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
@@ -157,5 +158,10 @@ function ModuleSurfaceWindow() {
 
   if (!activeModuleId) return null;
 
-  return <SurfaceWindowSlot moduleId={activeModuleId} />;
+  return (
+    <>
+      <SurfaceWindowSlot moduleId={activeModuleId} />
+      <Toaster />
+    </>
+  );
 }
