@@ -26,6 +26,17 @@ export default class MyModule extends LumenPlugin {
 }
 ```
 
+> **⚠️ Do not store host API objects in reactive state.** Host objects (`host.queue`, `host.presentation`, etc.) contain closures and internal references. Placing them in Zustand, Redux, `useState`, or any observable store triggers unnecessary comparisons on every state update, degrading performance. Store them in a plain `let` / `const` variable at module scope instead.
+>
+> ```ts
+> // ❌ Wrong — causes performance issues
+> useMyStore.getState().init({ queue: host.queue });
+>
+> // ✅ Right — module-level variable, no reactive overhead
+> let apiQueue: QueueHostAPI | null = null;
+> apiQueue = host.queue;
+> ```
+
 ### `manifest.json`
 
 ```json
