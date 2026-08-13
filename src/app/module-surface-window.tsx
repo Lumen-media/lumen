@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { emit } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { emit } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Toaster } from '@/components/ui/sonner';
@@ -41,7 +41,7 @@ function ModuleSurfaceWindow() {
     } catch {
       return;
     }
-    emit('module:surface-ready', { label }).catch(() => {});
+    emit('module:surface-ready', { label }).catch(() => { });
   }, []);
 
   const closeWindow = useCallback(async () => {
@@ -65,14 +65,14 @@ function ModuleSurfaceWindow() {
           emit('module:surface-window-closed', {
             moduleId,
             panelId: state?.panelId,
-          }).catch(() => {});
-        }),
+          }).catch(() => { });
+        })
       )
       .then((unlisten) => {
         if (!cancelled) detachCloseListener = unlisten;
         else unlisten();
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       cancelled = true;
@@ -97,12 +97,9 @@ function ModuleSurfaceWindow() {
           return;
         }
 
-        useModuleStore.getState().openSurfaceWindow(
-          state.moduleId,
-          state.panelId,
-          state.props,
-          state.options,
-        );
+        useModuleStore
+          .getState()
+          .openSurfaceWindow(state.moduleId, state.panelId, state.props, state.options);
 
         await bootSingleModule(state.moduleId, 'surface');
         if (cancelled) {
@@ -142,13 +139,13 @@ function ModuleSurfaceWindow() {
           useModuleStore.getState().clearSurfaceWindow(event.payload.moduleId);
           setActiveModuleId(null);
           void closeWindow();
-        }),
+        })
       )
       .then((fn) => {
         if (!cancelled) detachClearListener = fn;
         else fn();
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       cancelled = true;
