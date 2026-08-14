@@ -18,25 +18,29 @@ Bugfix or refactor. Summarize the change objectively.
 ## 🧪 How to Test
 
 **Before:**
-1.
-2.
+1. Step to reproduce the bug / current behavior.
+2. Expected (buggy/old) result.
 
 **After:**
-1.
-2.
+1. Steps to validate the fix (flows, flags, user roles).
+2. Edge cases or regressions to check.
+3. Expected result.
 
-## 📸 Screenshots / Recording
+## 📸 Screenshots / Evidence
 
-<!-- Logs, screenshots, or GIFs that demonstrate the fix. -->
+<!-- If applicable, add logs, screenshots, or GIFs demonstrating the fix -->
 
 ## ✅ Checklist
 
+- [ ] Bug reproduced before the change (if applicable)
 - [ ] Main flow tested manually
-- [ ] Checked for regressions in adjacent areas
+- [ ] Edge cases / adjacent areas checked for regressions
 - [ ] Behavior differences between dev and prod documented (if any)
+- [ ] Docs or release notes updated (if applicable)
 - [ ] Tests added or updated
+- [ ] All tests passing
 - [ ] Self-reviewed
 
 ## 📝 Additional Notes
 
-<!-- Known risks, trade-offs, follow-ups, or out-of-scope items. -->
+<!-- Known risks, trade-offs, planned follow-ups, or out-of-scope limits -->
