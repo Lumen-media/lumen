@@ -31,7 +31,7 @@ import { ImageLoader } from './image-loader';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './ui/empty';
-import { Input } from './ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
 import { ScrollArea } from './ui/scroll-area';
 import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from './ui/tabs';
 
@@ -537,15 +537,24 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
           </TabsContent>
 
           <TabsContent value="images" className="px-6 py-4 flex flex-col gap-4">
-            <div className="relative">
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-              <Input
+            <InputGroup>
+              <InputGroupInput
                 placeholder={t('Search Unsplash...')}
+                autoComplete="off"
+                aria-label={t('Search Unsplash')}
+                role="searchbox"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
               />
-            </div>
+              <InputGroupAddon>
+                <SearchIcon />
+              </InputGroupAddon>
+              {hasSearched && (
+                <InputGroupAddon align="inline-end">
+                  {unsplashResults.length} {t('results')}
+                </InputGroupAddon>
+              )}
+            </InputGroup>
             <ScrollArea
               ref={unsplashScrollRef}
               className="min-h-88 h-[34dvh]"

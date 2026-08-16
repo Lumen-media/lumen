@@ -326,6 +326,7 @@ export function MediaPanel() {
               placeholder={
                 activeMedia ? t(`Search ${currentItem?.label.toLowerCase()}...`) : t('Search...')
               }
+              autoComplete={'off'}
               aria-label={
                 activeMedia
                   ? `${'Search'} ${currentItem?.label.toLowerCase()} ${t('files')}`
