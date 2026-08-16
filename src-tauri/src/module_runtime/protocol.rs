@@ -96,7 +96,7 @@ fn resolve_theme_path(file_path: &str) -> Result<PathBuf, (u16, String)> {
         .parse::<i64>()
         .map_err(|_| (400, "Bad Request: invalid theme id".to_string()))?;
 
-    let db_path = app_base_dir()?.join("lumen.db");
+    let db_path = super::app_base_dir().map_err(|e| (500, e))?.join("lumen.db");
     let connection = Connection::open(db_path).map_err(|e| (500, e.to_string()))?;
     let path: String = connection
         .query_row(
@@ -110,7 +110,8 @@ fn resolve_theme_path(file_path: &str) -> Result<PathBuf, (u16, String)> {
     let canonical_theme_path = theme_path
         .canonicalize()
         .map_err(|e| (404, format!("Not Found: {e}")))?;
-    let canonical_themes_dir = app_base_dir()?
+let canonical_themes_dir = super::app_base_dir()
+        .map_err(|e| (500, e))?
         .join("files")
         .join("media")
         .join("themes")
@@ -122,14 +123,6 @@ fn resolve_theme_path(file_path: &str) -> Result<PathBuf, (u16, String)> {
     }
 
     Ok(canonical_theme_path)
-}
-
-fn app_base_dir() -> Result<PathBuf, (u16, String)> {
-    let exe = std::env::current_exe().map_err(|e| (500, e.to_string()))?;
-    let parent = exe
-        .parent()
-        .ok_or_else(|| (500, "Could not resolve executable directory".to_string()))?;
-    Ok(parent.join("lumen"))
 }
 
 fn response(status: u16, body: impl Into<String>) -> tauri::http::Response<Vec<u8>> {

@@ -194,7 +194,7 @@ fn match_url_pattern(url_str: &str, pattern: &str) -> bool {
     inner(url_str, pattern).unwrap_or(false)
 }
 
-fn check_url_allowed(
+pub(crate) fn check_url_allowed(
     url_str: &str,
     manifest: &ModuleManifest,
 ) -> Result<(), ModuleNetError> {
