@@ -135,6 +135,7 @@ export function createMockHost(overrides) {
       current: stub({ id: 'default', name: 'Default', colorMode: 'dark', accentId: 'cyan' }),
       list: stub([]),
       apply: noop,
+      addBackground: noopPromise({ id: 0, name: '', path: '', extension: '' }),
       defaultBackground: stub(null),
       onDefaultBackgroundChange: function() { return noopDisposable; },
     },
