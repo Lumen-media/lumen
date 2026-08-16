@@ -378,10 +378,27 @@ export interface ThemeRef {
   accentId: string;
 }
 
+export type ThemeAddSource =
+  | { type: 'url'; url: string }
+  | { type: 'file'; path: string };
+
+export interface ThemeAddInput {
+  source: ThemeAddSource;
+  name?: string;
+}
+
+export interface ThemeAddResult {
+  id: number;
+  name: string;
+  path: string;
+  extension: string;
+}
+
 export interface ThemesHostAPI {
   current(): ThemeRef;
   list(): ThemeRef[];
   apply(id: string): void;
+  addBackground(input: ThemeAddInput): Promise<ThemeAddResult>;
   defaultBackground(): { src: string; type: 'theme' | 'image' | 'video'; name: string } | null;
   onDefaultBackgroundChange(
     handler: (

@@ -165,6 +165,9 @@ export async function createPresenterHost(
       current: stub({ id: 'default', name: 'Default', colorMode: 'dark' as const, accentId: 'cyan' }),
       list: stub([]),
       apply: noop,
+      addBackground: async () => {
+        throw new Error('themes.addBackground is not available in this window');
+      },
       defaultBackground: stub(null),
       onDefaultBackgroundChange: () => noopDisposable,
     },
