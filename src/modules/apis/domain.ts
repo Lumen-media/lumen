@@ -22,6 +22,8 @@ import type {
   SurfaceWindowOptions,
   QueueHostAPI,
   StageBackdropChangeDetail,
+  ThemeAddInput,
+  ThemeAddResult,
   ThemesHostAPI,
 } from '../types';
 import { globalBus } from './bus';
@@ -613,7 +615,7 @@ async function ensureMediaWindow() {
   return { created: false };
 }
 
-export function createThemesHostAPI(): ThemesHostAPI {
+export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
   return {
     current() {
       const { profiles, activeProfileId } = useProfileStore.getState();
@@ -636,6 +638,9 @@ export function createThemesHostAPI(): ThemesHostAPI {
     },
     apply(id) {
       useProfileStore.getState().setActiveProfile(id);
+    },
+    addBackground(input: ThemeAddInput): Promise<ThemeAddResult> {
+      return invoke('module_theme_add', { moduleId, input });
     },
     defaultBackground() {
       const { profiles, activeProfileId } = useProfileStore.getState();

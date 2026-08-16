@@ -116,7 +116,7 @@ export async function createHost(
     presentation: createPresentationHostAPI(),
     overlay: createOverlayHostAPI(),
     surface: createSurfaceHostAPI(id),
-    themes: createThemesHostAPI(),
+    themes: createThemesHostAPI(id),
     fonts: createFontsAPI(),
 
     fs: createFsAPI(id),
