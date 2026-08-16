@@ -583,6 +583,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             module_runtime::module_data_sqlite_migrate,
             module_runtime::module_data_sqlite_close,
             module_runtime::net::module_net_request,
+            module_runtime::themes::module_theme_add,
             presentation::extract_presentation_metadata,
         ])
         .run(tauri::generate_context!())
