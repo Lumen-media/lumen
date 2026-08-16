@@ -80,7 +80,7 @@ export const SettingsDialog = () => {
 
       <DialogContent
         showCloseButton={false}
-        className="w-full p-0 gap-0 sm:max-w-[60dvw] h-full max-h-[70dvh] flex"
+        className="w-full p-0 gap-0 sm:max-w-[60dvw] h-full max-h-[70dvh] flex overflow-hidden"
       >
         <Card className="w-56 shrink-0 p-0 border-0 rounded-none rounded-l-xl gap-0">
           <CardHeader className="p-3 flex-row items-center justify-between">
@@ -221,7 +221,7 @@ export const SettingsDialog = () => {
 
         <Separator orientation="vertical" />
 
-        <Card className="flex-1 p-0 border-0 rounded-l-none rounded-r-xl gap-0">
+        <Card className="flex-1 p-0 border-0 rounded-none rounded-r-xl gap-0">
           <CardHeader className="p-4 flex-row items-start justify-between gap-4">
             <div>
               <p className="text-xs font-medium text-primary">
