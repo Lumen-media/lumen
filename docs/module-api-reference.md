@@ -893,7 +893,37 @@ Still only wired via bus — read methods return empty/default data.
 
 ## `host.themes` — background APIs ✅
 
-Two methods on `host.themes` are fully implemented and read real profile state.
+Methods on `host.themes` are fully implemented and read real profile state.
+
+### `addBackground(input)`
+
+Registers a new background image in the app's themes library. The image is written to the shared themes folder (`lumen/files/media/themes/`) and inserted into the `theme_files` table, exactly like a manually downloaded Unsplash image — it then appears in the background picker and can be served via `lumen-module://__theme/id/{id}`.
+
+```ts
+const theme = await host.themes.addBackground({
+  source: { type: 'url', url: 'https://example.com/background.jpg' },
+  name: 'My Module Background',
+})
+// { id: 12, name: 'My Module Background.jpg', path: 'C:\\lumen\\files\\media\\themes\\My Module Background.jpg', extension: '.jpg' }
+```
+
+`source` accepts either a remote URL or a file from the module's own data directory:
+
+```ts
+// From a file inside the module's sandboxed data dir (path is module-relative):
+const theme = await host.themes.addBackground({
+  source: { type: 'file', path: 'assets/background.png' },
+})
+```
+
+Behavior:
+
+- **URL source** — the host downloads the image on the module's behalf using the module's manifest `permissions.network` allowlist. URLs outside the allowlist are rejected with `permission_denied`; localhost/private hosts are blocked; the response must be an image and is capped at 50 MB.
+- **File source** — the path is resolved inside the module's own sandboxed directory (same scoping as `host.fs`). Path traversal is blocked.
+- **`name`** (optional) — display/file name. When omitted, it is derived from the URL or file name. Invalid filename characters are sanitized, and a numeric suffix (`name (1)`, `name (2)`, …) is added if a file with the same name already exists.
+- Supported image types: `gif`, `jpg`, `jpeg`, `png`, `webp`, `svg`, `bmp`, `avif`.
+
+The returned `ThemeAddResult` contains the persisted file metadata; the new background is available in the background picker immediately (the picker re-lists themes on open).
 
 ### `defaultBackground()`
 
