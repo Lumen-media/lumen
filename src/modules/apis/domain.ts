@@ -642,10 +642,23 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
     addBackground(input: ThemeAddInput): Promise<ThemeAddResult> {
       return invoke('module_theme_add', { moduleId, input });
     },
-    defaultBackground() {
+    async defaultBackground() {
       const { profiles, activeProfileId } = useProfileStore.getState();
       const profileBg = profiles.find((p) => p.id === activeProfileId)?.defaultBackground;
-      return profileBg ? { src: profileBg.src, type: profileBg.type, name: profileBg.name } : null;
+      if (!profileBg) return null;
+
+      const src = profileBg.src;
+      if (!src || src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:')) {
+        return { src, type: profileBg.type, name: profileBg.name };
+      }
+
+      try {
+        const bytes = await readFile(src);
+        const blobUrl = URL.createObjectURL(new Blob([bytes]));
+        return { src: blobUrl, type: profileBg.type, name: profileBg.name };
+      } catch {
+        return { src, type: profileBg.type, name: profileBg.name };
+      }
     },
     onDefaultBackgroundChange(handler) {
       let lastSrc: string | null | undefined ;
@@ -667,7 +680,7 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
             if (!bg) {
               handler(null);
               return;
-}
+            }
 
             handler({ ...bg, src: blobUrl, ...(thumb ? { thumb } : {}) });
           })
@@ -678,12 +691,14 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
         const profile = state.profiles.find((p) => p.id === state.activeProfileId);
         const bg = profile?.defaultBackground ?? null;
         const src = bg?.src ?? null;
+        console.log('[host] onDefaultBackgroundChange subscribe fired, src:', src, 'lastSrc:', lastSrc);
         if (src === lastSrc) return;
         lastSrc = src;
         fire(bg);
       });
 
       const { profiles, activeProfileId } = useProfileStore.getState();
+      console.log('[host] onDefaultBackgroundChange init check, profiles:', profiles.length, 'activeProfileId:', activeProfileId);
       const profile = profiles.find((p) => p.id === activeProfileId);
       const current = profile?.defaultBackground ?? null;
       if (current?.src) {
