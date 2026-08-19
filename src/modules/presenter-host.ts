@@ -1,4 +1,5 @@
 import { createDataAPI } from './apis/data';
+import { createThemesHostAPI } from './apis/domain';
 import { createFsAPI } from './apis/fs';
 import { createI18nAPI } from './apis/i18n';
 import { createLoggerAPI } from './apis/logger';
@@ -161,16 +162,7 @@ export async function createPresenterHost(
     fonts: {
       list: stub(Promise.resolve([] as string[])),
     },
-    themes: {
-      current: stub({ id: 'default', name: 'Default', colorMode: 'dark' as const, accentId: 'cyan' }),
-      list: stub([]),
-      apply: noop,
-      addBackground: async () => {
-        throw new Error('themes.addBackground is not available in this window');
-      },
-      defaultBackground: stub(null),
-      onDefaultBackgroundChange: () => noopDisposable,
-    },
+    themes: createThemesHostAPI(id),
 
     fs: createFsAPI(id),
     net: createNetAPI(id),
