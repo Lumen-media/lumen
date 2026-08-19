@@ -24,13 +24,28 @@ import type {
   StageBackdropChangeDetail,
   ThemeAddInput,
   ThemeAddResult,
+  ThemeRef,
   ThemesHostAPI,
 } from '../types';
 import { globalBus } from './bus';
 import { useProfileStore } from '@/stores/profile-store';
+import { ACCENT_PRESETS } from '@/stores/theme-store';
+import type { Profile } from '@/services/profile-service';
 
 function stripExt(name: string) {
   return name.replace(/\.[^/.]+$/, '');
+}
+
+function toThemeRef(profile?: Profile): ThemeRef {
+  const preset = ACCENT_PRESETS.find((a) => a.id === profile?.accentId);
+  return {
+    id: profile?.id ?? 'default',
+    name: profile?.name ?? 'Default',
+    colorMode: profile?.colorMode ?? 'dark',
+    accentId: profile?.accentId ?? 'cyan',
+    accentHex: preset?.hex,
+    language: profile?.language,
+  };
 }
 
 export function createLyricsHostAPI(): LyricsHostAPI {
@@ -621,23 +636,39 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
       const { profiles, activeProfileId } = useProfileStore.getState();
       const profile = profiles.find((item) => item.id === activeProfileId);
 
-      return {
-        id: profile?.id ?? 'default',
-        name: profile?.name ?? 'Default',
-        colorMode: profile?.colorMode ?? 'dark',
-        accentId: profile?.accentId ?? 'cyan',
-      };
+      return toThemeRef(profile);
     },
     list() {
-      return useProfileStore.getState().profiles.map((profile) => ({
-        id: profile.id,
-        name: profile.name,
-        colorMode: profile.colorMode ?? 'dark',
-        accentId: profile.accentId ?? 'cyan',
-      }));
+      return useProfileStore.getState().profiles.map(toThemeRef);
     },
     apply(id) {
       useProfileStore.getState().setActiveProfile(id);
+    },
+    onChange(handler) {
+      let lastKey: string | null = null;
+
+      const keyOf = (profile?: Profile) =>
+        profile
+          ? `${profile.id}:${profile.colorMode}:${profile.accentId}:${profile.language ?? ''}`
+          : '';
+
+      const fire = () => {
+        const { profiles, activeProfileId } = useProfileStore.getState();
+        const profile = profiles.find((p) => p.id === activeProfileId);
+        const key = keyOf(profile);
+        if (key === lastKey) return;
+        lastKey = key;
+        handler(toThemeRef(profile));
+      };
+
+      const unsub = useProfileStore.subscribe(fire);
+      fire();
+
+      return {
+        dispose() {
+          unsub();
+        },
+      };
     },
     addBackground(input: ThemeAddInput): Promise<ThemeAddResult> {
       return invoke('module_theme_add', { moduleId, input });

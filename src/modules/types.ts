@@ -376,6 +376,8 @@ export interface ThemeRef {
   name: string;
   colorMode: 'dark' | 'light';
   accentId: string;
+  accentHex?: string;
+  language?: string;
 }
 
 export type ThemeAddSource =
@@ -400,6 +402,7 @@ export interface ThemesHostAPI {
   apply(id: string): void;
   addBackground(input: ThemeAddInput): Promise<ThemeAddResult>;
   defaultBackground(): Promise<{ src: string; type: 'theme' | 'image' | 'video'; name: string } | null>;
+  onChange(handler: (theme: ThemeRef) => void): Disposable;
   onDefaultBackgroundChange(
     handler: (
       bg: { src: string; thumb?: string; type: 'theme' | 'image' | 'video'; name: string } | null
