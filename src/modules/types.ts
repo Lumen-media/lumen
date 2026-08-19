@@ -399,7 +399,7 @@ export interface ThemesHostAPI {
   list(): ThemeRef[];
   apply(id: string): void;
   addBackground(input: ThemeAddInput): Promise<ThemeAddResult>;
-  defaultBackground(): { src: string; type: 'theme' | 'image' | 'video'; name: string } | null;
+  defaultBackground(): Promise<{ src: string; type: 'theme' | 'image' | 'video'; name: string } | null>;
   onDefaultBackgroundChange(
     handler: (
       bg: { src: string; thumb?: string; type: 'theme' | 'image' | 'video'; name: string } | null
