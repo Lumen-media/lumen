@@ -960,6 +960,45 @@ hostExt.themes.onDefaultBackgroundChange?.((bg) => {
 
 **Why not use `host.fs.read()` yourself?** Module file access (`host.fs`) is sandboxed to the module's own data directory. Reading arbitrary paths from the host filesystem (e.g. theme image files stored under `lumen/files/media/themes/`) will throw `path traversal attempt blocked`. The host reads those files on your behalf and delivers a blob URL.
 
+### `current()` / `list()` / `apply(id)`
+
+`current()` returns the active profile as a `ThemeRef` (id, name, color mode, accent — including the resolved accent hex and the profile language). `list()` returns all profiles. `apply(id)` switches the active profile and propagates to every window.
+
+```ts
+const active = host.themes.current()
+// { id: 'ministerio', name: 'Ministério', colorMode: 'light', accentId: 'rose', accentHex: '#fb7185', language: 'en' }
+```
+
+### `onChange(handler)`
+
+Subscribes to changes of the **active theme** — fires whenever the active profile changes, or when its `colorMode`, `accentId`, or `language` is updated. Fires immediately with the current value on subscription, and returns a `Disposable`.
+
+```ts
+const dispose = host.themes.onChange((theme) => {
+  // theme: ThemeRef with accentHex + language resolved
+  applyMyColors(theme.colorMode, theme.accentHex)
+  if (theme.language) setMyTexts(theme.language)
+})
+
+// stop listening later:
+dispose.dispose()
+```
+
+> **Multi-window support**: modules run in the main window, presenter/overlay window, and surface windows — each is a separate JS context with its own profile store. Profile/locale changes are broadcast across windows via the internal Tauri event `profile:changed`, so `onChange` fires consistently in every window (main, presenter, overlay, surface). The callback payload is always the fully resolved `ThemeRef`; React state local to a window is not shared, only the data via this event.
+
+**`ThemeRef` shape:**
+
+```ts
+interface ThemeRef {
+  id: string
+  name: string
+  colorMode: 'dark' | 'light'
+  accentId: string
+  accentHex?: string // resolved from the accent preset
+  language?: string  // active profile language (e.g. 'pt-BR')
+}
+```
+
 ---
 
 ## `host.menus` ✅
