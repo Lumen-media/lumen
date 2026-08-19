@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { emit, listen } from '@tauri-apps/api/event';
 import { loadConfig, saveConfigKey } from '@/services/config';
 import {
   deleteProfile as deleteProfileFile,
@@ -21,12 +22,18 @@ function buildDefaultProfile(): Profile {
   };
 }
 
-function applyProfile(profile: Profile) {
+function applyProfile(profile: Profile, localeOverride?: string) {
   const theme = useThemeStore.getState();
   theme.setColorMode(profile.colorMode as ColorMode);
   theme.setAccentId(profile.accentId as AccentId);
-  const lang = profile.language ?? localStorage.getItem('lumen-language') ?? 'en';
+  const lang = localeOverride ?? profile.language ?? localStorage.getItem('lumen-language') ?? 'en';
   useI18nStore.getState().setLocale(lang);
+}
+
+function broadcastProfileState(state: { profiles: Profile[]; activeProfileId: string | null }) {
+  const active = state.profiles.find((p) => p.id === state.activeProfileId);
+  const locale = active?.language ?? localStorage.getItem('lumen-language') ?? 'en';
+  emit('profile:changed', { ...state, locale }).catch(() => {});
 }
 
 interface ProfileState {
@@ -66,6 +73,20 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     set({ profiles, activeProfileId });
     const active = profiles.find((p) => p.id === activeProfileId);
     if (active) applyProfile(active);
+
+    listen<{ profiles: Profile[]; activeProfileId: string | null; locale: string }>(
+      'profile:changed',
+      (event) => {
+        const next = event.payload;
+        const current = get();
+        if (JSON.stringify([current.activeProfileId, current.profiles]) === JSON.stringify([next.activeProfileId, next.profiles])) {
+          return;
+        }
+        set({ profiles: next.profiles, activeProfileId: next.activeProfileId });
+        const activeProfile = next.profiles.find((p) => p.id === next.activeProfileId);
+        if (activeProfile) applyProfile(activeProfile, next.locale);
+      },
+    ).catch(() => {});
   },
 
   setActiveProfile: async (id) => {
@@ -74,6 +95,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     set({ activeProfileId: id });
     await saveConfigKey('activeProfileId', id);
     applyProfile(profile);
+    broadcastProfileState(get());
   },
 
   createProfile: async (name) => {
@@ -92,6 +114,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     set((s) => ({ profiles: [...s.profiles, newProfile], activeProfileId: id }));
     await saveConfigKey('activeProfileId', id);
     applyProfile(newProfile);
+    broadcastProfileState(get());
   },
 
   updateProfile: async (id, patch) => {
@@ -101,6 +124,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     await saveProfile(updatedProfile);
     set({ profiles: updated });
     if (get().activeProfileId === id) applyProfile(updatedProfile);
+    broadcastProfileState(get());
   },
 
 
@@ -116,6 +140,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       applyProfile(remaining[0]);
     }
     set({ profiles: remaining, activeProfileId: newActiveId });
+    broadcastProfileState(get());
   },
 
   resetProfile: async (id) => {
