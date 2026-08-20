@@ -3,8 +3,7 @@ pub mod store;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use serde_json;
-use tauri::{AppHandle, Emitter, Listener, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use store::{ChatConfig, ChatMessage, ChatStore};
@@ -226,97 +225,4 @@ pub async fn send_chat_reaction(
     Ok(())
 }
 
-pub async fn send_system_message(
-    app: &AppHandle,
-    chat: &ChatState,
-    device_state: &DeviceState,
-    text: String,
-) -> Result<(), String> {
-    let mut inner = chat.inner.lock().await;
 
-    if !inner.config.enabled {
-        return Ok(());
-    }
-
-    let msg = ChatMessage {
-        id: 0,
-        sender_id: "system".to_string(),
-        sender_type: "system".to_string(),
-        sender_name: "Lumen".to_string(),
-        text,
-        ts: crate::devices::now_ts(),
-        file: None,
-        reactions: Vec::new(),
-    };
-
-    let committed = inner.store.push(msg);
-
-    drop(inner);
-
-    store::broadcast_chat_message(device_state, &committed)?;
-
-    let _ = app.emit("chat_message", committed);
-
-    Ok(())
-}
-
-pub fn setup_system_listeners(app: &AppHandle, chat: ChatState) {
-    let app_handle = app.clone();
-
-    {
-        let chat = chat.clone();
-        let listen_app = app_handle.clone();
-        let app_in_closure = listen_app.clone();
-        listen_app.listen("playback-started", move |event| {
-            let payload = event.payload();
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
-                let title = value
-                    .get("title")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Unknown");
-                let artist = value.get("artist").and_then(|v| v.as_str()).unwrap_or("");
-
-                let text = if artist.is_empty() {
-                    format!("Now playing: **{}**", title)
-                } else {
-                    format!("Now playing: **{}** — {}", title, artist)
-                };
-
-                let chat = chat.clone();
-                let app = app_in_closure.clone();
-                tauri::async_runtime::spawn(async move {
-                    let device_state = app.state::<DeviceState>();
-                    let _ = send_system_message(&app, &chat, &device_state, text).await;
-                });
-            }
-        });
-    }
-
-    {
-        let chat = chat.clone();
-        let listen_app = app_handle.clone();
-        let app_in_closure = listen_app.clone();
-        listen_app.listen("queue-item-added", move |event| {
-            let payload = event.payload();
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
-                let title = value
-                    .get("title")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Unknown");
-                let added_by = value
-                    .get("added_by")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("someone");
-
-                let text = format!("{} added **{}** to the queue", added_by, title);
-
-                let chat = chat.clone();
-                let app = app_in_closure.clone();
-                tauri::async_runtime::spawn(async move {
-                    let device_state = app.state::<DeviceState>();
-                    let _ = send_system_message(&app, &chat, &device_state, text).await;
-                });
-            }
-        });
-    }
-}

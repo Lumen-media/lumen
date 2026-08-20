@@ -129,13 +129,7 @@ When `persist_enabled = false`:
 - [x] `broadcast_chat_reaction` fan-out to all participants
 - [x] Persist reactions in `chat_reactions` table (UNIQUE constraint on message_id+emoji+sender_id)
 
-### Phase 5 — System Notifications ✅
-
-- [x] `send_system_message()` helper — emits `chat_message` with `sender_type: "system"`
-- [x] `setup_system_listeners()` in `main.rs` — listens to `playback-started`, `queue-item-added`
-- [x] System messages broadcast to all participants + Tauri event emitted
-
-### Phase 6 — UI (Deferred)
+### Phase 5 — UI (Deferred)
 
 - [ ] Chat panel + input (operator view)
 - [ ] Per-device `chat` toggle on the device management screen
@@ -163,4 +157,3 @@ When `persist_enabled = false`:
 13. **Reaction add:** device sends `chat_reaction` → `chat_reaction` broadcast to all; reaction appears on the message.
 14. **Reaction toggle:** same device sends same emoji again → reaction removed; `reaction: null` in broadcast.
 15. **Reaction persist:** restart with `persist_enabled = true` → reactions restored with messages.
-16. **System notification:** playback starts → `chat_message` with `sender_type: "system"` appears in feed.
