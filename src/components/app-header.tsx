@@ -1,7 +1,7 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import { animate } from 'animejs';
-import { CheckIcon, Monitor, Smartphone, Star, Volume2 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { CheckIcon, MessageCircle, Monitor, Smartphone, Star, Volume2 } from 'lucide-react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { useAsideStore } from '@/stores/aside-store';
+import { useChatStore } from '@/stores/chat-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { useStreamingStore } from '@/stores/streaming-store';
 import { HeaderTrailingSlot } from '@/modules/components/HeaderTrailingSlot';
@@ -48,6 +50,32 @@ export function AppHeader() {
 
   const mobileConnected = useStreamingStore((s) => s.status.mobile_connected);
   const mobileCount = Object.keys(useStreamingStore((s) => s.mobileStreams)).length;
+
+  const asideActiveTab = useAsideStore((s) => s.activeTab);
+  const setAsideTab = useAsideStore((s) => s.setActiveTab);
+  const chatUnread = useChatStore((s) => s.unread);
+  const chatEnabled = useChatStore((s) => s.config.enabled);
+  const chatInit = useChatStore((s) => s.init);
+
+  const chatBlink = chatEnabled && chatUnread > 0 && asideActiveTab !== 'chat';
+
+  const openChat = useCallback(() => {
+    chatInit().catch(() => {});
+    setAsideTab('chat');
+    useChatStore.getState().markRead();
+    window.dispatchEvent(new CustomEvent('lumen:chat-focus'));
+  }, [chatInit, setAsideTab]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+        e.preventDefault();
+        openChat();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [openChat]);
 
   const activeTab: TabTo = (() => {
     const match = NAV_TABS.find((t) => t.to !== '/' && pathname.startsWith(t.to));
@@ -159,6 +187,19 @@ export function AppHeader() {
               </span>
             )}
           </span>
+          {chatEnabled && (
+            <button
+              type="button"
+              onClick={openChat}
+              className="relative inline-flex items-center justify-center"
+              title="Chat (Ctrl+Shift+C)"
+            >
+              <MessageCircle className={cn('size-4 shrink-0', asideActiveTab === 'chat' ? 'text-primary' : 'text-muted-foreground')} />
+              {chatBlink && (
+                <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-primary animate-pulse" />
+              )}
+            </button>
+          )}
           <Monitor className="size-4 shrink-0 text-muted-foreground" />
           <Volume2 className="size-4 shrink-0 text-muted-foreground" />
           <SettingsDialog />

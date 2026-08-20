@@ -48,6 +48,7 @@ import {
 } from 'react';
 import { TextEditor, type TextEditorRef } from '@/components/text-editor';
 import { type BubbleMenuItem, TextEditorBubbleMenu } from '@/components/text-editor-bubble-menu';
+import { ChatTab } from '@/components/chat-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -87,6 +88,8 @@ import { notesService } from '@/services/notes-service';
 import { thumbnailService } from '@/services/thumbnail-service';
 import type { FileInfo } from '@/services/types';
 import { usePlayerStore } from '@/stores/player-store';
+import { useAsideStore } from '@/stores/aside-store';
+import { useChatStore } from '@/stores/chat-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { queueDbService } from '@/services/queue-db-service';
 import {
@@ -101,7 +104,7 @@ type TriggerDialog = {
   instanceId: string | null;
 } | null;
 
-type TabValue = 'queue' | 'notes' | 'themes';
+type TabValue = 'queue' | 'notes' | 'themes' | 'chat';
 
 function getDownloadStatusLabel(item: QueueItem): string | null {
   if (item.file.extension !== 'url' && !item.file.originalUrl) return null;
@@ -119,6 +122,7 @@ const TABS: { value: TabValue; label: string }[] = [
   { value: 'queue', label: t('Queue') },
   { value: 'notes', label: t('Notes') },
   { value: 'themes', label: t('Themes') },
+  { value: 'chat', label: t('Chat') },
 ];
 
 export function AsidePanel() {
@@ -133,11 +137,18 @@ export function AsidePanel() {
   } = useQueueStore();
   const loadFile = usePlayerStore((s) => s.loadFile);
 
-  const [activeTab, setActiveTab] = useState<TabValue>('queue');
+  const activeTab = useAsideStore((s) => s.activeTab);
+  const setActiveTab = useAsideStore((s) => s.setActiveTab);
 
   useEffect(() => {
     loadFromDb();
   }, [loadFromDb]);
+
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      useChatStore.getState().markRead();
+    }
+  }, [activeTab]);
 
   return (
     <Card className="flex flex-col w-full h-full overflow-hidden">
@@ -184,6 +195,10 @@ export function AsidePanel() {
 
         <TabsContent value="themes" className="flex-1 overflow-hidden mt-0">
           <ThemesTab />
+        </TabsContent>
+
+        <TabsContent value="chat" className="flex-1 overflow-hidden mt-0">
+          <ChatTab />
         </TabsContent>
       </Tabs>
     </Card>
