@@ -100,7 +100,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         {message.text && <div className="break-words">{renderMarkdown(message.text)}</div>}
       </div>
 
-      {message.reactions.length > 0 && (
+      {message.reactions?.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {groupReactions(message.reactions).map(([emoji, count]) => (
             <button

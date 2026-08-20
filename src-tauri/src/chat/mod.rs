@@ -3,6 +3,7 @@ pub mod store;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use serde_json::json;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
@@ -203,7 +204,7 @@ pub async fn clear_chat_history(chat: State<'_, ChatState>) -> Result<(), String
 
 #[tauri::command]
 pub async fn send_chat_reaction(
-    _app: AppHandle,
+    app: AppHandle,
     chat: State<'_, ChatState>,
     device_state: State<'_, DeviceState>,
     message_id: u64,
@@ -221,6 +222,16 @@ pub async fn send_chat_reaction(
     drop(inner);
 
     store::broadcast_chat_reaction(&device_state, message_id, &emoji, "operator", &reaction)?;
+
+    let _ = app.emit(
+        "chat_reaction",
+        json!({
+            "message_id": message_id,
+            "emoji": emoji,
+            "sender_id": "operator",
+            "reaction": reaction,
+        }),
+    );
 
     Ok(())
 }

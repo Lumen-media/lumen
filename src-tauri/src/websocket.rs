@@ -945,6 +945,16 @@ async fn handle_chat_event(
 
             store::broadcast_chat_reaction(&device_state, message_id, &emoji, device_id, &reaction)?;
 
+            let _ = app.emit(
+                "chat_reaction",
+                serde_json::json!({
+                    "message_id": message_id,
+                    "emoji": emoji,
+                    "sender_id": device_id,
+                    "reaction": reaction,
+                }),
+            );
+
             Ok(true)
         }
         _ => Ok(false),
