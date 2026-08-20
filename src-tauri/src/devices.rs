@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS devices (
     permissions_bible INTEGER NOT NULL DEFAULT 1,
     permissions_media INTEGER NOT NULL DEFAULT 1,
     permissions_streaming INTEGER NOT NULL DEFAULT 0,
+    permissions_chat INTEGER NOT NULL DEFAULT 0,
     registered_at INTEGER NOT NULL,
     last_connected_at INTEGER
 )
@@ -41,6 +42,7 @@ pub struct DevicePermissions {
     pub bible: bool,
     pub media: bool,
     pub streaming: bool,
+    pub chat: bool,
 }
 
 impl Default for DevicePermissions {
@@ -51,6 +53,7 @@ impl Default for DevicePermissions {
             bible: true,
             media: true,
             streaming: false,
+            chat: false,
         }
     }
 }
@@ -749,23 +752,29 @@ fn ensure_devices_schema(connection: &Connection) -> Result<(), String> {
     let mut statement = connection
         .prepare("PRAGMA table_info(devices)")
         .map_err(|e| e.to_string())?;
-    let columns = statement
+    let columns: Vec<String> = statement
         .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    let mut has_permissions_streaming = false;
-    for column in columns {
-        let column = column.map_err(|e| e.to_string())?;
-        if column == "permissions_streaming" {
-            has_permissions_streaming = true;
-            break;
-        }
-    }
+    let has_permissions_streaming = columns.iter().any(|c| c == "permissions_streaming");
 
     if !has_permissions_streaming {
         connection
             .execute(
                 "ALTER TABLE devices ADD COLUMN permissions_streaming INTEGER NOT NULL DEFAULT 0",
+                [],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
+    let has_permissions_chat = columns.iter().any(|c| c == "permissions_chat");
+
+    if !has_permissions_chat {
+        connection
+            .execute(
+                "ALTER TABLE devices ADD COLUMN permissions_chat INTEGER NOT NULL DEFAULT 0",
                 [],
             )
             .map_err(|e| e.to_string())?;
@@ -831,6 +840,7 @@ fn load_devices_from_db() -> Result<HashMap<String, Device>, String> {
                 permissions_bible,
                 permissions_media,
                 permissions_streaming,
+                permissions_chat,
                 registered_at,
                 last_connected_at
             FROM devices
@@ -854,9 +864,10 @@ fn load_devices_from_db() -> Result<HashMap<String, Device>, String> {
                     bible: row.get::<_, i64>(9)? == 1,
                     media: row.get::<_, i64>(10)? == 1,
                     streaming: row.get::<_, i64>(11)? == 1,
+                    chat: row.get::<_, i64>(12)? == 1,
                 },
-                registered_at: row.get::<_, u64>(12)?,
-                last_connected_at: row.get(13)?,
+                registered_at: row.get::<_, u64>(13)?,
+                last_connected_at: row.get(14)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -888,9 +899,10 @@ fn insert_or_replace_device_in_db(device: &Device) -> Result<(), String> {
                 permissions_bible,
                 permissions_media,
                 permissions_streaming,
+                permissions_chat,
                 registered_at,
                 last_connected_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             "#,
             params![
                 device.device_id,
@@ -905,6 +917,7 @@ fn insert_or_replace_device_in_db(device: &Device) -> Result<(), String> {
                 i64::from(device.permissions.bible),
                 i64::from(device.permissions.media),
                 i64::from(device.permissions.streaming),
+                i64::from(device.permissions.chat),
                 device.registered_at,
                 device.last_connected_at,
             ],
@@ -948,6 +961,7 @@ pub fn map_event_permission(event: &str) -> Option<&'static str> {
         | "webrtc_answer"
         | "webrtc_ice_candidate"
         | "mobile_offer" => Some("streaming"),
+        "chat_send" | "chat_file_send" | "chat_history" => Some("chat"),
         _ => None,
     }
 }
@@ -959,6 +973,7 @@ pub fn is_permission_allowed(permissions: &DevicePermissions, permission: &str) 
         "bible" => permissions.bible,
         "media" => permissions.media,
         "streaming" => permissions.streaming,
+        "chat" => permissions.chat,
         _ => false,
     }
 }
