@@ -18,7 +18,8 @@ Every message is attributable — `sender_id` / `sender_name` travel with the pa
 - **Feature flags:**
   - **Global:** `ChatConfig.enabled` — operator turns the whole chat on/off.
   - **Per device:** `permissions_chat` column — operator allows/denies chat per device.
-- **Persistence:** optional. In-memory ring buffer by default; when `persist_enabled` is on, messages are written through to SQLite and history can be replayed.
+- **Persistence:** optional. When `persist_enabled` is off, messages are written to SQLite but the current day's messages are cleared on restart. When on, messages survive restarts.
+- **File attachments:** devices and operator can send files (up to 25 MB). Files are saved to the existing `files/media/files/` folder so Lumen's file manager can access them.
 - **UI:** deferred. This document defines the data contract (events, payloads, commands) only.
 
 ---
@@ -36,7 +37,7 @@ Every message is attributable — `sender_id` / `sender_name` travel with the pa
 │  Operator UI  │◄──│  │  ring buffer │                               │
 │  (desktop)    │   │  └─────────────┘                               │
 └──────────────┘   │   ▲                                            │
-    ▲               │   │ send_chat_message (Tauri command)         │
+    ▲               │   │ send_chat_message / send_chat_file        │
     │               │   └──────────┐                                 │
     └── Tauri event "chat_message" ┘                                 │
                     └─────────────────────────────────────────────────┘
@@ -58,8 +59,8 @@ The sender also receives the canonical server-assigned message (with `id` and `t
 ```
 src-tauri/src/
 ├── chat/
-│   ├── mod.rs         — ChatConfig, ChatMessage, ChatState, handler entry points
-│   └── store.rs       — in-memory ring buffer + optional SQLite persistence
+│   ├── mod.rs         — ChatState, Tauri commands, initialization
+│   └── store.rs       — ChatConfig, ChatMessage, ChatFile, ChatStore, persistence, broadcast
 └── websocket.rs       — routes chat_* events (after auth + permission check)
 ```
 
@@ -68,14 +69,20 @@ src-tauri/src/
 ## Message Model
 
 ```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatFile {
+    pub file_name: String,   // original filename
+    pub file_path: String,   // stored path on disk
+    pub file_size: u64,      // bytes
+}
+
 pub struct ChatMessage {
-    pub id:          u64,          // server-assigned, monotonic per runtime
-    pub sender_id:   String,       // device_id or "operator"
-    pub sender_type: String,       // "device" | "operator"
-    pub sender_name: String,       // device_name or desktop name
-    pub text:        String,
-    pub ts:          u64,          // unix seconds (server clock)
+    pub id:          u64,              // server-assigned, monotonic
+    pub sender_id:   String,           // device_id or "operator"
+    pub sender_type: String,           // "device" | "operator"
+    pub sender_name: String,           // device_name or desktop name
+    pub text:        String,           // markdown content
+    pub ts:          u64,              // unix seconds (server clock)
+    pub file:        Option<ChatFile>, // optional attachment
 }
 ```
 
@@ -90,35 +97,50 @@ Wire format (as delivered to every participant):
     "sender_type": "device",
     "sender_name": "John's Pixel 8",
     "text": "projection froze on slide two",
-    "ts": 1710000000
+    "ts": 1710000000,
+    "file": {
+      "file_name": "screenshot.jpg",
+      "file_path": "C:/lumen/files/media/files/abc-uuid.jpg",
+      "file_size": 245760
+    }
   }
 }
 ```
 
 Operator-originated messages use `sender_type: "operator"` and the desktop name as `sender_name`.
 
+### Constants
+
+```rust
+pub const MAX_MESSAGE_LENGTH: usize = 4000;           // text is markdown, generous limit
+pub const MAX_FILE_SIZE: u64 = 25 * 1024 * 1024;      // 25 MB
+```
+
 ---
 
 ## ChatState (Server)
 
-Central state held in `Arc<Mutex<ChatState>>` inside `AppState`, following the same pattern as `StreamManager`.
+Central state held in `Arc<Mutex<ChatStateInner>>` inside `AppState`, following the same pattern as `StreamManager`.
 
 ```rust
 pub struct ChatState {
-    pub config:   ChatConfig,
-    pub messages: VecDeque<ChatMessage>,   // ring buffer, capped at history_limit
-    pub next_id:  u64,
+    pub inner: Arc<Mutex<ChatStateInner>>,
+}
+
+pub struct ChatStateInner {
+    pub config: ChatConfig,
+    pub store:  ChatStore,
+    db_path:    PathBuf,    // lumen.db — shared with devices
 }
 ```
 
-`messages` is always kept up to date regardless of persistence. When `persist_enabled` is `true`, every append is also written to SQLite; `history_limit` still caps the in-memory window returned by `chat_history`.
+`store.messages` (in-memory `VecDeque`) is always kept up to date regardless of persistence. When `persist_enabled` is `true`, every append is also written to SQLite; `history_limit` still caps the in-memory window returned by `chat_history`.
 
 ---
 
 ## ChatConfig
 
 ```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatConfig {
     pub enabled:         bool,   // global on/off (operator toggle)
     pub persist_enabled: bool,   // write-through to SQLite
@@ -136,12 +158,17 @@ impl Default for ChatConfig {
 }
 ```
 
-Persisted at: `{app_base_path}/config/chat.json` — same pattern as `remote-access.json` / `streaming.json`.
+Persisted in: `chat_settings` table in `{exe_dir}/lumen/lumen.db` (key/value rows). No JSON files.
 
 **Semantics of `enabled = false`:**
-- Incoming `chat_send` from devices is rejected with `chat_error { reason: "disabled" }`.
+- Incoming `chat_send` / `chat_file_send` from devices is rejected with `chat_error { reason: "disabled" }`.
 - The operator can still call `get_chat_messages` (reads the buffer).
 - History remains available to the operator; it is just not broadcastable to devices.
+
+**Semantics of `persist_enabled = false`:**
+- Messages are still written to SQLite during the session (in-memory ring buffer + DB).
+- On restart, `clear_today()` deletes the current day's messages from `chat_messages`.
+- The in-memory buffer starts empty.
 
 ---
 
@@ -152,24 +179,27 @@ New events routed in `websocket.rs`. All `chat_*` events require an authenticate
 ### Device → Desktop
 
 ```jsonc
-// send a message
+// send a text message (markdown)
 { "event": "chat_send", "text": "projection froze on slide two" }
 
-// request recent history (paged window)
-{ "event": "chat_history", "before": 42, "limit": 50 }
+// send a file attachment (+ optional text)
+{ "event": "chat_file_send", "file_name": "photo.jpg", "data": "<base64>", "text": "check this" }
+
+// request recent history
+{ "event": "chat_history", "limit": 50 }
 ```
 
 ### Desktop → Device
 
 ```jsonc
 // a message broadcast to the room (everyone, including sender echo)
-{ "event": "chat_message", "message": { "id": 42, "sender_id": "...", "sender_type": "device", "sender_name": "...", "text": "...", "ts": 1710000000 } }
+{ "event": "chat_message", "message": { "id": 42, "sender_id": "...", "sender_type": "device", "sender_name": "...", "text": "...", "ts": 1710000000, "file": null } }
 
 // history response to chat_history request
 { "event": "chat_history", "messages": [ { "id": 42, ... } ] }
 
 // rejection
-{ "event": "chat_error", "reason": "no_permission" | "disabled" }
+{ "event": "chat_error", "reason": "no_permission" | "disabled" | "file_too_large" | "invalid_file" }
 ```
 
 ### Permission Mapping
@@ -178,7 +208,7 @@ New events routed in `websocket.rs`. All `chat_*` events require an authenticate
 fn map_event_permission(event: &str) -> Option<&'static str> {
     match event {
         // existing...
-        "chat_send" | "chat_history" => Some("chat"),
+        "chat_send" | "chat_file_send" | "chat_history" => Some("chat"),
         _ => None,
     }
 }
@@ -195,12 +225,14 @@ Uses the existing session registry (`DeviceState.sessions`), the same source tha
 ```rust
 pub fn broadcast_chat_message(
     state: &State<'_, DeviceState>,
-    message: ChatMessage,
+    message: &ChatMessage,
 ) -> Result<(), String> {
-    let payload = json_message(&json!({
+    let payload = serde_json::to_string(&json!({
         "event": "chat_message",
         "message": message,
-    }))?;
+    }))
+    .map(Message::Text)
+    .map_err(|e| e.to_string())?;
 
     let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
     for session in sessions.values() {
@@ -220,6 +252,27 @@ A message only exists after it is committed to `ChatState` (and SQLite when pers
 
 ---
 
+## File Attachments
+
+Files are saved to `{exe_dir}/lumen/files/media/files/` — the same folder Lumen's file manager already indexes. This means:
+- Files sent through chat are immediately available to the operator via the existing media library.
+- UUID-based filenames prevent collisions; the original filename is stored in `ChatFile.file_name`.
+
+### Device → Desktop (`chat_file_send`)
+
+The device sends base64-encoded file data. The server decodes it, saves to disk, creates a `ChatMessage` with the `file` field populated, and broadcasts.
+
+### Operator (`send_chat_file`)
+
+The operator sends a local file path. The server reads it, copies to the chat files directory, creates the message, and broadcasts.
+
+### Limits
+
+- Max file size: 25 MB (`MAX_FILE_SIZE`)
+- Files exceeding the limit receive `chat_error { reason: "file_too_large" }`
+
+---
+
 ## Operator Integration (Desktop)
 
 The operator does **not** appear in the device session registry, so chat is bridged to the desktop UI via Tauri commands and events — the same pattern used by `streaming_status_changed` / `mobile_stream_started`.
@@ -228,16 +281,29 @@ The operator does **not** appear in the device session registry, so chat is brid
 
 ```rust
 #[tauri::command] async fn send_chat_message(text: String) -> Result<(), String>
+#[tauri::command] async fn send_chat_file(file_path: String, text: Option<String>) -> Result<(), String>
 #[tauri::command] async fn get_chat_messages(limit: Option<u32>) -> Result<Vec<ChatMessage>, String>
 #[tauri::command] async fn get_chat_config()  -> Result<ChatConfig, String>
 #[tauri::command] async fn set_chat_config(config: ChatConfig) -> Result<(), String>
+#[tauri::command] async fn clear_chat_history() -> Result<(), String>
 ```
 
 `send_chat_message`:
-1. Builds `ChatMessage { sender_type: "operator", sender_name: <desktop_name>, ... }`.
-2. Commits it to `ChatState` (+ SQLite if persistence enabled).
-3. Calls `broadcast_chat_message`.
-4. Emits `chat_message` back to the frontend (echo) so the operator UI updates from the same canonical event.
+1. Validates text (non-empty, under `MAX_MESSAGE_LENGTH`).
+2. Builds `ChatMessage { sender_type: "operator", sender_name: <desktop_name>, ... }`.
+3. Commits it to `ChatState` (+ SQLite if persistence enabled).
+4. Calls `broadcast_chat_message`.
+5. Emits `chat_message` back to the frontend (echo) so the operator UI updates from the same canonical event.
+
+`send_chat_file`:
+1. Reads file from `file_path` on disk.
+2. Saves to `files/media/files/` with UUID filename.
+3. Builds `ChatMessage` with `file` populated.
+4. Same commit → broadcast → emit flow.
+
+`clear_chat_history`:
+1. Deletes all rows from `chat_messages`.
+2. Does not affect the in-memory buffer (operator can still see current session messages).
 
 ### Tauri Events Emitted
 
@@ -250,7 +316,20 @@ The operator does **not** appear in the device session registry, so chat is brid
 
 ## Persistence Model
 
-When `persist_enabled` is `true`, messages are written to the devices database (`{exe_dir}/lumen/lumen.db`) in a new table:
+All data lives in `{exe_dir}/lumen/lumen.db` — the same database used by the devices table.
+
+### `chat_settings` table (config)
+
+```sql
+CREATE TABLE IF NOT EXISTS chat_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+```
+
+Rows: `enabled` ("0"/"1"), `persist_enabled` ("0"/"1"), `history_limit` ("200").
+
+### `chat_messages` table (messages + attachments)
 
 ```sql
 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -259,14 +338,18 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     sender_type TEXT NOT NULL,
     sender_name TEXT NOT NULL,
     text        TEXT NOT NULL,
-    created_at  INTEGER NOT NULL
+    created_at  INTEGER NOT NULL,
+    file_name   TEXT,
+    file_path   TEXT,
+    file_size   INTEGER
 );
 ```
 
-- Created in `setup_db()` (same file as the `devices` table).
-- Write-through on every message commit; the in-memory ring buffer remains the hot path for `chat_history`.
-- `get_chat_messages` reads the buffer first and may page older rows from SQLite when persistence is enabled.
-- History survives restarts only when persistence is on; otherwise it is intentionally ephemeral.
+- Created via `ensure_tables()` during `initialize_chat_state()`.
+- Write-through on every message commit when `persist_enabled` is `true`.
+- When `persist_enabled` is `false`, messages are still written to SQLite during the session but `clear_today()` deletes the current day's rows on restart.
+- `get_chat_messages` reads the in-memory buffer; may page older rows from SQLite.
+- History survives restarts only when persistence is on.
 
 ---
 
@@ -312,6 +395,12 @@ The UI is out of scope for now. The data contract that a future panel will consu
 ```typescript
 import { invoke } from "@tauri-apps/api/core";
 
+export interface ChatFile {
+  file_name: string;
+  file_path: string;
+  file_size: number;
+}
+
 export interface ChatMessage {
   id: number;
   sender_id: string;
@@ -319,6 +408,7 @@ export interface ChatMessage {
   sender_name: string;
   text: string;
   ts: number;
+  file: ChatFile | null;
 }
 
 export interface ChatConfig {
@@ -328,10 +418,12 @@ export interface ChatConfig {
 }
 
 export const chatService = {
-  sendMessage: (text: string)                  => invoke("send_chat_message", { text }),
-  getMessages: (limit?: number)                => invoke<ChatMessage[]>("get_chat_messages", { limit: limit ?? null }),
-  getConfig:   ()                              => invoke<ChatConfig>("get_chat_config"),
-  setConfig:   (config: Partial<ChatConfig>)   => invoke("set_chat_config", { config }),
+  sendMessage:  (text: string)                  => invoke("send_chat_message", { text }),
+  sendFile:     (filePath: string, text?: string) => invoke("send_chat_file", { filePath, text: text ?? null }),
+  getMessages:  (limit?: number)                => invoke<ChatMessage[]>("get_chat_messages", { limit: limit ?? null }),
+  getConfig:    ()                              => invoke<ChatConfig>("get_chat_config"),
+  setConfig:    (config: Partial<ChatConfig>)   => invoke("set_chat_config", { config }),
+  clearHistory: ()                              => invoke("clear_chat_history"),
 };
 ```
 
@@ -347,8 +439,10 @@ interface ChatStore {
   config: ChatConfig;
   init: () => Promise<void>;
   send: (text: string) => Promise<void>;
+  sendFile: (filePath: string, text?: string) => Promise<void>;
   setEnabled: (enabled: boolean) => Promise<void>;
   setPersist: (persist: boolean) => Promise<void>;
+  clearHistory: () => Promise<void>;
 }
 
 // init():
@@ -363,17 +457,17 @@ interface ChatStore {
 
 ---
 
-## Existing Files to Modify
+## Existing Files — Modified
 
 | File | Change |
 |---|---|
-| `src-tauri/src/chat/mod.rs` | NEW — `ChatConfig`, `ChatMessage`, `ChatState`, handler entry points |
-| `src-tauri/src/chat/store.rs` | NEW — ring buffer + optional SQLite persistence |
-| `src-tauri/src/websocket.rs` | Route `chat_send` / `chat_history` after auth + permission check |
+| `src-tauri/src/chat/mod.rs` | NEW — `ChatState`, `ChatStateInner`, Tauri commands, initialization |
+| `src-tauri/src/chat/store.rs` | NEW — `ChatConfig`, `ChatMessage`, `ChatFile`, `ChatStore`, SQLite tables, broadcast, validation |
+| `src-tauri/src/websocket.rs` | Route `chat_send`, `chat_file_send`, `chat_history` after auth + permission check |
 | `src-tauri/src/devices.rs` | + `chat` in `DevicePermissions`; `permissions_chat` column migration; `map_event_permission`; `is_permission_allowed` |
-| `src-tauri/src/main.rs` | Initialize `ChatState`; register `send_chat_message`, `get_chat_messages`, `get_chat_config`, `set_chat_config` |
-| `src/services/chat-service.ts` | NEW — invoke wrapper |
-| `src/stores/chat-store.ts` | NEW — zustand store + `chat_message` listener |
+| `src-tauri/src/main.rs` | Initialize `ChatState`; register `send_chat_message`, `send_chat_file`, `get_chat_messages`, `get_chat_config`, `set_chat_config`, `clear_chat_history` |
+| `src/services/chat-service.ts` | NEW — invoke wrapper (deferred) |
+| `src/stores/chat-store.ts` | NEW — zustand store + `chat_message` listener (deferred) |
 
 ---
 
@@ -381,6 +475,5 @@ interface ChatStore {
 
 - **UI** (panel, input, device management toggle) — data contract is ready, visual design deferred.
 - **Typing indicators** — no `chat_typing` event yet; can be added later without breaking the model.
-- **Attachments / media in chat** — reserved, not in this model.
 - **Moderation** (mute/kick/delete) — the per-device `permissions_chat` flag is the only control for now.
 - **Multiple rooms / channels** — single private room only.
