@@ -435,7 +435,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             app.manage(streaming_state);
             let chat_state = chat::initialize_chat_state()?;
             app.manage(chat_state.clone());
-            chat::setup_system_listeners(app.handle(), chat_state);
             let app_handle = app.handle();
             let app_handle_clone = app_handle.clone();
             async_runtime::spawn(async move {
