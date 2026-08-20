@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde_json;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Listener, Manager, State};
 use tokio::sync::Mutex;
 
-use store::{ChatConfig, ChatMessage, ChatStore, Reaction};
+use store::{ChatConfig, ChatMessage, ChatStore};
 
 use crate::devices::DeviceState;
 
@@ -204,7 +204,7 @@ pub async fn clear_chat_history(chat: State<'_, ChatState>) -> Result<(), String
 
 #[tauri::command]
 pub async fn send_chat_reaction(
-    app: AppHandle,
+    _app: AppHandle,
     chat: State<'_, ChatState>,
     device_state: State<'_, DeviceState>,
     message_id: u64,
@@ -265,8 +265,9 @@ pub fn setup_system_listeners(app: &AppHandle, chat: ChatState) {
 
     {
         let chat = chat.clone();
-        let app = app_handle.clone();
-        app.listen("playback-started", move |event| {
+        let listen_app = app_handle.clone();
+        let app_in_closure = listen_app.clone();
+        listen_app.listen("playback-started", move |event| {
             let payload = event.payload();
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
                 let title = value
@@ -282,7 +283,7 @@ pub fn setup_system_listeners(app: &AppHandle, chat: ChatState) {
                 };
 
                 let chat = chat.clone();
-                let app = app.clone();
+                let app = app_in_closure.clone();
                 tauri::async_runtime::spawn(async move {
                     let device_state = app.state::<DeviceState>();
                     let _ = send_system_message(&app, &chat, &device_state, text).await;
@@ -293,8 +294,9 @@ pub fn setup_system_listeners(app: &AppHandle, chat: ChatState) {
 
     {
         let chat = chat.clone();
-        let app = app_handle.clone();
-        app.listen("queue-item-added", move |event| {
+        let listen_app = app_handle.clone();
+        let app_in_closure = listen_app.clone();
+        listen_app.listen("queue-item-added", move |event| {
             let payload = event.payload();
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload) {
                 let title = value
@@ -309,7 +311,7 @@ pub fn setup_system_listeners(app: &AppHandle, chat: ChatState) {
                 let text = format!("{} added **{}** to the queue", added_by, title);
 
                 let chat = chat.clone();
-                let app = app.clone();
+                let app = app_in_closure.clone();
                 tauri::async_runtime::spawn(async move {
                     let device_state = app.state::<DeviceState>();
                     let _ = send_system_message(&app, &chat, &device_state, text).await;
