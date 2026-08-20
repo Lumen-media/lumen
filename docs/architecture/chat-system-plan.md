@@ -106,25 +106,42 @@ When `persist_enabled = false`:
 
 ### Phase 2 — Operator Integration (Desktop) ✅
 
-- [x] Register `send_chat_message`, `send_chat_file`, `get_chat_messages`, `get_chat_config`, `set_chat_config`, `clear_chat_history` in `main.rs`
+- [x] Register `send_chat_message`, `send_chat_file`, `send_chat_reaction`, `get_chat_messages`, `get_chat_config`, `set_chat_config`, `clear_chat_history` in `main.rs`
 - [x] Initialize `ChatState` in `AppState`; load config from SQLite `chat_settings` table
-- [x] Emit `chat_message` (operator echo) and `chat_config_changed` Tauri events
+- [x] Emit `chat_message` (operator echo), `chat_reaction`, and `chat_config_changed` Tauri events
 - [ ] Create `src/services/chat-service.ts` (invoke wrappers) — UI deferred
 - [ ] Create `src/stores/chat-store.ts` (zustand + `chat_message` listener, history window) — UI deferred
 
 ### Phase 3 — Persistence ✅
 
-- [x] `chat_messages` + `chat_settings` tables in `lumen.db`
+- [x] `chat_messages` + `chat_settings` + `chat_reactions` tables in `lumen.db`
 - [x] Write-through to SQLite when `persist_enabled`
-- [x] `clear_today()` clears current day's messages on restart when `persist_enabled = false`
-- [x] `load_from_disk()` pages messages from SQLite into ring buffer
+- [x] `clear_today()` clears current day's messages + reactions on restart when `persist_enabled = false`
+- [x] `load_from_disk()` pages messages (with reactions) from SQLite into ring buffer
 - [x] `set_chat_config` propagates changes to store in real time
 
-### Phase 4 — UI (Deferred)
+### Phase 4 — Reactions ✅
+
+- [x] `Reaction` struct with `emoji`, `sender_id`, `ts`
+- [x] `reactions` field on `ChatMessage` (loaded from `chat_reactions` table)
+- [x] `chat_reaction` WebSocket event (toggle: same emoji+sender = remove)
+- [x] `send_chat_reaction` Tauri command for operator
+- [x] `broadcast_chat_reaction` fan-out to all participants
+- [x] Persist reactions in `chat_reactions` table (UNIQUE constraint on message_id+emoji+sender_id)
+
+### Phase 5 — System Notifications ✅
+
+- [x] `send_system_message()` helper — emits `chat_message` with `sender_type: "system"`
+- [x] `setup_system_listeners()` in `main.rs` — listens to `playback-started`, `queue-item-added`
+- [x] System messages broadcast to all participants + Tauri event emitted
+
+### Phase 6 — UI (Deferred)
 
 - [ ] Chat panel + input (operator view)
 - [ ] Per-device `chat` toggle on the device management screen
 - [ ] Global enabled/persist toggles (settings)
+- [ ] Song suggestions (frontend-only, markdown-based)
+- [ ] Unread message badge
 - [ ] Full end-to-end manual test
 
 ---
@@ -143,3 +160,7 @@ When `persist_enabled = false`:
 10. **History (persist off):** restart → `clear_today()` removes today's messages; buffer starts empty.
 11. **Remote access off:** `remote_enabled = false` → no external sessions → no device traffic; operator chat commands still work locally.
 12. **Ordering:** all recipients see monotonically increasing `id` with no gaps.
+13. **Reaction add:** device sends `chat_reaction` → `chat_reaction` broadcast to all; reaction appears on the message.
+14. **Reaction toggle:** same device sends same emoji again → reaction removed; `reaction: null` in broadcast.
+15. **Reaction persist:** restart with `persist_enabled = true` → reactions restored with messages.
+16. **System notification:** playback starts → `chat_message` with `sender_type: "system"` appears in feed.
