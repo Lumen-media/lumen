@@ -83,9 +83,9 @@ pub struct Reaction {
 
 pub struct ChatMessage {
     pub id:          u64,              // server-assigned, monotonic
-    pub sender_id:   String,           // device_id, "operator", or "system"
-    pub sender_type: String,           // "device" | "operator" | "system"
-    pub sender_name: String,           // device_name, desktop name, or "Lumen"
+    pub sender_id:   String,           // device_id, or "operator"
+    pub sender_type: String,           // "device" | "operator"
+    pub sender_name: String,           // device_name, or desktop name
     pub text:        String,           // markdown content
     pub ts:          u64,              // unix seconds (server clock)
     pub file:        Option<ChatFile>, // optional attachment
@@ -331,7 +331,7 @@ The operator does **not** appear in the device session registry, so chat is brid
 
 | Event | Payload | When |
 |---|---|---|
-| `chat_message` | `ChatMessage` | any message committed to the room (device, operator, or system) |
+| `chat_message` | `ChatMessage` | any message committed to the room (device or operator) |
 | `chat_reaction` | `{ message_id, emoji, sender_id, reaction }` | reaction toggled on a message |
 | `chat_config_changed` | `ChatConfig` | global config changed via `set_chat_config` |
 
@@ -494,27 +494,11 @@ interface ChatStore {
 
 ---
 
-## System Notifications
-
-The server listens to Tauri events and emits `chat_message` with `sender_type: "system"` into the room. This keeps operators informed without leaving the chat.
-
-### Listened Events
-
-| Tauri Event | Chat Output | Example |
-|---|---|---|
-| `playback-started` | `Now playing: **{title}** — {artist}` | "Now playing: **Amazing Grace** — Chris Tomlin" |
-| `queue-item-added` | `{added_by} added **{title}** to the queue` | "Gabriel added **How Great Is Our God** to the queue" |
-
-System messages use `sender_id: "system"`, `sender_name: "Lumen"`, and have no file or reactions.
-
-Setup happens in `setup_system_listeners()` called during app initialization in `main.rs`.
-
----
-
 ## Deferred / Out of Scope
 
 - **UI** (panel, input, device management toggle) — data contract is ready, visual design deferred.
 - **Song suggestions** — frontend-only concern; operator sends markdown with a link/text, device renders as clickable card. No server-side API needed.
+- **System notifications** — explicitly rejected: operators already see playback/queue state elsewhere in the app, so `playback-started` / `queue-item-added` do not emit chat messages.
 - **Typing indicators** — no `chat_typing` event yet; can be added later without breaking the model.
 - **Moderation** (mute/kick/delete) — the per-device `permissions_chat` flag is the only control for now.
 - **Multiple rooms / channels** — single private room only.
