@@ -434,7 +434,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let streaming_state = streaming::initialize_streaming_state(&app.handle())?;
             app.manage(streaming_state);
             let chat_state = chat::initialize_chat_state()?;
-            app.manage(chat_state);
+            app.manage(chat_state.clone());
+            chat::setup_system_listeners(app.handle(), chat_state);
             let app_handle = app.handle();
             let app_handle_clone = app_handle.clone();
             async_runtime::spawn(async move {
@@ -569,6 +570,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             chat::get_chat_config,
             chat::set_chat_config,
             chat::clear_chat_history,
+            chat::send_chat_reaction,
             set_stream_overlay,
             thumbnail::get_thumbnail,
             module_runtime::module_list_installed,
