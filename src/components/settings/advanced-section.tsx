@@ -1,10 +1,11 @@
 'use client';
 
 import { useTranslation } from '@/lib/i18n';
-import { Cpu, Globe, MonitorPlay, Shield } from 'lucide-react';
+import { Cpu, Globe, MessageCircle, MonitorPlay, Shield } from 'lucide-react';
 import { useEffect } from 'react';
 
 import { useAppSettingsStore } from '@/stores/app-settings-store';
+import { useChatStore } from '@/stores/chat-store';
 import { useStreamingStore } from '@/stores/streaming-store';
 import { CardContent } from '../ui/card';
 import { Input } from '../ui/input';
@@ -16,6 +17,8 @@ export function AdvancedSection() {
   const { t } = useTranslation();
   const { config, status, init, updateConfig } = useStreamingStore();
   const { developerMode, setDeveloperMode } = useAppSettingsStore();
+  const chatConfig = useChatStore((s) => s.config);
+  const toggleChatEnabled = useChatStore((s) => s.toggleEnabled);
 
   useEffect(() => {
     init().catch(() => {});
@@ -227,6 +230,26 @@ export function AdvancedSection() {
           </div>
           <Switch checked={developerMode} onCheckedChange={setDeveloperMode} />
         </div>
+      </CardContent>
+
+      <CardContent variant="muted" className="gap-3 p-4 rounded-xl">
+        <div className="flex items-center gap-2.5 ml-3.5">
+          <MessageCircle className="size-4 text-primary" />
+          <span className="text-sm font-medium">{t('Chat')}</span>
+        </div>
+
+        <CardContent className="flex items-center justify-between rounded-lg p-4">
+          <div>
+            <p className="text-sm font-medium">{t('Enable Chat')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('Allow internal chat between operators and connected devices.')}
+            </p>
+          </div>
+          <Switch
+            checked={chatConfig.enabled}
+            onCheckedChange={(checked) => toggleChatEnabled(checked)}
+          />
+        </CardContent>
       </CardContent>
     </div>
   );
