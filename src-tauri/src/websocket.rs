@@ -1,3 +1,5 @@
+use crate::chat::ChatState;
+use crate::chat::store::{self, ChatMessage, decode_base64, validate_message_text};
 use crate::devices::{
     AuthPayload, DeviceState, RegisterPayload, auth_fail_message, authenticate_device,
     deactivate_device_registration, device_deactivated_message, is_permission_allowed,
@@ -119,6 +121,18 @@ async fn handle_internal_connection(
                                     &app,
                                     &sender,
                                     &internal_session_id,
+                                    "internal",
+                                    event_name,
+                                    &value,
+                                )
+                                .await?
+                                {
+                                    continue;
+                                }
+
+                                if handle_chat_event(
+                                    &app,
+                                    &sender,
                                     "internal",
                                     event_name,
                                     &value,
@@ -324,6 +338,18 @@ async fn handle_external_connection(
                     &app,
                     &sender,
                     &session.session_id,
+                    &session.device_id,
+                    event_name,
+                    &value,
+                )
+                .await?
+                {
+                    continue;
+                }
+
+                if handle_chat_event(
+                    &app,
+                    &sender,
                     &session.device_id,
                     event_name,
                     &value,
@@ -744,6 +770,149 @@ async fn handle_streaming_event(
                     }),
                 );
             }
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
+}
+
+async fn handle_chat_event(
+    app: &AppHandle,
+    sender: &mpsc::UnboundedSender<Message>,
+    device_id: &str,
+    event_name: &str,
+    value: &Value,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    match event_name {
+        "chat_send" => {
+            let chat = app.state::<ChatState>();
+            let device_state = app.state::<DeviceState>();
+
+            let mut inner = chat.inner.lock().await;
+
+            if !inner.config.enabled {
+                let _ = store::send_chat_error(sender, "disabled");
+                return Ok(true);
+            }
+
+            let text = value
+                .get("text")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+
+            let clean_text = match validate_message_text(text) {
+                Ok(t) => t,
+                Err(_) => return Ok(true),
+            };
+
+            let device_name = {
+                let devices = device_state.devices.lock().map_err(|e| e.to_string())?;
+                devices
+                    .get(device_id)
+                    .map(|d| d.device_name.clone())
+                    .unwrap_or_else(|| device_id.to_string())
+            };
+
+            let msg = ChatMessage {
+                id: 0,
+                sender_id: device_id.to_string(),
+                sender_type: "device".to_string(),
+                sender_name: device_name,
+                text: clean_text,
+                ts: crate::devices::now_ts(),
+                file: None,
+            };
+
+            let committed = inner.store.push(msg);
+
+            drop(inner);
+
+            store::broadcast_chat_message(&device_state, &committed)?;
+
+            let _ = app.emit("chat_message", committed);
+
+            Ok(true)
+        }
+        "chat_file_send" => {
+            let chat = app.state::<ChatState>();
+            let device_state = app.state::<DeviceState>();
+
+            let mut inner = chat.inner.lock().await;
+
+            if !inner.config.enabled {
+                let _ = store::send_chat_error(sender, "disabled");
+                return Ok(true);
+            }
+
+            let file_name = value
+                .get("file_name")
+                .and_then(Value::as_str)
+                .unwrap_or("file");
+
+            let base64_data = value
+                .get("data")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+
+            let file_data = match decode_base64(base64_data) {
+                Ok(d) => d,
+                Err(_) => {
+                    let _ = store::send_chat_error(sender, "invalid_file");
+                    return Ok(true);
+                }
+            };
+
+            let chat_file = match inner.store.save_file(file_name, &file_data) {
+                Ok(f) => f,
+                Err(e) => {
+                    let _ = store::send_chat_error(sender, &e);
+                    return Ok(true);
+                }
+            };
+
+            let text = value
+                .get("text")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+
+            let device_name = {
+                let devices = device_state.devices.lock().map_err(|e| e.to_string())?;
+                devices
+                    .get(device_id)
+                    .map(|d| d.device_name.clone())
+                    .unwrap_or_else(|| device_id.to_string())
+            };
+
+            let msg = ChatMessage {
+                id: 0,
+                sender_id: device_id.to_string(),
+                sender_type: "device".to_string(),
+                sender_name: device_name,
+                text,
+                ts: crate::devices::now_ts(),
+                file: Some(chat_file),
+            };
+
+            let committed = inner.store.push(msg);
+
+            drop(inner);
+
+            store::broadcast_chat_message(&device_state, &committed)?;
+
+            let _ = app.emit("chat_message", committed);
+
+            Ok(true)
+        }
+        "chat_history" => {
+            let chat = app.state::<ChatState>();
+            let inner = chat.inner.lock().await;
+
+            let limit = value.get("limit").and_then(Value::as_u64).map(|l| l as u32);
+            let messages = inner.store.get_messages(limit);
+
+            let _ = store::send_chat_history(sender, messages);
+
             Ok(true)
         }
         _ => Ok(false),
