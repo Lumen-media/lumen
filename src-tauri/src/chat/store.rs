@@ -62,7 +62,7 @@ fn open_db(db_path: &PathBuf) -> Result<Connection, String> {
     Connection::open(db_path).map_err(|e| e.to_string())
 }
 
-fn ensure_tables(conn: &Connection) -> Result<(), String> {
+pub fn ensure_tables(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS chat_settings (
             key TEXT PRIMARY KEY,
@@ -91,7 +91,7 @@ fn ensure_tables(conn: &Connection) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
-fn load_config(conn: &Connection) -> Result<ChatConfig, String> {
+pub fn load_config(conn: &Connection) -> Result<ChatConfig, String> {
     let mut stmt = conn
         .prepare("SELECT key, value FROM chat_settings")
         .map_err(|e| e.to_string())?;
@@ -118,7 +118,7 @@ fn load_config(conn: &Connection) -> Result<ChatConfig, String> {
     Ok(config)
 }
 
-fn save_config(conn: &Connection, config: &ChatConfig) -> Result<(), String> {
+pub fn save_config(conn: &Connection, config: &ChatConfig) -> Result<(), String> {
     let entries = [
         ("enabled", if config.enabled { "1" } else { "0" }),
         (
@@ -424,7 +424,7 @@ fn load_reactions_for_message(conn: &Connection, message_id: u64) -> Result<Vec<
 }
 
 pub fn broadcast_chat_message(
-    state: &tauri::State<'_, DeviceState>,
+    state: &DeviceState,
     message: &ChatMessage,
 ) -> Result<(), String> {
     let payload = serde_json::to_string(&json!({
@@ -448,7 +448,7 @@ pub fn broadcast_chat_message(
 }
 
 pub fn broadcast_chat_reaction(
-    state: &tauri::State<'_, DeviceState>,
+    state: &DeviceState,
     message_id: u64,
     emoji: &str,
     sender_id: &str,
