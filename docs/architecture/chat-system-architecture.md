@@ -75,14 +75,21 @@ pub struct ChatFile {
     pub file_size: u64,      // bytes
 }
 
+pub struct Reaction {
+    pub emoji:      String,
+    pub sender_id:  String,
+    pub ts:         u64,
+}
+
 pub struct ChatMessage {
     pub id:          u64,              // server-assigned, monotonic
-    pub sender_id:   String,           // device_id or "operator"
-    pub sender_type: String,           // "device" | "operator"
-    pub sender_name: String,           // device_name or desktop name
+    pub sender_id:   String,           // device_id, "operator", or "system"
+    pub sender_type: String,           // "device" | "operator" | "system"
+    pub sender_name: String,           // device_name, desktop name, or "Lumen"
     pub text:        String,           // markdown content
     pub ts:          u64,              // unix seconds (server clock)
     pub file:        Option<ChatFile>, // optional attachment
+    pub reactions:   Vec<Reaction>,    // emoji reactions
 }
 ```
 
@@ -102,7 +109,10 @@ Wire format (as delivered to every participant):
       "file_name": "screenshot.jpg",
       "file_path": "C:/lumen/files/media/files/abc-uuid.jpg",
       "file_size": 245760
-    }
+    },
+    "reactions": [
+      { "emoji": "👍", "sender_id": "operator", "ts": 1710000005 }
+    ]
   }
 }
 ```
@@ -185,6 +195,9 @@ New events routed in `websocket.rs`. All `chat_*` events require an authenticate
 // send a file attachment (+ optional text)
 { "event": "chat_file_send", "file_name": "photo.jpg", "data": "<base64>", "text": "check this" }
 
+// toggle a reaction on a message (same emoji+sender = remove)
+{ "event": "chat_reaction", "message_id": 42, "emoji": "👍" }
+
 // request recent history
 { "event": "chat_history", "limit": 50 }
 ```
@@ -193,7 +206,10 @@ New events routed in `websocket.rs`. All `chat_*` events require an authenticate
 
 ```jsonc
 // a message broadcast to the room (everyone, including sender echo)
-{ "event": "chat_message", "message": { "id": 42, "sender_id": "...", "sender_type": "device", "sender_name": "...", "text": "...", "ts": 1710000000, "file": null } }
+{ "event": "chat_message", "message": { "id": 42, "sender_id": "...", "sender_type": "device", "sender_name": "...", "text": "...", "ts": 1710000000, "file": null, "reactions": [] } }
+
+// reaction broadcast (includes the reaction object if added, null if removed)
+{ "event": "chat_reaction", "message_id": 42, "emoji": "👍", "sender_id": "device-abc", "reaction": { "emoji": "👍", "sender_id": "device-abc", "ts": 1710000005 } }
 
 // history response to chat_history request
 { "event": "chat_history", "messages": [ { "id": 42, ... } ] }
@@ -208,7 +224,7 @@ New events routed in `websocket.rs`. All `chat_*` events require an authenticate
 fn map_event_permission(event: &str) -> Option<&'static str> {
     match event {
         // existing...
-        "chat_send" | "chat_file_send" | "chat_history" => Some("chat"),
+        "chat_send" | "chat_file_send" | "chat_history" | "chat_reaction" => Some("chat"),
         _ => None,
     }
 }
@@ -282,6 +298,7 @@ The operator does **not** appear in the device session registry, so chat is brid
 ```rust
 #[tauri::command] async fn send_chat_message(text: String) -> Result<(), String>
 #[tauri::command] async fn send_chat_file(file_path: String, text: Option<String>) -> Result<(), String>
+#[tauri::command] async fn send_chat_reaction(message_id: u64, emoji: String) -> Result<(), String>
 #[tauri::command] async fn get_chat_messages(limit: Option<u32>) -> Result<Vec<ChatMessage>, String>
 #[tauri::command] async fn get_chat_config()  -> Result<ChatConfig, String>
 #[tauri::command] async fn set_chat_config(config: ChatConfig) -> Result<(), String>
@@ -301,15 +318,21 @@ The operator does **not** appear in the device session registry, so chat is brid
 3. Builds `ChatMessage` with `file` populated.
 4. Same commit → broadcast → emit flow.
 
+`send_chat_reaction`:
+1. Toggles the reaction: same emoji + same sender = removes it; otherwise adds it.
+2. Persists to `chat_reactions` table.
+3. Broadcasts `chat_reaction` to all participants.
+
 `clear_chat_history`:
-1. Deletes all rows from `chat_messages`.
+1. Deletes all rows from `chat_messages` and `chat_reactions`.
 2. Does not affect the in-memory buffer (operator can still see current session messages).
 
 ### Tauri Events Emitted
 
 | Event | Payload | When |
 |---|---|---|
-| `chat_message` | `ChatMessage` | any message committed to the room (device or operator) |
+| `chat_message` | `ChatMessage` | any message committed to the room (device, operator, or system) |
+| `chat_reaction` | `{ message_id, emoji, sender_id, reaction }` | reaction toggled on a message |
 | `chat_config_changed` | `ChatConfig` | global config changed via `set_chat_config` |
 
 ---
@@ -471,9 +494,27 @@ interface ChatStore {
 
 ---
 
+## System Notifications
+
+The server listens to Tauri events and emits `chat_message` with `sender_type: "system"` into the room. This keeps operators informed without leaving the chat.
+
+### Listened Events
+
+| Tauri Event | Chat Output | Example |
+|---|---|---|
+| `playback-started` | `Now playing: **{title}** — {artist}` | "Now playing: **Amazing Grace** — Chris Tomlin" |
+| `queue-item-added` | `{added_by} added **{title}** to the queue` | "Gabriel added **How Great Is Our God** to the queue" |
+
+System messages use `sender_id: "system"`, `sender_name: "Lumen"`, and have no file or reactions.
+
+Setup happens in `setup_system_listeners()` called during app initialization in `main.rs`.
+
+---
+
 ## Deferred / Out of Scope
 
 - **UI** (panel, input, device management toggle) — data contract is ready, visual design deferred.
+- **Song suggestions** — frontend-only concern; operator sends markdown with a link/text, device renders as clickable card. No server-side API needed.
 - **Typing indicators** — no `chat_typing` event yet; can be added later without breaking the model.
 - **Moderation** (mute/kick/delete) — the per-device `permissions_chat` flag is the only control for now.
 - **Multiple rooms / channels** — single private room only.
