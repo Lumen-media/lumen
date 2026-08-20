@@ -18,6 +18,13 @@ pub struct ChatFile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Reaction {
+    pub emoji: String,
+    pub sender_id: String,
+    pub ts: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub id: u64,
     pub sender_id: String,
@@ -27,6 +34,8 @@ pub struct ChatMessage {
     pub ts: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<ChatFile>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub reactions: Vec<Reaction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +78,14 @@ fn ensure_tables(conn: &Connection) -> Result<(), String> {
             file_name TEXT,
             file_path TEXT,
             file_size INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS chat_reactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER NOT NULL,
+            emoji TEXT NOT NULL,
+            sender_id TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(message_id, emoji, sender_id)
         );",
     )
     .map_err(|e| e.to_string())
@@ -205,13 +222,15 @@ impl ChatStore {
                     text: row.get(4)?,
                     ts: row.get::<_, u64>(5)?,
                     file,
+                    reactions: Vec::new(),
                 })
             })
             .map_err(|e| e.to_string())?;
 
         let mut loaded: VecDeque<ChatMessage> = VecDeque::new();
         for row in rows {
-            let msg = row.map_err(|e| e.to_string())?;
+            let mut msg = row.map_err(|e| e.to_string())?;
+            msg.reactions = load_reactions_for_message(&conn, msg.id)?;
             loaded.push_front(msg);
         }
 
@@ -227,6 +246,8 @@ impl ChatStore {
         let conn = open_db(&self.db_path)?;
         conn.execute("DELETE FROM chat_messages", [])
             .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM chat_reactions", [])
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -238,6 +259,11 @@ impl ChatStore {
         let today_start = now - (now % 86400);
 
         let conn = open_db(&self.db_path)?;
+        conn.execute(
+            "DELETE FROM chat_reactions WHERE message_id IN (SELECT id FROM chat_messages WHERE created_at >= ?1)",
+            params![today_start],
+        )
+        .map_err(|e| e.to_string())?;
         conn.execute(
             "DELETE FROM chat_messages WHERE created_at >= ?1",
             params![today_start],
@@ -256,6 +282,7 @@ impl ChatStore {
     pub fn push(&mut self, mut msg: ChatMessage) -> ChatMessage {
         msg.id = self.next_id;
         self.next_id += 1;
+        msg.reactions = Vec::new();
 
         if self.messages.len() >= self.history_limit {
             self.messages.pop_front();
@@ -321,6 +348,79 @@ impl ChatStore {
             file_size: data.len() as u64,
         })
     }
+
+    pub fn toggle_reaction(
+        &mut self,
+        message_id: u64,
+        emoji: &str,
+        sender_id: &str,
+        ts: u64,
+    ) -> Result<Option<Reaction>, String> {
+        let conn = open_db(&self.db_path)?;
+
+        let existing = conn
+            .query_row(
+                "SELECT id FROM chat_reactions WHERE message_id = ?1 AND emoji = ?2 AND sender_id = ?3",
+                params![message_id, emoji, sender_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .ok();
+
+        if let Some(_id) = existing {
+            conn.execute(
+                "DELETE FROM chat_reactions WHERE message_id = ?1 AND emoji = ?2 AND sender_id = ?3",
+                params![message_id, emoji, sender_id],
+            )
+            .map_err(|e| e.to_string())?;
+
+            if let Some(msg) = self.messages.iter_mut().find(|m| m.id == message_id) {
+                msg.reactions
+                    .retain(|r| !(r.emoji == emoji && r.sender_id == sender_id));
+            }
+
+            return Ok(None);
+        }
+
+        conn.execute(
+            "INSERT INTO chat_reactions (message_id, emoji, sender_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![message_id, emoji, sender_id, ts],
+        )
+        .map_err(|e| e.to_string())?;
+
+        let reaction = Reaction {
+            emoji: emoji.to_string(),
+            sender_id: sender_id.to_string(),
+            ts,
+        };
+
+        if let Some(msg) = self.messages.iter_mut().find(|m| m.id == message_id) {
+            msg.reactions.push(reaction.clone());
+        }
+
+        Ok(Some(reaction))
+    }
+}
+
+fn load_reactions_for_message(conn: &Connection, message_id: u64) -> Result<Vec<Reaction>, String> {
+    let mut stmt = conn
+        .prepare("SELECT emoji, sender_id, created_at FROM chat_reactions WHERE message_id = ?1")
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map(params![message_id], |row| {
+            Ok(Reaction {
+                emoji: row.get(0)?,
+                sender_id: row.get(1)?,
+                ts: row.get::<_, u64>(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut reactions = Vec::new();
+    for row in rows {
+        reactions.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(reactions)
 }
 
 pub fn broadcast_chat_message(
@@ -330,6 +430,36 @@ pub fn broadcast_chat_message(
     let payload = serde_json::to_string(&json!({
         "event": "chat_message",
         "message": message,
+    }))
+    .map(Message::Text)
+    .map_err(|e| e.to_string())?;
+
+    let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+    for session in sessions.values() {
+        if !is_permission_allowed(&session.permissions, "chat") {
+            continue;
+        }
+        if let Some(sender) = &session.sender {
+            let _ = sender.send(payload.clone());
+        }
+    }
+
+    Ok(())
+}
+
+pub fn broadcast_chat_reaction(
+    state: &tauri::State<'_, DeviceState>,
+    message_id: u64,
+    emoji: &str,
+    sender_id: &str,
+    reaction: &Option<Reaction>,
+) -> Result<(), String> {
+    let payload = serde_json::to_string(&json!({
+        "event": "chat_reaction",
+        "message_id": message_id,
+        "emoji": emoji,
+        "sender_id": sender_id,
+        "reaction": reaction,
     }))
     .map(Message::Text)
     .map_err(|e| e.to_string())?;

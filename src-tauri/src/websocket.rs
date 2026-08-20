@@ -821,6 +821,7 @@ async fn handle_chat_event(
                 text: clean_text,
                 ts: crate::devices::now_ts(),
                 file: None,
+                reactions: Vec::new(),
             };
 
             let committed = inner.store.push(msg);
@@ -892,6 +893,7 @@ async fn handle_chat_event(
                 text,
                 ts: crate::devices::now_ts(),
                 file: Some(chat_file),
+                reactions: Vec::new(),
             };
 
             let committed = inner.store.push(msg);
@@ -912,6 +914,36 @@ async fn handle_chat_event(
             let messages = inner.store.get_messages(limit);
 
             let _ = store::send_chat_history(sender, messages);
+
+            Ok(true)
+        }
+        "chat_reaction" => {
+            let chat = app.state::<ChatState>();
+            let device_state = app.state::<DeviceState>();
+
+            let message_id = match value.get("message_id").and_then(Value::as_u64) {
+                Some(id) => id,
+                None => return Ok(true),
+            };
+
+            let emoji = match value.get("emoji").and_then(Value::as_str) {
+                Some(e) => e.to_string(),
+                None => return Ok(true),
+            };
+
+            let mut inner = chat.inner.lock().await;
+
+            if !inner.config.enabled {
+                let _ = store::send_chat_error(sender, "disabled");
+                return Ok(true);
+            }
+
+            let ts = crate::devices::now_ts();
+            let reaction = inner.store.toggle_reaction(message_id, &emoji, device_id, ts)?;
+
+            drop(inner);
+
+            store::broadcast_chat_reaction(&device_state, message_id, &emoji, device_id, &reaction)?;
 
             Ok(true)
         }
