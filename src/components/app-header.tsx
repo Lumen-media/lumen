@@ -60,7 +60,7 @@ export function AppHeader() {
   const chatBlink = chatEnabled && chatUnread > 0 && asideActiveTab !== 'chat';
 
   const openChat = useCallback(() => {
-    chatInit().catch(() => {});
+    chatInit().catch((err) => console.error('[chat] init failed:', err));
     setAsideTab('chat');
     useChatStore.getState().markRead();
     window.dispatchEvent(new CustomEvent('lumen:chat-focus'));

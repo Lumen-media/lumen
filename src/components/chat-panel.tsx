@@ -1,12 +1,13 @@
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { readFile } from '@tauri-apps/plugin-fs';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { FileText, MessageCircle, Paperclip, Send } from 'lucide-react';
-import type React from 'react';
+import { Check, CheckCheck, MessageCircle, Paperclip, Reply, Send, Trash2, X } from 'lucide-react';
+import * as React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { ChatMessage, Reaction } from '@/services/chat-service';
+import { MAX_MESSAGE_LENGTH } from '@/services/chat-service';
 import { fileManagementService } from '@/services/file-management-service';
 import { thumbnailService } from '@/services/thumbnail-service';
 import { useChatStore } from '@/stores/chat-store';
@@ -15,6 +16,12 @@ import { TypingLoader } from './typing-loader';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from './ui/context-menu';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './ui/empty';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card';
 import { ScrollArea } from './ui/scroll-area';
@@ -22,16 +29,16 @@ import { ScrollArea } from './ui/scroll-area';
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '🙌', '👏'];
 
 const SENDER_COLORS = [
-  '#38bdf8', // sky-400
-  '#fbbf24', // amber-400
-  '#34d399', // emerald-400
-  '#fb7185', // rose-400
-  '#a78bfa', // violet-400
-  '#fb923c', // orange-400
-  '#2dd4bf', // teal-400
-  '#e879f9', // fuchsia-400
-  '#a3e635', // lime-400
-  '#22d3ee', // cyan-400
+  '#38bdf8',
+  '#fbbf24',
+  '#34d399',
+  '#fb7185',
+  '#a78bfa',
+  '#fb923c',
+  '#2dd4bf',
+  '#e879f9',
+  '#a3e635',
+  '#22d3ee',
 ];
 
 function senderColor(name: string): string {
@@ -46,7 +53,9 @@ function openChatFile(filePath: string): void {
   const normalized = filePath.replace(/\\/g, '/');
   const separatorIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
   const folderPath = separatorIndex >= 0 ? filePath.substring(0, separatorIndex) : filePath;
-  invoke('open_folder', { path: folderPath }).catch(() => { });
+  invoke('open_folder', { path: folderPath }).catch((err) =>
+    console.error('[chat] open folder failed:', err)
+  );
 }
 
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif']);
@@ -66,18 +75,32 @@ function isPdf(fileName: string): boolean {
 
 function FilePreview({ file }: { file: NonNullable<ChatMessage['file']> }) {
   const [thumbnail, setThumbnail] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (isImage(file.file_name)) {
       let cancelled = false;
-      thumbnailService.getThumbnail(file.file_path, 300).then((url) => {
-        if (!cancelled) setThumbnail(url);
-      }).catch(() => { });
-      return () => { cancelled = true; };
+      setLoading(true);
+      thumbnailService
+        .getThumbnail(file.file_path, 300)
+        .then((url) => {
+          if (!cancelled) {
+            setThumbnail(url);
+            setLoading(false);
+          }
+        })
+        .catch((err) => {
+          console.error('[chat] thumbnail load failed:', err);
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (isPdf(file.file_name)) {
       let cancelled = false;
+      setLoading(true);
       (async () => {
         try {
           const pdfjsLib = await import('pdfjs-dist');
@@ -98,28 +121,40 @@ function FilePreview({ file }: { file: NonNullable<ChatMessage['file']> }) {
           canvas.height = viewport.height;
           await page.render({ canvas, viewport }).promise;
 
-          if (!cancelled) setThumbnail(canvas.toDataURL('image/jpeg', 0.7));
+          if (!cancelled) {
+            setThumbnail(canvas.toDataURL('image/jpeg', 0.7));
+            setLoading(false);
+          }
           URL.revokeObjectURL(blobUrl);
         } catch (err) {
-          console.error('PDF thumbnail error:', err);
+          console.error('[chat] PDF thumbnail error:', err);
+          if (!cancelled) setLoading(false);
         }
       })();
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+      };
     }
+
+    setLoading(false);
   }, [file.file_path, file.file_name]);
 
-  if (isImage(file.file_name) && thumbnail) {
+  if (isImage(file.file_name)) {
     return (
       <button
         type="button"
         onClick={() => openChatFile(file.file_path)}
         className="mb-1.5 block w-full overflow-hidden rounded-lg"
       >
-        <img
-          src={thumbnail}
-          alt={file.file_name}
-          className="max-h-48 w-full rounded-lg object-cover"
-        />
+        {loading || !thumbnail ? (
+          <div className="h-32 w-full animate-pulse rounded-lg bg-muted/40" />
+        ) : (
+          <img
+            src={thumbnail}
+            alt={file.file_name}
+            className="max-h-48 w-full rounded-lg object-cover"
+          />
+        )}
       </button>
     );
   }
@@ -131,12 +166,18 @@ function FilePreview({ file }: { file: NonNullable<ChatMessage['file']> }) {
         onClick={() => openChatFile(file.file_path)}
         className="mb-1.5 w-full overflow-hidden rounded-lg bg-background/40 hover:bg-background/60"
       >
-        <div className="flex h-20 items-center justify-center bg-muted/30">
-          <FileText className="size-12 text-muted-foreground/60" />
-        </div>
+        {loading || !thumbnail ? (
+          <div className="flex h-20 items-center justify-center bg-muted/30">
+            <div className="size-12 animate-pulse rounded bg-muted/40" />
+          </div>
+        ) : (
+          <img src={thumbnail} alt={file.file_name} className="h-20 w-full object-cover" />
+        )}
         <div className="flex items-center gap-2 px-2.5 py-1.5">
           <span className="truncate text-xs font-medium flex-1">{file.file_name}</span>
-          <span className="shrink-0 text-[10px] text-muted-foreground">{formatFileSize(file.file_size)}</span>
+          <span className="shrink-0 text-[10px] text-muted-foreground">
+            {formatFileSize(file.file_size)}
+          </span>
         </div>
       </button>
     );
@@ -156,33 +197,44 @@ function FilePreview({ file }: { file: NonNullable<ChatMessage['file']> }) {
 }
 
 function renderMarkdown(text: string): React.ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return (
-        <strong key={i} className="font-semibold">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
-      return <em key={i}>{part.slice(1, -1)}</em>;
-    }
-    const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-    if (link) {
-      return (
-        <a
-          key={i}
-          href={link[2]}
-          target="_blank"
-          rel="noreferrer"
-          className="text-primary underline underline-offset-4 hover:text-primary/80"
-        >
-          {link[1]}
-        </a>
-      );
-    }
-    return <span key={i}>{part}</span>;
+  const lines = text.split('\n');
+  return lines.map((line, lineIdx) => {
+    const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g);
+    const rendered = parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return (
+          <strong key={i} className="font-semibold">
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+        return <em key={i}>{part.slice(1, -1)}</em>;
+      }
+      const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      if (link) {
+        return (
+          <a
+            key={i}
+            href={link[2]}
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-400 underline underline-offset-4 hover:text-blue-300"
+          >
+            {link[1]}
+          </a>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+    return lineIdx > 0 ? (
+      <React.Fragment key={lineIdx}>
+        {'\n'}
+        {rendered}
+      </React.Fragment>
+    ) : (
+      rendered
+    );
   });
 }
 
@@ -191,95 +243,206 @@ function formatTime(ts: number): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
-  const { sendReaction } = useChatStore();
+function truncatePreview(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen)}…`;
+}
+
+function ReplyPreview({ message, onClear }: { message: ChatMessage; onClear: () => void }) {
+  return (
+    <div className="flex items-center gap-2 rounded-t-lg bg-muted/30 px-3 py-1.5 text-xs">
+      <Reply className="size-3 shrink-0 text-muted-foreground" />
+      <span className="font-medium text-muted-foreground">{message.sender_name}</span>
+      <span className="truncate text-muted-foreground/70 flex-1">
+        {truncatePreview(message.text || (message.file?.file_name ?? ''), 60)}
+      </span>
+      <button
+        type="button"
+        onClick={onClear}
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+      >
+        <X className="size-3" />
+      </button>
+    </div>
+  );
+}
+
+function ReadIndicator({ read }: { read: boolean }) {
+  return read ? (
+    <CheckCheck className="size-3 text-blue-400 shrink-0" />
+  ) : (
+    <Check className="size-3 text-muted-foreground/50 shrink-0" />
+  );
+}
+
+function MessageBubble({
+  message,
+  showHeader,
+  onReply,
+}: {
+  message: ChatMessage;
+  showHeader: boolean;
+  onReply: (msg: ChatMessage) => void;
+}) {
+  const { sendReaction, deleteMessage } = useChatStore();
   const isOperator = message.sender_type === 'operator';
 
   const toggleReaction = useCallback(
     (emoji: string) => {
-      sendReaction(message.id, emoji).catch(() => { });
+      sendReaction(message.id, emoji).catch((err) => console.error('[chat] reaction failed:', err));
     },
     [message.id, sendReaction]
   );
 
+  const handleDelete = useCallback(() => {
+    deleteMessage(message.id).catch((err) => console.error('[chat] delete failed:', err));
+  }, [message.id, deleteMessage]);
+
   return (
-    <div className={cn('group flex flex-col gap-1', isOperator ? 'items-end' : 'items-start')}>
-      <HoverCard>
-        <HoverCardTrigger
-          render={
-            <Card
-              className={cn(
-                'relative max-w-[85%] min-w-2/5 rounded-xl p-1.5 leading-relaxed gap-0 text-sm border-0 shadow-none cursor-default',
-                isOperator
-                  ? 'rounded-br-sm bg-primary text-primary-foreground'
-                  : 'rounded-bl-sm bg-muted/60'
-              )}
-            />
-          }
-        >
-          {!isOperator && (
-            <p
-              className="mb-1 text-xs font-medium"
-              style={{ color: senderColor(message.sender_name) }}
-            >
-              {message.sender_name}
-            </p>
-          )}
-
-          {message.file && (
-            <FilePreview file={message.file} />
-          )}
-          {message.text && <div className="wrap-break-word">{renderMarkdown(message.text)}</div>}
-
-          <p
-            className={cn(
-              'text-[10px] text-right',
-              isOperator ? 'text-primary-foreground/60' : 'text-muted-foreground'
-            )}
+    <ContextMenu>
+      <ContextMenuTrigger
+        className={cn('group flex flex-col gap-1', isOperator ? 'items-end' : 'items-start')}
+      >
+        <HoverCard>
+          <HoverCardTrigger
+            render={
+              <Card
+                className={cn(
+                  'relative max-w-[85%] min-w-30 rounded-xl p-1.5 leading-relaxed gap-0 text-sm border-0 shadow-none cursor-default',
+                  isOperator
+                    ? 'rounded-br-sm bg-primary/80 text-primary-foreground'
+                    : 'rounded-bl-sm bg-muted/40',
+                  'animate-in fade-in-0 zoom-in-95 duration-200'
+                )}
+              />
+            }
           >
-            {formatTime(message.ts)}
-          </p>
-        </HoverCardTrigger>
-
-        <HoverCardContent
-          side="top"
-          align="end"
-          sideOffset={-6}
-          alignOffset={0}
-          className="w-auto p-0.5 rounded-lg"
-        >
-          <div className="flex gap-0.5">
-            {REACTION_EMOJIS.map((emoji) => (
-              <Button
-                key={emoji}
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => toggleReaction(emoji)}
-                title={emoji}
+            {message.reply_to && (
+              <div
+                className={cn(
+                  'mb-1.5 rounded-lg px-2 py-1.5 text-xs border-l-2',
+                  isOperator
+                    ? 'bg-primary-foreground/10 border-primary-foreground/30'
+                    : 'bg-muted/60 border-muted-foreground/30'
+                )}
               >
-                {emoji}
-              </Button>
+                <p
+                  className={cn(
+                    'font-medium mb-0.5',
+                    isOperator ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                  )}
+                >
+                  {message.reply_to.sender_name}
+                </p>
+                <p
+                  className={cn(
+                    'truncate max-w-55',
+                    isOperator ? 'text-primary-foreground/50' : 'text-muted-foreground/60'
+                  )}
+                >
+                  {message.reply_to.text || message.reply_to.file?.file_name || ''}
+                </p>
+              </div>
+            )}
+
+            {showHeader && !isOperator && (
+              <p
+                className="mb-1 text-xs font-medium"
+                style={{ color: senderColor(message.sender_name) }}
+              >
+                {message.sender_name}
+              </p>
+            )}
+
+            {message.file && <FilePreview file={message.file} />}
+            {message.text && (
+              <div className="wrap-break-word whitespace-pre-wrap">
+                {renderMarkdown(message.text)}
+              </div>
+            )}
+
+            <div
+              className={cn(
+                'flex items-center gap-1 mt-0.5',
+                isOperator ? 'justify-end' : 'justify-start'
+              )}
+            >
+              <p
+                className={cn(
+                  'text-[10px]',
+                  isOperator ? 'text-primary-foreground/60' : 'text-muted-foreground'
+                )}
+              >
+                {formatTime(message.ts)}
+              </p>
+              {isOperator && <ReadIndicator read={message.read ?? false} />}
+            </div>
+          </HoverCardTrigger>
+
+          <HoverCardContent
+            side="top"
+            align="end"
+            sideOffset={-6}
+            alignOffset={0}
+            className="w-auto p-0.5 rounded-lg"
+          >
+            <div className="flex gap-0.5">
+              {REACTION_EMOJIS.map((emoji) => (
+                <Button
+                  key={emoji}
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => toggleReaction(emoji)}
+                  title={emoji}
+                >
+                  {emoji}
+                </Button>
+              ))}
+            </div>
+          </HoverCardContent>
+        </HoverCard>
+
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => onReply(message)}
+          className={cn(
+            'opacity-0 group-hover:opacity-100 transition-opacity absolute top-1/2 -translate-y-1/2',
+            isOperator ? '-left-7' : '-right-7'
+          )}
+          title={t('Reply')}
+        >
+          <Reply />
+        </Button>
+
+        {message.reactions?.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {groupReactions(message.reactions).map(([emoji, count]) => (
+              <Badge
+                key={emoji}
+                variant="outline"
+                render={<button type="button" onClick={() => toggleReaction(emoji)} />}
+                className="cursor-pointer gap-1 animate-in fade-in-0 zoom-in-95 duration-150"
+              >
+                <span>{emoji}</span>
+                <span>{count}</span>
+              </Badge>
             ))}
           </div>
-        </HoverCardContent>
-      </HoverCard>
+        )}
+      </ContextMenuTrigger>
 
-      {message.reactions?.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {groupReactions(message.reactions).map(([emoji, count]) => (
-            <Badge
-              key={emoji}
-              variant="outline"
-              render={<button type="button" onClick={() => toggleReaction(emoji)} />}
-              className="cursor-pointer gap-1"
-            >
-              <span>{emoji}</span>
-              <span>{count}</span>
-            </Badge>
-          ))}
-        </div>
-      )}
-    </div>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={() => onReply(message)}>
+          <Reply />
+          {t('Reply')}
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" onClick={handleDelete}>
+          <Trash2 />
+          {t('Delete')}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -300,9 +463,11 @@ function formatFileSize(bytes: number): string {
 function ChatTab() {
   const { messages, config, init, sendMessage, sendFile, sendTyping, typingUsers } = useChatStore();
   const [sending, setSending] = useState(false);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<TextEditorRef>(null);
   const isNearBottomRef = useRef(true);
+  const [charCount, setCharCount] = useState(0);
 
   const virtualizer = useVirtualizer({
     count: messages.length,
@@ -322,19 +487,22 @@ function ChatTab() {
   const handleSend = useCallback(async () => {
     const md = editorRef.current?.getMarkdown().trim() ?? '';
     if (!md || sending) return;
+    if (md.length > MAX_MESSAGE_LENGTH) return;
     setSending(true);
     try {
-      await sendMessage(md);
+      await sendMessage(md, replyTo?.id);
       editorRef.current?.setMarkdown('');
+      setReplyTo(null);
+      setCharCount(0);
       isNearBottomRef.current = true;
       requestAnimationFrame(scrollToBottom);
-    } catch {
-      // keep text so the operator can retry
+    } catch (err) {
+      console.error('[chat] send failed:', err);
     } finally {
       setSending(false);
       editorRef.current?.focus();
     }
-  }, [sending, sendMessage, scrollToBottom]);
+  }, [sending, sendMessage, scrollToBottom, replyTo]);
 
   const handleAttach = useCallback(async () => {
     const picked = await fileManagementService.openFilePicker('files');
@@ -344,14 +512,16 @@ function ChatTab() {
     setSending(true);
     try {
       const caption = editorRef.current?.getMarkdown().trim() || undefined;
-      await sendFile(filePath, caption);
+      await sendFile(filePath, caption, replyTo?.id);
       editorRef.current?.setMarkdown('');
-    } catch {
-      // ignore
+      setReplyTo(null);
+      setCharCount(0);
+    } catch (err) {
+      console.error('[chat] attach failed:', err);
     } finally {
       setSending(false);
     }
-  }, [sendFile]);
+  }, [sendFile, replyTo]);
 
   useEffect(() => {
     if (config.enabled) {
@@ -360,10 +530,9 @@ function ChatTab() {
   }, [config.enabled]);
 
   useEffect(() => {
-    init().catch(() => { });
+    init().catch((err) => console.error('[chat] init failed:', err));
   }, [init]);
 
-  // Typing debounce — send typing true on edit, false after 2s idle
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingRef = useRef(false);
 
@@ -373,16 +542,18 @@ function ChatTab() {
 
     const handleUpdate = () => {
       if (!config.enabled) return;
+      const md = editor.markdown?.serialize(editor.state.doc.toJSON()) ?? '';
+      setCharCount(md.length);
 
       if (!lastTypingRef.current) {
         lastTypingRef.current = true;
-        sendTyping(true).catch(() => { });
+        sendTyping(true).catch((err) => console.error('[chat] typing true failed:', err));
       }
 
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
         lastTypingRef.current = false;
-        sendTyping(false).catch(() => { });
+        sendTyping(false).catch((err) => console.error('[chat] typing false failed:', err));
       }, 2000);
     };
 
@@ -394,9 +565,7 @@ function ChatTab() {
   }, [config.enabled, sendTyping]);
 
   useEffect(() => {
-    const handler = () => {
-      editorRef.current?.focus();
-    };
+    const handler = () => editorRef.current?.focus();
     window.addEventListener('lumen:chat-focus', handler);
     return () => window.removeEventListener('lumen:chat-focus', handler);
   }, []);
@@ -404,13 +573,11 @@ function ChatTab() {
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-
     const handleScroll = () => {
       const threshold = 120;
       const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
       isNearBottomRef.current = distanceFromBottom < threshold;
     };
-
     viewport.addEventListener('scroll', handleScroll);
     return () => viewport.removeEventListener('scroll', handleScroll);
   }, []);
@@ -425,17 +592,17 @@ function ChatTab() {
   useEffect(() => {
     const editor = editorRef.current?.editor;
     if (!editor) return;
-
     const handleEditorKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
         handleSend();
       }
     };
-
     editor.view.dom.addEventListener('keydown', handleEditorKeyDown);
     return () => editor.view.dom.removeEventListener('keydown', handleEditorKeyDown);
   }, [handleSend]);
+
+  const isOverLimit = charCount > MAX_MESSAGE_LENGTH;
 
   return (
     <div className="flex h-full flex-col">
@@ -453,23 +620,24 @@ function ChatTab() {
             </EmptyHeader>
           </Empty>
         ) : (
-          <div
-            className="relative w-full"
-            style={{ height: `${virtualizer.getTotalSize()}px` }}
-          >
+          <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
             {virtualizer.getVirtualItems().map((virtualItem) => {
               const message = messages[virtualItem.index];
+              const prev = virtualItem.index > 0 ? messages[virtualItem.index - 1] : null;
+              const showHeader = !prev || prev.sender_id !== message.sender_id;
+
               return (
                 <div
                   key={virtualItem.key}
                   data-index={virtualItem.index}
                   ref={virtualizer.measureElement}
-                  className="absolute top-0 left-0 w-full px-3"
+                  className={cn(
+                    'absolute top-0 left-0 w-full px-3 pb-1.5',
+                    showHeader ? 'pt-2' : 'pt-0.5'
+                  )}
                   style={{ transform: `translateY(${virtualItem.start}px)` }}
                 >
-                  <div className="py-1.5">
-                    <MessageBubble message={message} />
-                  </div>
+                  <MessageBubble message={message} showHeader={showHeader} onReply={setReplyTo} />
                 </div>
               );
             })}
@@ -477,20 +645,27 @@ function ChatTab() {
         )}
 
         {Object.keys(typingUsers).length > 0 && (
-            <div className="flex items-center gap-2 text-xs rounded-xl px-3 py-2 w-fit mb-3 text-primary-foreground bg-primary p-1">
-              {Object.values(typingUsers)
-                .map((u) => u.name)
-                .join(', ')}{' '}
-              <TypingLoader size={4} />
+          <div className="flex items-center gap-2 text-xs rounded-xl px-3 py-2 w-fit mb-3 text-primary-foreground bg-primary p-1">
+            {Object.values(typingUsers)
+              .map((u) => u.name)
+              .join(', ')}{' '}
+            <TypingLoader size={4} />
           </div>
         )}
-
       </ScrollArea>
 
+      <div className="shrink-0 px-2 pb-2">
+        <div className="flex flex-col gap-1">
+          {replyTo && <ReplyPreview message={replyTo} onClear={() => setReplyTo(null)} />}
 
-      <div className="shrink-0">
-        <div className="flex flex-col gap-1.5">
-          <div className="max-h-40 overflow-auto scrollbar-none rounded-3xl border border-border bg-background/50 text-sm">
+          <div
+            className={cn(
+              'max-h-40 overflow-auto scrollbar-none rounded-2xl border text-sm',
+              isOverLimit ? 'border-destructive' : 'border-border',
+              replyTo ? 'rounded-t-none' : '',
+              'bg-background/50'
+            )}
+          >
             <TextEditor
               ref={editorRef}
               placeholder={t('Type a message…')}
@@ -498,8 +673,9 @@ function ChatTab() {
               debounce={100}
             />
           </div>
-          <div className="flex items-center justify-between gap-1">
-            <div className="flex items-center gap-0.5">
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -509,10 +685,24 @@ function ChatTab() {
               >
                 <Paperclip />
               </Button>
+              {charCount > 0 && (
+                <span
+                  className={cn(
+                    'text-[10px] tabular-nums',
+                    isOverLimit ? 'text-destructive font-medium' : 'text-muted-foreground'
+                  )}
+                >
+                  {charCount}/{MAX_MESSAGE_LENGTH}
+                </span>
+              )}
             </div>
-            <Button size="sm" onClick={handleSend} disabled={!config.enabled || sending}>
+            <Button
+              size="sm"
+              onClick={handleSend}
+              disabled={!config.enabled || sending || isOverLimit}
+              className="rounded-xl"
+            >
               <Send />
-              {t('Send')}
             </Button>
           </div>
         </div>
