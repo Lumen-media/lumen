@@ -133,7 +133,8 @@ A new message was committed to the room.
     "text": "Hey everyone!",
     "ts": 1724000000,
     "file": null,
-    "reactions": []
+    "reactions": [],
+    "reply_to": null
   }
 }
 ```
@@ -190,6 +191,25 @@ Sent to all participants with `chat` permission. Ephemeral — no persistence.
 
 ---
 
+### `chat_deleted`
+
+A message was deleted by the operator.
+
+```json
+{
+  "event": "chat_deleted",
+  "message_id": 42
+}
+```
+
+| Field        | Type   | Description |
+|--------------|--------|-------------|
+| `message_id` | number | ID of the deleted message |
+
+Sent to all participants with `chat` permission. The message should be removed from the local store. Reactions associated with the message are also deleted.
+
+---
+
 ### `chat_history`
 
 Response to a `chat_history` request. Sent only to the requesting device.
@@ -206,7 +226,8 @@ Response to a `chat_history` request. Sent only to the requesting device.
       "text": "Good morning!",
       "ts": 1723999900,
       "file": null,
-      "reactions": [{ "emoji": "👍", "sender_id": "device-abc", "ts": 1723999950 }]
+      "reactions": [{ "emoji": "👍", "sender_id": "device-abc", "ts": 1723999950 }],
+      "reply_to": null
     }
   ]
 }
@@ -245,6 +266,7 @@ These events are emitted via `app.emit()` for the desktop operator frontend.
 | `chat_message`     | `ChatMessage`                      | Message committed (device or operator) |
 | `chat_reaction`    | `{ message_id, emoji, sender_id, reaction }` | Reaction toggled |
 | `chat_typing`      | `{ sender_id, sender_name, is_typing }`      | Typing status changed |
+| `chat_deleted`     | `{ message_id }`                   | Message deleted |
 | `chat_config_changed` | `ChatConfig`                    | Config changed via `set_chat_config` |
 
 ### Tauri Commands (Operator → Rust)
@@ -255,6 +277,7 @@ These events are emitted via `app.emit()` for the desktop operator frontend.
 | `send_chat_file`      | `ChatMessage`        | Send file attachment |
 | `send_chat_reaction`  | `ChatReactionResult` | Toggle reaction |
 | `send_chat_typing`    | `()`                 | Broadcast typing status |
+| `delete_chat_message` | `()`                 | Delete a message by ID |
 | `get_chat_messages`   | `ChatMessage[]`      | Load message history |
 | `get_chat_config`     | `ChatConfig`         | Get current config |
 | `set_chat_config`     | `()`                 | Update config |
@@ -281,7 +304,13 @@ These events are emitted via `app.emit()` for the desktop operator frontend.
   },
   "reactions": [
     { "emoji": "👍", "sender_id": "device-xyz", "ts": 1724000005 }
-  ]
+  ],
+  "reply_to": {
+    "id": 40,
+    "sender_name": "John",
+    "text": "Which song first?",
+    "file": null
+  }
 }
 ```
 
@@ -295,6 +324,7 @@ These events are emitted via `app.emit()` for the desktop operator frontend.
 | `ts`         | number         | Unix timestamp (seconds) |
 | `file`       | object\|null   | Attachment metadata |
 | `reactions`  | Reaction[]     | List of reactions |
+| `reply_to`   | object\|null   | Referenced message info (id, sender_name, text, file) |
 
 ### ChatConfig
 
