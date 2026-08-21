@@ -29,21 +29,28 @@ export interface ChatConfig {
   history_limit: number;
 }
 
+export interface ChatReactionResult {
+  message_id: number;
+  emoji: string;
+  sender_id: string;
+  reaction: Reaction | null;
+}
+
 class ChatService {
   async getMessages(limit?: number): Promise<ChatMessage[]> {
     return invoke<ChatMessage[]>('get_chat_messages', limit != null ? { limit } : {});
   }
 
-  async sendMessage(text: string): Promise<void> {
-    await invoke('send_chat_message', { text });
+  async sendMessage(text: string): Promise<ChatMessage> {
+    return invoke<ChatMessage>('send_chat_message', { text });
   }
 
-  async sendFile(filePath: string, text?: string): Promise<void> {
-    await invoke('send_chat_file', text != null ? { filePath, text } : { filePath });
+  async sendFile(filePath: string, text?: string): Promise<ChatMessage> {
+    return invoke<ChatMessage>('send_chat_file', text != null ? { filePath, text } : { filePath });
   }
 
-  async sendReaction(messageId: number, emoji: string): Promise<void> {
-    await invoke('send_chat_reaction', { messageId, emoji });
+  async sendReaction(messageId: number, emoji: string): Promise<ChatReactionResult> {
+    return invoke<ChatReactionResult>('send_chat_reaction', { messageId, emoji });
   }
 
   async getConfig(): Promise<ChatConfig> {
@@ -56,6 +63,10 @@ class ChatService {
 
   async clearHistory(): Promise<void> {
     await invoke('clear_chat_history');
+  }
+
+  async sendTyping(isTyping: boolean): Promise<void> {
+    await invoke('send_chat_typing', { isTyping });
   }
 }
 
