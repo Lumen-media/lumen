@@ -70,7 +70,7 @@ pub async fn send_chat_message(
     chat: State<'_, ChatState>,
     device_state: State<'_, DeviceState>,
     text: String,
-) -> Result<(), String> {
+) -> Result<ChatMessage, String> {
     let mut inner = chat.inner.lock().await;
 
     if !inner.config.enabled {
@@ -81,7 +81,18 @@ pub async fn send_chat_message(
 
     let desktop_name = std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "Lumen Desktop".to_string());
+        .unwrap_or_else(|_| "Lumen Desktop".to_string())
+        .replace('-', " ")
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(c) => c.to_uppercase().to_string() + &chars.as_str().to_lowercase(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let msg = ChatMessage {
         id: 0,
@@ -100,9 +111,9 @@ pub async fn send_chat_message(
 
     store::broadcast_chat_message(&device_state, &committed)?;
 
-    let _ = app.emit("chat_message", committed);
+    let _ = app.emit("chat_message", &committed);
 
-    Ok(())
+    Ok(committed)
 }
 
 #[tauri::command]
@@ -112,7 +123,7 @@ pub async fn send_chat_file(
     device_state: State<'_, DeviceState>,
     file_path: String,
     text: Option<String>,
-) -> Result<(), String> {
+) -> Result<ChatMessage, String> {
     let mut inner = chat.inner.lock().await;
 
     if !inner.config.enabled {
@@ -131,7 +142,18 @@ pub async fn send_chat_file(
 
     let desktop_name = std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "Lumen Desktop".to_string());
+        .unwrap_or_else(|_| "Lumen Desktop".to_string())
+        .replace('-', " ")
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(c) => c.to_uppercase().to_string() + &chars.as_str().to_lowercase(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let msg = ChatMessage {
         id: 0,
@@ -150,9 +172,9 @@ pub async fn send_chat_file(
 
     store::broadcast_chat_message(&device_state, &committed)?;
 
-    let _ = app.emit("chat_message", committed);
+    let _ = app.emit("chat_message", &committed);
 
-    Ok(())
+    Ok(committed)
 }
 
 #[tauri::command]
@@ -202,6 +224,14 @@ pub async fn clear_chat_history(chat: State<'_, ChatState>) -> Result<(), String
     inner.store.clear_history()
 }
 
+#[derive(serde::Serialize)]
+pub struct ChatReactionResult {
+    pub message_id: u64,
+    pub emoji: String,
+    pub sender_id: String,
+    pub reaction: Option<store::Reaction>,
+}
+
 #[tauri::command]
 pub async fn send_chat_reaction(
     app: AppHandle,
@@ -209,7 +239,7 @@ pub async fn send_chat_reaction(
     device_state: State<'_, DeviceState>,
     message_id: u64,
     emoji: String,
-) -> Result<(), String> {
+) -> Result<ChatReactionResult, String> {
     let mut inner = chat.inner.lock().await;
 
     if !inner.config.enabled {
@@ -223,6 +253,13 @@ pub async fn send_chat_reaction(
 
     store::broadcast_chat_reaction(&device_state, message_id, &emoji, "operator", &reaction)?;
 
+    let result = ChatReactionResult {
+        message_id,
+        emoji: emoji.clone(),
+        sender_id: "operator".to_string(),
+        reaction: reaction.clone(),
+    };
+
     let _ = app.emit(
         "chat_reaction",
         json!({
@@ -232,6 +269,47 @@ pub async fn send_chat_reaction(
             "reaction": reaction,
         }),
     );
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn send_chat_typing(
+    app: AppHandle,
+    chat: State<'_, ChatState>,
+    device_state: State<'_, DeviceState>,
+    is_typing: bool,
+) -> Result<(), String> {
+    let inner = chat.inner.lock().await;
+
+    if !inner.config.enabled {
+        return Ok(());
+    }
+
+    drop(inner);
+
+    let desktop_name = std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "Lumen Desktop".to_string())
+        .replace('-', " ")
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(c) => c.to_uppercase().to_string() + &chars.as_str().to_lowercase(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    store::broadcast_chat_typing(&device_state, "operator", &desktop_name, is_typing)?;
+
+    let _ = app.emit("chat_typing", serde_json::json!({
+        "sender_id": "operator",
+        "sender_name": desktop_name,
+        "is_typing": is_typing,
+    }));
 
     Ok(())
 }

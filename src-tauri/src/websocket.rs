@@ -957,6 +957,47 @@ async fn handle_chat_event(
 
             Ok(true)
         }
+        "chat_typing" => {
+            let device_state = app.state::<DeviceState>();
+
+            let is_typing = value
+                .get("is_typing")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+
+            let device_name = {
+                let devices = device_state.devices.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+                devices
+                    .get(device_id)
+                    .map(|d| d.device_name.clone())
+                    .unwrap_or_else(|| device_id.to_string())
+            };
+
+            let payload = serde_json::json!({
+                "event": "chat_typing",
+                "sender_id": device_id,
+                "sender_name": device_name,
+                "is_typing": is_typing,
+            });
+
+            let sessions = device_state.sessions.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+            for session in sessions.values() {
+                if !is_permission_allowed(&session.permissions, "chat") {
+                    continue;
+                }
+                if let Some(tx) = &session.sender {
+                    let _ = tx.send(Message::Text(serde_json::to_string(&payload).unwrap_or_default()));
+                }
+            }
+
+            let _ = app.emit("chat_typing", serde_json::json!({
+                "sender_id": device_id,
+                "sender_name": device_name,
+                "is_typing": is_typing,
+            }));
+
+            Ok(true)
+        }
         _ => Ok(false),
     }
 }

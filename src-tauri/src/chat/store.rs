@@ -280,30 +280,37 @@ impl ChatStore {
     }
 
     pub fn push(&mut self, mut msg: ChatMessage) -> ChatMessage {
-        msg.id = self.next_id;
-        self.next_id += 1;
         msg.reactions = Vec::new();
 
         if self.messages.len() >= self.history_limit {
             self.messages.pop_front();
         }
-        self.messages.push_back(msg.clone());
 
         if self.persist_enabled {
-            let _ = self.persist_message(&msg);
+            match self.persist_message(&msg) {
+                Ok(id) => msg.id = id,
+                Err(e) => {
+                    eprintln!("chat persist error: {}", e);
+                    msg.id = self.next_id;
+                    self.next_id += 1;
+                }
+            }
+        } else {
+            msg.id = self.next_id;
+            self.next_id += 1;
         }
 
+        self.messages.push_back(msg.clone());
         msg
     }
 
-    fn persist_message(&self, msg: &ChatMessage) -> Result<(), String> {
+    fn persist_message(&self, msg: &ChatMessage) -> Result<u64, String> {
         let conn = open_db(&self.db_path)?;
         conn.execute(
             "INSERT INTO chat_messages
-             (id, sender_id, sender_type, sender_name, text, created_at, file_name, file_path, file_size)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             (sender_id, sender_type, sender_name, text, created_at, file_name, file_path, file_size)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
-                msg.id,
                 msg.sender_id,
                 msg.sender_type,
                 msg.sender_name,
@@ -315,7 +322,7 @@ impl ChatStore {
             ],
         )
         .map_err(|e| e.to_string())?;
-        Ok(())
+        Ok(conn.last_insert_rowid() as u64)
     }
 
     pub fn save_file(&self, file_name: &str, data: &[u8]) -> Result<ChatFile, String> {
@@ -460,6 +467,34 @@ pub fn broadcast_chat_reaction(
         "emoji": emoji,
         "sender_id": sender_id,
         "reaction": reaction,
+    }))
+    .map(Message::Text)
+    .map_err(|e| e.to_string())?;
+
+    let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+    for session in sessions.values() {
+        if !is_permission_allowed(&session.permissions, "chat") {
+            continue;
+        }
+        if let Some(sender) = &session.sender {
+            let _ = sender.send(payload.clone());
+        }
+    }
+
+    Ok(())
+}
+
+pub fn broadcast_chat_typing(
+    state: &DeviceState,
+    sender_id: &str,
+    sender_name: &str,
+    is_typing: bool,
+) -> Result<(), String> {
+    let payload = serde_json::to_string(&json!({
+        "event": "chat_typing",
+        "sender_id": sender_id,
+        "sender_name": sender_name,
+        "is_typing": is_typing,
     }))
     .map(Message::Text)
     .map_err(|e| e.to_string())?;
