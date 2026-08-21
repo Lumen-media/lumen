@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
+export const MAX_MESSAGE_LENGTH = 4000;
+
 export interface ChatFile {
   file_name: string;
   file_path: string;
@@ -21,6 +23,13 @@ export interface ChatMessage {
   ts: number;
   file: ChatFile | null;
   reactions: Reaction[];
+  read?: boolean;
+  reply_to?: {
+    id: number;
+    sender_name: string;
+    text: string;
+    file: ChatFile | null;
+  } | null;
 }
 
 export interface ChatConfig {
@@ -41,12 +50,16 @@ class ChatService {
     return invoke<ChatMessage[]>('get_chat_messages', limit != null ? { limit } : {});
   }
 
-  async sendMessage(text: string): Promise<ChatMessage> {
-    return invoke<ChatMessage>('send_chat_message', { text });
+  async sendMessage(text: string, replyToId?: number): Promise<ChatMessage> {
+    return invoke<ChatMessage>('send_chat_message', { text, replyToId: replyToId ?? null });
   }
 
-  async sendFile(filePath: string, text?: string): Promise<ChatMessage> {
-    return invoke<ChatMessage>('send_chat_file', text != null ? { filePath, text } : { filePath });
+  async sendFile(filePath: string, text?: string, replyToId?: number): Promise<ChatMessage> {
+    return invoke<ChatMessage>('send_chat_file', {
+      filePath,
+      text: text ?? null,
+      replyToId: replyToId ?? null,
+    });
   }
 
   async sendReaction(messageId: number, emoji: string): Promise<ChatReactionResult> {
@@ -67,6 +80,10 @@ class ChatService {
 
   async sendTyping(isTyping: boolean): Promise<void> {
     await invoke('send_chat_typing', { isTyping });
+  }
+
+  async deleteMessage(messageId: number): Promise<void> {
+    await invoke('delete_chat_message', { messageId });
   }
 }
 
