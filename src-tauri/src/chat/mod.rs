@@ -224,6 +224,27 @@ pub async fn clear_chat_history(chat: State<'_, ChatState>) -> Result<(), String
     inner.store.clear_history()
 }
 
+#[tauri::command]
+pub async fn delete_chat_message(
+    app: AppHandle,
+    chat: State<'_, ChatState>,
+    device_state: State<'_, DeviceState>,
+    message_id: u64,
+) -> Result<(), String> {
+    let mut inner = chat.inner.lock().await;
+    inner.store.delete_message(message_id)?;
+    drop(inner);
+
+    store::broadcast_chat_delete(&device_state, message_id)?;
+
+    let _ = app.emit(
+        "chat_deleted",
+        serde_json::json!({ "message_id": message_id }),
+    );
+
+    Ok(())
+}
+
 #[derive(serde::Serialize)]
 pub struct ChatReactionResult {
     pub message_id: u64,
