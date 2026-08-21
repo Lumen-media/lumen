@@ -308,9 +308,9 @@ function MessageBubble({
             render={
               <Card
                 className={cn(
-                  'relative max-w-[85%] min-w-30 rounded-xl p-1.5 leading-relaxed gap-0 text-sm border-0 shadow-none cursor-default',
+                  'relative max-w-[85%] min-w-[120px] rounded-xl p-1.5 leading-relaxed gap-0 text-sm border-0 shadow-none cursor-default',
                   isOperator
-                    ? 'rounded-br-sm bg-primary/80 text-primary-foreground'
+                    ? 'rounded-br-sm bg-primary/15 text-foreground'
                     : 'rounded-bl-sm bg-muted/40',
                   'animate-in fade-in-0 zoom-in-95 duration-200'
                 )}
@@ -322,14 +322,14 @@ function MessageBubble({
                 className={cn(
                   'mb-1.5 rounded-lg px-2 py-1.5 text-xs border-l-2',
                   isOperator
-                    ? 'bg-primary-foreground/10 border-primary-foreground/30'
+                    ? 'bg-primary/10 border-primary/30'
                     : 'bg-muted/60 border-muted-foreground/30'
                 )}
               >
                 <p
                   className={cn(
                     'font-medium mb-0.5',
-                    isOperator ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                    isOperator ? 'text-foreground/70' : 'text-muted-foreground'
                   )}
                 >
                   {message.reply_to.sender_name}
@@ -337,7 +337,7 @@ function MessageBubble({
                 <p
                   className={cn(
                     'truncate max-w-55',
-                    isOperator ? 'text-primary-foreground/50' : 'text-muted-foreground/60'
+                    isOperator ? 'text-foreground/50' : 'text-muted-foreground/60'
                   )}
                 >
                   {message.reply_to.text || message.reply_to.file?.file_name || ''}
@@ -367,14 +367,7 @@ function MessageBubble({
                 isOperator ? 'justify-end' : 'justify-start'
               )}
             >
-              <p
-                className={cn(
-                  'text-[10px]',
-                  isOperator ? 'text-primary-foreground/60' : 'text-muted-foreground'
-                )}
-              >
-                {formatTime(message.ts)}
-              </p>
+              <p className="text-[10px] text-muted-foreground">{formatTime(message.ts)}</p>
               {isOperator && <ReadIndicator read={message.read ?? false} />}
             </div>
           </HoverCardTrigger>
@@ -495,7 +488,7 @@ function ChatTab() {
       setReplyTo(null);
       setCharCount(0);
       isNearBottomRef.current = true;
-      requestAnimationFrame(scrollToBottom);
+      setTimeout(scrollToBottom, 50);
     } catch (err) {
       console.error('[chat] send failed:', err);
     } finally {
@@ -574,7 +567,7 @@ function ChatTab() {
     const viewport = viewportRef.current;
     if (!viewport) return;
     const handleScroll = () => {
-      const threshold = 120;
+      const threshold = 200;
       const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
       isNearBottomRef.current = distanceFromBottom < threshold;
     };
