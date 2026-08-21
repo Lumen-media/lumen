@@ -21,7 +21,7 @@ export function AdvancedSection() {
   const toggleChatEnabled = useChatStore((s) => s.toggleEnabled);
 
   useEffect(() => {
-    init().catch(() => {});
+    init().catch((err) => console.error('[streaming] init failed:', err));
   }, [init]);
 
   return (
