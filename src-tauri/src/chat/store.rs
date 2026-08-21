@@ -251,6 +251,24 @@ impl ChatStore {
         Ok(())
     }
 
+    pub fn delete_message(&mut self, message_id: u64) -> Result<(), String> {
+        self.messages.retain(|m| m.id != message_id);
+
+        let conn = open_db(&self.db_path)?;
+        conn.execute(
+            "DELETE FROM chat_reactions WHERE message_id = ?1",
+            params![message_id],
+        )
+        .map_err(|e| e.to_string())?;
+        conn.execute(
+            "DELETE FROM chat_messages WHERE id = ?1",
+            params![message_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        Ok(())
+    }
+
     pub fn clear_today(&self) -> Result<(), String> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -495,6 +513,27 @@ pub fn broadcast_chat_typing(
         "sender_id": sender_id,
         "sender_name": sender_name,
         "is_typing": is_typing,
+    }))
+    .map(Message::Text)
+    .map_err(|e| e.to_string())?;
+
+    let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+    for session in sessions.values() {
+        if !is_permission_allowed(&session.permissions, "chat") {
+            continue;
+        }
+        if let Some(sender) = &session.sender {
+            let _ = sender.send(payload.clone());
+        }
+    }
+
+    Ok(())
+}
+
+pub fn broadcast_chat_delete(state: &DeviceState, message_id: u64) -> Result<(), String> {
+    let payload = serde_json::to_string(&json!({
+        "event": "chat_deleted",
+        "message_id": message_id,
     }))
     .map(Message::Text)
     .map_err(|e| e.to_string())?;

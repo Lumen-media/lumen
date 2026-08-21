@@ -571,6 +571,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             chat::clear_chat_history,
             chat::send_chat_reaction,
             chat::send_chat_typing,
+            chat::delete_chat_message,
             set_stream_overlay,
             thumbnail::get_thumbnail,
             module_runtime::module_list_installed,
