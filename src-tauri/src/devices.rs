@@ -961,7 +961,7 @@ pub fn map_event_permission(event: &str) -> Option<&'static str> {
         | "webrtc_answer"
         | "webrtc_ice_candidate"
         | "mobile_offer" => Some("streaming"),
-        "chat_send" | "chat_file_send" | "chat_history" | "chat_reaction" => Some("chat"),
+        "chat_send" | "chat_file_send" | "chat_history" | "chat_reaction" | "chat_typing" => Some("chat"),
         _ => None,
     }
 }
