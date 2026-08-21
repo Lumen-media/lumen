@@ -81,6 +81,13 @@ pub struct Reaction {
     pub ts:         u64,
 }
 
+pub struct ReplyRef {
+    pub id:          u64,
+    pub sender_name: String,
+    pub text:        String,
+    pub file:        Option<ChatFile>,
+}
+
 pub struct ChatMessage {
     pub id:          u64,              // server-assigned, monotonic
     pub sender_id:   String,           // device_id, or "operator"
@@ -90,6 +97,7 @@ pub struct ChatMessage {
     pub ts:          u64,              // unix seconds (server clock)
     pub file:        Option<ChatFile>, // optional attachment
     pub reactions:   Vec<Reaction>,    // emoji reactions
+    pub reply_to:    Option<ReplyRef>, // referenced message (if reply)
 }
 ```
 
@@ -112,7 +120,13 @@ Wire format (as delivered to every participant):
     },
     "reactions": [
       { "emoji": "👍", "sender_id": "operator", "ts": 1710000005 }
-    ]
+    ],
+    "reply_to": {
+      "id": 40,
+      "sender_name": "Operator",
+      "text": "check slide 2",
+      "file": null
+    }
   }
 }
 ```
@@ -300,6 +314,7 @@ The operator does **not** appear in the device session registry, so chat is brid
 #[tauri::command] async fn send_chat_file(file_path: String, text: Option<String>) -> Result<ChatMessage, String>
 #[tauri::command] async fn send_chat_reaction(message_id: u64, emoji: String) -> Result<ChatReactionResult, String>
 #[tauri::command] async fn send_chat_typing(is_typing: bool) -> Result<(), String>
+#[tauri::command] async fn delete_chat_message(message_id: u64) -> Result<(), String>
 #[tauri::command] async fn get_chat_messages(limit: Option<u32>) -> Result<Vec<ChatMessage>, String>
 #[tauri::command] async fn get_chat_config()  -> Result<ChatConfig, String>
 #[tauri::command] async fn set_chat_config(config: ChatConfig) -> Result<(), String>
@@ -332,6 +347,12 @@ The operator does **not** appear in the device session registry, so chat is brid
 2. Emits `chat_typing` Tauri event for the frontend.
 3. No persistence — ephemeral event.
 
+`delete_chat_message`:
+1. Removes message from the in-memory `VecDeque`.
+2. Deletes message and its reactions from SQLite (`chat_messages` + `chat_reactions`).
+3. Broadcasts `chat_deleted` to device sessions.
+4. Emits `chat_deleted` Tauri event for the frontend.
+
 `clear_chat_history`:
 1. Deletes all rows from `chat_messages` and `chat_reactions`.
 2. Does not affect the in-memory buffer (operator can still see current session messages).
@@ -354,6 +375,8 @@ pub struct ChatReactionResult {
 |---|---|---|
 | `chat_message` | `ChatMessage` | any message committed to the room (device or operator) |
 | `chat_reaction` | `{ message_id, emoji, sender_id, reaction }` | reaction toggled on a message |
+| `chat_typing` | `{ sender_id, sender_name, is_typing }` | typing status changed |
+| `chat_deleted` | `{ message_id }` | message deleted by operator |
 | `chat_config_changed` | `ChatConfig` | global config changed via `set_chat_config` |
 
 ---
