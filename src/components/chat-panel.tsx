@@ -308,7 +308,7 @@ function MessageBubble({
             render={
               <Card
                 className={cn(
-                  'relative max-w-[85%] min-w-[120px] rounded-xl p-1.5 leading-relaxed gap-0 text-sm border-0 shadow-none cursor-default',
+                  'relative max-w-[85%] min-w-30 rounded-xl p-1.5 leading-relaxed gap-0 text-sm border-0 shadow-none cursor-default',
                   isOperator
                     ? 'rounded-br-sm bg-primary/15 text-foreground'
                     : 'rounded-bl-sm bg-muted/40',
@@ -320,24 +320,24 @@ function MessageBubble({
             {message.reply_to && (
               <div
                 className={cn(
-                  'mb-1.5 rounded-lg px-2 py-1.5 text-xs border-l-2',
+                  'mb-1 rounded-md px-2 py-1 text-[11px] leading-tight border-l-2 cursor-default',
                   isOperator
-                    ? 'bg-primary/10 border-primary/30'
-                    : 'bg-muted/60 border-muted-foreground/30'
+                    ? 'bg-foreground/[0.07] border-foreground/20'
+                    : 'bg-foreground/5 border-foreground/15'
                 )}
               >
                 <p
                   className={cn(
-                    'font-medium mb-0.5',
-                    isOperator ? 'text-foreground/70' : 'text-muted-foreground'
+                    'font-medium truncate',
+                    isOperator ? 'text-foreground/60' : 'text-muted-foreground'
                   )}
                 >
                   {message.reply_to.sender_name}
                 </p>
                 <p
                   className={cn(
-                    'truncate max-w-55',
-                    isOperator ? 'text-foreground/50' : 'text-muted-foreground/60'
+                    'truncate',
+                    isOperator ? 'text-foreground/40' : 'text-muted-foreground/50'
                   )}
                 >
                   {message.reply_to.text || message.reply_to.file?.file_name || ''}
@@ -465,8 +465,8 @@ function ChatTab() {
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => viewportRef.current,
-    estimateSize: () => 80,
-    overscan: 10,
+    estimateSize: () => 60,
+    overscan: 15,
     measureElement: (el) => el.getBoundingClientRect().height,
     getItemKey: (index) => messages[index]?.id ?? index,
   });
@@ -488,7 +488,7 @@ function ChatTab() {
       setReplyTo(null);
       setCharCount(0);
       isNearBottomRef.current = true;
-      setTimeout(scrollToBottom, 50);
+      setTimeout(scrollToBottom, 150);
     } catch (err) {
       console.error('[chat] send failed:', err);
     } finally {
@@ -567,7 +567,7 @@ function ChatTab() {
     const viewport = viewportRef.current;
     if (!viewport) return;
     const handleScroll = () => {
-      const threshold = 200;
+      const threshold = 300;
       const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
       isNearBottomRef.current = distanceFromBottom < threshold;
     };
@@ -578,7 +578,7 @@ function ChatTab() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: auto-scroll when near bottom
   useEffect(() => {
     if (isNearBottomRef.current) {
-      requestAnimationFrame(scrollToBottom);
+      setTimeout(scrollToBottom, 100);
     }
   }, [messages.length, scrollToBottom]);
 
