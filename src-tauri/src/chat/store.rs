@@ -25,6 +25,15 @@ pub struct Reaction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplyRef {
+    pub id: u64,
+    pub sender_name: String,
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<ChatFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub id: u64,
     pub sender_id: String,
@@ -36,6 +45,10 @@ pub struct ChatMessage {
     pub file: Option<ChatFile>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub reactions: Vec<Reaction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reply_to: Option<ReplyRef>,
+    #[serde(skip)]
+    pub reply_to_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,7 +90,8 @@ pub fn ensure_tables(conn: &Connection) -> Result<(), String> {
             created_at INTEGER NOT NULL,
             file_name TEXT,
             file_path TEXT,
-            file_size INTEGER
+            file_size INTEGER,
+            reply_to_id INTEGER
         );
         CREATE TABLE IF NOT EXISTS chat_reactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,7 +102,22 @@ pub fn ensure_tables(conn: &Connection) -> Result<(), String> {
             UNIQUE(message_id, emoji, sender_id)
         );",
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    let has_reply_col: bool = conn
+        .prepare("PRAGMA table_info(chat_messages)")
+        .map_err(|e| e.to_string())?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .any(|name| name == "reply_to_id");
+
+    if !has_reply_col {
+        conn.execute("ALTER TABLE chat_messages ADD COLUMN reply_to_id INTEGER", [])
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
 
 pub fn load_config(conn: &Connection) -> Result<ChatConfig, String> {
@@ -191,7 +220,7 @@ impl ChatStore {
         let mut statement = conn
             .prepare(
                 "SELECT id, sender_id, sender_type, sender_name, text, created_at,
-                        file_name, file_path, file_size
+                        file_name, file_path, file_size, reply_to_id
                  FROM chat_messages ORDER BY id DESC LIMIT ?1",
             )
             .map_err(|e| e.to_string())?;
@@ -201,6 +230,7 @@ impl ChatStore {
                 let file_name: Option<String> = row.get(6)?;
                 let file_path: Option<String> = row.get(7)?;
                 let file_size: Option<u64> = row.get(8)?;
+                let reply_to_id: Option<u64> = row.get(9)?;
 
                 let file = if let (Some(name), Some(path), Some(size)) =
                     (file_name, file_path, file_size)
@@ -223,6 +253,8 @@ impl ChatStore {
                     ts: row.get::<_, u64>(5)?,
                     file,
                     reactions: Vec::new(),
+                    reply_to: None,
+                    reply_to_id,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -231,6 +263,29 @@ impl ChatStore {
         for row in rows {
             let mut msg = row.map_err(|e| e.to_string())?;
             msg.reactions = load_reactions_for_message(&conn, msg.id)?;
+
+            if let Some(rid) = msg.reply_to_id {
+                if let Ok(replied) = conn.query_row(
+                    "SELECT sender_name, text, file_name, file_path, file_size FROM chat_messages WHERE id = ?1",
+                    params![rid],
+                    |row| {
+                        let r_name: String = row.get(0)?;
+                        let r_text: String = row.get(1)?;
+                        let r_file_name: Option<String> = row.get(2)?;
+                        let r_file_path: Option<String> = row.get(3)?;
+                        let r_file_size: Option<u64> = row.get(4)?;
+                        let r_file = if let (Some(n), Some(p), Some(s)) = (r_file_name, r_file_path, r_file_size) {
+                            Some(ChatFile { file_name: n, file_path: p, file_size: s })
+                        } else {
+                            None
+                        };
+                        Ok(ReplyRef { id: rid, sender_name: r_name, text: r_text, file: r_file })
+                    },
+                ) {
+                    msg.reply_to = Some(replied);
+                }
+            }
+
             loaded.push_front(msg);
         }
 
@@ -297,6 +352,10 @@ impl ChatStore {
         self.messages.iter().rev().take(n).cloned().collect()
     }
 
+    pub fn find_message(&self, id: u64) -> Option<&ChatMessage> {
+        self.messages.iter().find(|m| m.id == id)
+    }
+
     pub fn push(&mut self, mut msg: ChatMessage) -> ChatMessage {
         msg.reactions = Vec::new();
 
@@ -326,8 +385,8 @@ impl ChatStore {
         let conn = open_db(&self.db_path)?;
         conn.execute(
             "INSERT INTO chat_messages
-             (sender_id, sender_type, sender_name, text, created_at, file_name, file_path, file_size)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             (sender_id, sender_type, sender_name, text, created_at, file_name, file_path, file_size, reply_to_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 msg.sender_id,
                 msg.sender_type,
@@ -337,6 +396,7 @@ impl ChatStore {
                 msg.file.as_ref().map(|f| &f.file_name),
                 msg.file.as_ref().map(|f| &f.file_path),
                 msg.file.as_ref().map(|f| f.file_size),
+                msg.reply_to.as_ref().map(|r| r.id),
             ],
         )
         .map_err(|e| e.to_string())?;

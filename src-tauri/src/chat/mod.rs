@@ -70,6 +70,7 @@ pub async fn send_chat_message(
     chat: State<'_, ChatState>,
     device_state: State<'_, DeviceState>,
     text: String,
+    reply_to_id: Option<u64>,
 ) -> Result<ChatMessage, String> {
     let mut inner = chat.inner.lock().await;
 
@@ -94,6 +95,15 @@ pub async fn send_chat_message(
         .collect::<Vec<_>>()
         .join(" ");
 
+    let reply_to = reply_to_id.and_then(|rid| {
+        inner.store.find_message(rid).map(|m| store::ReplyRef {
+            id: m.id,
+            sender_name: m.sender_name.clone(),
+            text: m.text.clone(),
+            file: m.file.clone(),
+        })
+    });
+
     let msg = ChatMessage {
         id: 0,
         sender_id: "operator".to_string(),
@@ -103,6 +113,8 @@ pub async fn send_chat_message(
         ts: crate::devices::now_ts(),
         file: None,
         reactions: Vec::new(),
+        reply_to,
+        reply_to_id: None,
     };
 
     let committed = inner.store.push(msg);
@@ -123,6 +135,7 @@ pub async fn send_chat_file(
     device_state: State<'_, DeviceState>,
     file_path: String,
     text: Option<String>,
+    reply_to_id: Option<u64>,
 ) -> Result<ChatMessage, String> {
     let mut inner = chat.inner.lock().await;
 
@@ -155,6 +168,15 @@ pub async fn send_chat_file(
         .collect::<Vec<_>>()
         .join(" ");
 
+    let reply_to = reply_to_id.and_then(|rid| {
+        inner.store.find_message(rid).map(|m| store::ReplyRef {
+            id: m.id,
+            sender_name: m.sender_name.clone(),
+            text: m.text.clone(),
+            file: m.file.clone(),
+        })
+    });
+
     let msg = ChatMessage {
         id: 0,
         sender_id: "operator".to_string(),
@@ -164,6 +186,8 @@ pub async fn send_chat_file(
         ts: crate::devices::now_ts(),
         file: Some(chat_file),
         reactions: Vec::new(),
+        reply_to,
+        reply_to_id: None,
     };
 
     let committed = inner.store.push(msg);

@@ -822,6 +822,8 @@ async fn handle_chat_event(
                 ts: crate::devices::now_ts(),
                 file: None,
                 reactions: Vec::new(),
+                reply_to: None,
+                reply_to_id: None,
             };
 
             let committed = inner.store.push(msg);
@@ -894,6 +896,8 @@ async fn handle_chat_event(
                 ts: crate::devices::now_ts(),
                 file: Some(chat_file),
                 reactions: Vec::new(),
+                reply_to: None,
+                reply_to_id: None,
             };
 
             let committed = inner.store.push(msg);
