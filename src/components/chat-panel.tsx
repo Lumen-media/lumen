@@ -50,11 +50,8 @@ function senderColor(name: string): string {
 }
 
 function openChatFile(filePath: string): void {
-  const normalized = filePath.replace(/\\/g, '/');
-  const separatorIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
-  const folderPath = separatorIndex >= 0 ? filePath.substring(0, separatorIndex) : filePath;
-  invoke('open_folder', { path: folderPath }).catch((err) =>
-    console.error('[chat] open folder failed:', err)
+  invoke('open_folder', { path: filePath }).catch((err) =>
+    console.error('[chat] open file failed:', err)
   );
 }
 

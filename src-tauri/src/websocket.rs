@@ -844,9 +844,9 @@ async fn handle_chat_event(
             let committed = inner.store.push(msg);
             let port = inner.file_server_port;
 
-            drop(inner);
-
             store::broadcast_chat_message(&device_state, &committed, port)?;
+
+            drop(inner);
 
             let _ = app.emit("chat_message", committed);
 
@@ -943,9 +943,9 @@ async fn handle_chat_event(
             let committed = inner.store.push(msg);
             let port = inner.file_server_port;
 
-            drop(inner);
-
             store::broadcast_chat_message(&device_state, &committed, port)?;
+
+            drop(inner);
 
             let _ = app.emit("chat_message", committed);
 
