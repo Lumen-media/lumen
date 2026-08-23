@@ -69,7 +69,11 @@ async fn handle_request(
     }
 
     let filename = &path[7..];
-    if filename.contains("..") || filename.contains('\\') {
+    if filename.is_empty()
+        || filename.contains("..")
+        || filename.contains('\\')
+        || filename.contains('/')
+    {
         let response = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
         stream.write_all(response.as_bytes()).await?;
         return Ok(());

@@ -183,7 +183,7 @@ pub fn now_ts() -> u64 {
         .as_secs()
 }
 
-fn resolve_desktop_name(app: &AppHandle) -> String {
+pub fn resolve_desktop_name(app: &AppHandle) -> String {
     for key in ["COMPUTERNAME", "HOSTNAME"] {
         if let Ok(value) = std::env::var(key) {
             let trimmed = value.trim();
