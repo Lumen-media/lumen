@@ -102,9 +102,11 @@ function mergeMessages(dbMessages: ChatMessage[], current: ChatMessage[]): ChatM
 
 const pendingQueue: PendingMessage[] = [];
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let isProcessingQueue = false;
 
 function processRetryQueue(sendFn: (text: string, replyToId?: number) => Promise<void>) {
-  if (retryTimer) return;
+  if (retryTimer || isProcessingQueue) return;
+  isProcessingQueue = true;
   retryTimer = setTimeout(async () => {
     retryTimer = null;
     const pending = [...pendingQueue];
@@ -123,6 +125,7 @@ function processRetryQueue(sendFn: (text: string, replyToId?: number) => Promise
         pendingQueue.push({ ...item, retries: item.retries + 1 });
       }
     }
+    isProcessingQueue = false;
     if (pendingQueue.length > 0) {
       processRetryQueue(sendFn);
     }

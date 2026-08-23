@@ -101,6 +101,19 @@ const PRESENTABLE_EXTS = new Set([
   'pptx',
 ]);
 const seenMessageIds = new Set<number>();
+const MAX_SEEN_MESSAGE_IDS = 10_000;
+
+function rememberMessageId(id: number) {
+  if (seenMessageIds.size >= MAX_SEEN_MESSAGE_IDS) {
+    const it = seenMessageIds.values();
+    for (let i = 0; i < MAX_SEEN_MESSAGE_IDS / 2; i++) {
+      const next = it.next();
+      if (next.done) break;
+      seenMessageIds.delete(next.value);
+    }
+  }
+  seenMessageIds.add(id);
+}
 
 function getFileExt(fileName: string): string {
   return fileName.split('.').pop()?.toLowerCase() ?? '';
@@ -300,6 +313,16 @@ function FilePreview({
 }
 
 const markdownCache = new Map<string, React.ReactNode[]>();
+const MAX_MARKDOWN_CACHE_SIZE = 1000;
+
+function cacheMarkdown(text: string, result: React.ReactNode[]) {
+  if (markdownCache.size >= MAX_MARKDOWN_CACHE_SIZE) {
+    const oldest = markdownCache.keys().next().value;
+    if (oldest !== undefined) markdownCache.delete(oldest);
+  }
+  markdownCache.set(text, result);
+}
+
 function renderMarkdown(text: string, onYouTubeLink?: (url: string) => void): React.ReactNode[] {
   const cached = markdownCache.get(text);
   if (cached) return cached;
@@ -365,16 +388,22 @@ function renderMarkdown(text: string, onYouTubeLink?: (url: string) => void): Re
       rendered
     );
   });
-  markdownCache.set(text, result);
+  cacheMarkdown(text, result);
   return result;
 }
 
 const formatTimeCache = new Map<number, string>();
+const MAX_FORMAT_TIME_CACHE_SIZE = 1000;
+
 function formatTime(ts: number): string {
   let formatted = formatTimeCache.get(ts);
   if (!formatted) {
     const date = new Date(ts * 1000);
     formatted = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (formatTimeCache.size >= MAX_FORMAT_TIME_CACHE_SIZE) {
+      const oldest = formatTimeCache.keys().next().value;
+      if (oldest !== undefined) formatTimeCache.delete(oldest);
+    }
     formatTimeCache.set(ts, formatted);
   }
   return formatted;
@@ -657,7 +686,7 @@ function MessageBubble({
   useEffect(() => {
     const el = bubbleRef.current;
     if (!el || seenMessageIds.has(message.id)) return;
-    seenMessageIds.add(message.id);
+    rememberMessageId(message.id);
     animate(el, {
       opacity: [0, 1],
       translateY: [12, 0],

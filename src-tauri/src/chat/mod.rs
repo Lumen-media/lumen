@@ -40,21 +40,8 @@ fn chat_files_dir() -> Result<PathBuf, String> {
     Ok(app_base_dir()?.join("files").join("media").join("files"))
 }
 
-fn desktop_name() -> String {
-    std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "Lumen Desktop".to_string())
-        .replace('-', " ")
-        .split_whitespace()
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(c) => c.to_uppercase().to_string() + &chars.as_str().to_lowercase(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+fn desktop_name(app: &AppHandle) -> String {
+    crate::devices::resolve_desktop_name(app)
 }
 
 pub fn initialize_chat_state() -> Result<ChatState, String> {
@@ -117,7 +104,7 @@ pub async fn send_chat_message(
         id: 0,
         sender_id: "operator".to_string(),
         sender_type: "operator".to_string(),
-        sender_name: desktop_name(),
+        sender_name: desktop_name(&app),
         text: clean_text,
         ts: crate::devices::now_ts(),
         file: None,
@@ -176,7 +163,7 @@ pub async fn send_chat_file(
         id: 0,
         sender_id: "operator".to_string(),
         sender_type: "operator".to_string(),
-        sender_name: desktop_name(),
+        sender_name: desktop_name(&app),
         text: text.unwrap_or_default(),
         ts: crate::devices::now_ts(),
         file: Some(chat_file),
@@ -336,7 +323,7 @@ pub async fn send_chat_typing(
 
     drop(inner);
 
-    let name = desktop_name();
+    let name = desktop_name(&app);
 
     store::broadcast_chat_typing(&device_state, "operator", &name, is_typing)?;
 

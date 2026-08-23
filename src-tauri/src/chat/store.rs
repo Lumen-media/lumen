@@ -244,8 +244,33 @@ impl ChatStore {
     pub fn set_history_limit(&mut self, limit: u32) {
         self.history_limit = limit as usize;
         while self.messages.len() > self.history_limit {
-            self.messages.pop_front();
+            self.trim_oldest();
         }
+    }
+
+    fn trim_oldest(&mut self) {
+        let oldest = match self.messages.pop_front() {
+            Some(m) => m,
+            None => return,
+        };
+
+        if !self.persist_enabled {
+            return;
+        }
+
+        if let Some(ref file) = oldest.file {
+            let _ = std::fs::remove_file(&file.file_path);
+        }
+
+        let conn = &self.conn;
+        let _ = conn.execute(
+            "DELETE FROM chat_reactions WHERE message_id = ?1",
+            params![oldest.id],
+        );
+        let _ = conn.execute(
+            "DELETE FROM chat_messages WHERE id = ?1",
+            params![oldest.id],
+        );
     }
 
     pub fn load_from_disk(&mut self) -> Result<(), String> {
@@ -378,9 +403,21 @@ impl ChatStore {
 
         self.messages.retain(|m| m.id != message_id);
 
+        for m in self.messages.iter_mut() {
+            if m.reply_to_id == Some(message_id) {
+                m.reply_to_id = None;
+                m.reply_to = None;
+            }
+        }
+
         let conn = &self.conn;
         conn.execute(
             "DELETE FROM chat_reactions WHERE message_id = ?1",
+            params![message_id],
+        )
+        .map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE chat_messages SET reply_to_id = NULL WHERE reply_to_id = ?1",
             params![message_id],
         )
         .map_err(|e| e.to_string())?;
@@ -390,29 +427,6 @@ impl ChatStore {
         )
         .map_err(|e| e.to_string())?;
 
-        Ok(())
-    }
-
-    pub fn clear_today(&self) -> Result<(), String> {
-        use chrono::{Local, NaiveTime};
-        let today_start = Local::now()
-            .date_naive()
-            .and_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap())
-            .and_local_timezone(Local)
-            .unwrap()
-            .timestamp() as u64;
-
-        let conn = &self.conn;
-        conn.execute(
-            "DELETE FROM chat_reactions WHERE message_id IN (SELECT id FROM chat_messages WHERE created_at >= ?1)",
-            params![today_start],
-        )
-        .map_err(|e| e.to_string())?;
-        conn.execute(
-            "DELETE FROM chat_messages WHERE created_at >= ?1",
-            params![today_start],
-        )
-        .map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -431,7 +445,7 @@ impl ChatStore {
         msg.reactions = Vec::new();
 
         if self.messages.len() >= self.history_limit {
-            self.messages.pop_front();
+            self.trim_oldest();
         }
 
         msg.id = self.next_id;
