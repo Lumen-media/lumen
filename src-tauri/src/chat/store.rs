@@ -200,6 +200,33 @@ impl ChatStore {
     }
 
     pub fn set_persist_enabled(&mut self, enabled: bool) {
+        if enabled && !self.persist_enabled {
+            if let Ok(conn) = open_db(&self.db_path) {
+                let max_db_id: u64 = conn
+                    .query_row(
+                        "SELECT COALESCE(MAX(id), 0) FROM chat_messages",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+                if self.next_id <= max_db_id {
+                    self.next_id = max_db_id + 1;
+                }
+                let _ = conn.execute(
+                    "DELETE FROM sqlite_sequence WHERE name = 'chat_messages'",
+                    [],
+                );
+                let _ = conn.execute(
+                    "INSERT INTO chat_messages (id, sender_id, sender_type, sender_name, text, created_at)
+                     VALUES (?1, '_seq_rebase', '_', '_', '', 0)",
+                    params![self.next_id],
+                );
+                let _ = conn.execute(
+                    "DELETE FROM chat_messages WHERE sender_id = '_seq_rebase'",
+                    [],
+                );
+            }
+        }
         self.persist_enabled = enabled;
     }
 
@@ -212,7 +239,11 @@ impl ChatStore {
 
     pub fn load_from_disk(&mut self) -> Result<(), String> {
         if !self.persist_enabled {
-            self.clear_today()?;
+            let conn = open_db(&self.db_path)?;
+            conn.execute("DELETE FROM chat_reactions", [])
+                .map_err(|e| e.to_string())?;
+            conn.execute("DELETE FROM chat_messages", [])
+                .map_err(|e| e.to_string())?;
             return Ok(());
         }
 
@@ -297,8 +328,22 @@ impl ChatStore {
         Ok(())
     }
 
-    pub fn clear_history(&self) -> Result<(), String> {
+    pub fn clear_history(&mut self) -> Result<(), String> {
+        self.messages.clear();
+
         let conn = open_db(&self.db_path)?;
+
+        let files: Vec<String> = conn
+            .prepare("SELECT file_path FROM chat_messages WHERE file_path IS NOT NULL")
+            .map_err(|e| e.to_string())?
+            .query_map([], |row| row.get(0))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        for path in &files {
+            let _ = std::fs::remove_file(path);
+        }
+
         conn.execute("DELETE FROM chat_messages", [])
             .map_err(|e| e.to_string())?;
         conn.execute("DELETE FROM chat_reactions", [])
@@ -307,6 +352,12 @@ impl ChatStore {
     }
 
     pub fn delete_message(&mut self, message_id: u64) -> Result<(), String> {
+        if let Some(msg) = self.messages.iter().find(|m| m.id == message_id) {
+            if let Some(ref file) = msg.file {
+                let _ = std::fs::remove_file(&file.file_path);
+            }
+        }
+
         self.messages.retain(|m| m.id != message_id);
 
         let conn = open_db(&self.db_path)?;
@@ -349,7 +400,7 @@ impl ChatStore {
         let n = limit
             .map(|l| l as usize)
             .unwrap_or(self.messages.len());
-        self.messages.iter().rev().take(n).cloned().collect()
+        self.messages.iter().rev().take(n).cloned().rev().collect()
     }
 
     pub fn find_message(&self, id: u64) -> Option<&ChatMessage> {
@@ -363,31 +414,27 @@ impl ChatStore {
             self.messages.pop_front();
         }
 
+        msg.id = self.next_id;
+        self.next_id += 1;
+
         if self.persist_enabled {
-            match self.persist_message(&msg) {
-                Ok(id) => msg.id = id,
-                Err(e) => {
-                    eprintln!("chat persist error: {}", e);
-                    msg.id = self.next_id;
-                    self.next_id += 1;
-                }
+            if let Err(e) = self.persist_message(&msg) {
+                eprintln!("chat persist error: {}", e);
             }
-        } else {
-            msg.id = self.next_id;
-            self.next_id += 1;
         }
 
         self.messages.push_back(msg.clone());
         msg
     }
 
-    fn persist_message(&self, msg: &ChatMessage) -> Result<u64, String> {
+    fn persist_message(&self, msg: &ChatMessage) -> Result<(), String> {
         let conn = open_db(&self.db_path)?;
         conn.execute(
             "INSERT INTO chat_messages
-             (sender_id, sender_type, sender_name, text, created_at, file_name, file_path, file_size, reply_to_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             (id, sender_id, sender_type, sender_name, text, created_at, file_name, file_path, file_size, reply_to_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
+                msg.id,
                 msg.sender_id,
                 msg.sender_type,
                 msg.sender_name,
@@ -400,16 +447,12 @@ impl ChatStore {
             ],
         )
         .map_err(|e| e.to_string())?;
-        Ok(conn.last_insert_rowid() as u64)
+        Ok(())
     }
 
     pub fn save_file(&self, file_name: &str, data: &[u8]) -> Result<ChatFile, String> {
         if data.len() as u64 > MAX_FILE_SIZE {
-            return Err(format!(
-                "file_too_large:{}:{}",
-                data.len(),
-                MAX_FILE_SIZE
-            ));
+            return Err("file_too_large".to_string());
         }
 
         std::fs::create_dir_all(&self.files_dir).map_err(|e| e.to_string())?;
@@ -441,6 +484,10 @@ impl ChatStore {
         sender_id: &str,
         ts: u64,
     ) -> Result<Option<Reaction>, String> {
+        if self.messages.iter().find(|m| m.id == message_id).is_none() {
+            return Err("message_not_found".to_string());
+        }
+
         let conn = open_db(&self.db_path)?;
 
         let existing = conn
@@ -647,11 +694,7 @@ pub fn validate_message_text(text: &str) -> Result<String, String> {
         return Err("empty_message".to_string());
     }
     if trimmed.len() > MAX_MESSAGE_LENGTH {
-        return Err(format!(
-            "message_too_long:{}:{}",
-            trimmed.len(),
-            MAX_MESSAGE_LENGTH
-        ));
+        return Err("message_too_long".to_string());
     }
     Ok(trimmed.to_string())
 }
@@ -660,5 +703,5 @@ pub fn decode_base64(data: &str) -> Result<Vec<u8>, String> {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD
         .decode(data)
-        .map_err(|e| format!("invalid_base64:{}", e))
+        .map_err(|_| "invalid_file".to_string())
 }
