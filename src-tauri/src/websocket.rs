@@ -327,6 +327,8 @@ async fn handle_external_connection(
                                 stream_type_for_event(event_name, &value),
                                 "no_permission",
                             )?);
+                        } else if event_name.starts_with("chat_") {
+                            let _ = store::send_chat_error(&sender, "no_permission");
                         } else {
                             let _ = sender.send(permission_denied_message(event_name)?);
                         }
@@ -802,7 +804,10 @@ async fn handle_chat_event(
 
             let clean_text = match validate_message_text(text) {
                 Ok(t) => t,
-                Err(_) => return Ok(true),
+                Err(reason) => {
+                    let _ = store::send_chat_error(sender, &reason);
+                    return Ok(true);
+                }
             };
 
             let device_name = {
@@ -873,11 +878,19 @@ async fn handle_chat_event(
                 }
             };
 
-            let text = value
+            let text = match value
                 .get("text")
                 .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
+            {
+                Some(t) if !t.is_empty() => match validate_message_text(t) {
+                    Ok(clean) => clean,
+                    Err(reason) => {
+                        let _ = store::send_chat_error(sender, &reason);
+                        return Ok(true);
+                    }
+                },
+                _ => String::new(),
+            };
 
             let device_name = {
                 let devices = device_state.devices.lock().map_err(|e| e.to_string())?;
@@ -927,12 +940,18 @@ async fn handle_chat_event(
 
             let message_id = match value.get("message_id").and_then(Value::as_u64) {
                 Some(id) => id,
-                None => return Ok(true),
+                None => {
+                    let _ = store::send_chat_error(sender, "missing_message_id");
+                    return Ok(true);
+                }
             };
 
             let emoji = match value.get("emoji").and_then(Value::as_str) {
                 Some(e) => e.to_string(),
-                None => return Ok(true),
+                None => {
+                    let _ = store::send_chat_error(sender, "missing_emoji");
+                    return Ok(true);
+                }
             };
 
             let mut inner = chat.inner.lock().await;
@@ -943,7 +962,13 @@ async fn handle_chat_event(
             }
 
             let ts = crate::devices::now_ts();
-            let reaction = inner.store.toggle_reaction(message_id, &emoji, device_id, ts)?;
+            let reaction = match inner.store.toggle_reaction(message_id, &emoji, device_id, ts) {
+                Ok(r) => r,
+                Err(reason) => {
+                    let _ = store::send_chat_error(sender, &reason);
+                    return Ok(true);
+                }
+            };
 
             drop(inner);
 

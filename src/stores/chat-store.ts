@@ -60,7 +60,7 @@ let unlistenTyping: UnlistenFn | null = null;
 let unlistenDeleted: UnlistenFn | null = null;
 let initPromise: Promise<void> | null = null;
 
-const TYPING_TIMEOUT_MS = 60_000;
+const TYPING_TIMEOUT_MS = 3_000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
 
@@ -82,7 +82,7 @@ function mergeMessages(dbMessages: ChatMessage[], current: ChatMessage[]): ChatM
     }
   }
   const merged = Array.from(messageIndex.values());
-  merged.sort((a, b) => a.ts - b.ts);
+  merged.sort((a, b) => a.id - b.id);
   return merged;
 }
 

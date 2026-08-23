@@ -213,13 +213,21 @@ function renderMarkdown(text: string): React.ReactNode[] {
       }
       const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
       if (link) {
+        const href = link[2];
+        const safe = /^https?:\/\//i.test(href);
         return (
           <a
             key={i}
-            href={link[2]}
+            href={safe ? href : '#'}
             target="_blank"
             rel="noreferrer"
-            className="text-blue-400 underline underline-offset-4 hover:text-blue-300"
+            className={cn(
+              'underline underline-offset-4',
+              safe
+                ? 'text-blue-400 hover:text-blue-300'
+                : 'text-muted-foreground cursor-not-allowed'
+            )}
+            onClick={safe ? undefined : (e) => e.preventDefault()}
           >
             {link[1]}
           </a>

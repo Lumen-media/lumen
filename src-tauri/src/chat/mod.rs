@@ -38,6 +38,23 @@ fn chat_files_dir() -> Result<PathBuf, String> {
     Ok(app_base_dir()?.join("files").join("media").join("files"))
 }
 
+fn desktop_name() -> String {
+    std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "Lumen Desktop".to_string())
+        .replace('-', " ")
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(c) => c.to_uppercase().to_string() + &chars.as_str().to_lowercase(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub fn initialize_chat_state() -> Result<ChatState, String> {
     let db_path = chat_db_path()?;
     let files_dir = chat_files_dir()?;
@@ -80,21 +97,6 @@ pub async fn send_chat_message(
 
     let clean_text = store::validate_message_text(&text)?;
 
-    let desktop_name = std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "Lumen Desktop".to_string())
-        .replace('-', " ")
-        .split_whitespace()
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(c) => c.to_uppercase().to_string() + &chars.as_str().to_lowercase(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-
     let reply_to = reply_to_id.and_then(|rid| {
         inner.store.find_message(rid).map(|m| store::ReplyRef {
             id: m.id,
@@ -108,7 +110,7 @@ pub async fn send_chat_message(
         id: 0,
         sender_id: "operator".to_string(),
         sender_type: "operator".to_string(),
-        sender_name: desktop_name,
+        sender_name: desktop_name(),
         text: clean_text,
         ts: crate::devices::now_ts(),
         file: None,
@@ -153,21 +155,6 @@ pub async fn send_chat_file(
 
     let chat_file = inner.store.save_file(&file_name, &data)?;
 
-    let desktop_name = std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "Lumen Desktop".to_string())
-        .replace('-', " ")
-        .split_whitespace()
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(c) => c.to_uppercase().to_string() + &chars.as_str().to_lowercase(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-
     let reply_to = reply_to_id.and_then(|rid| {
         inner.store.find_message(rid).map(|m| store::ReplyRef {
             id: m.id,
@@ -181,7 +168,7 @@ pub async fn send_chat_file(
         id: 0,
         sender_id: "operator".to_string(),
         sender_type: "operator".to_string(),
-        sender_name: desktop_name,
+        sender_name: desktop_name(),
         text: text.unwrap_or_default(),
         ts: crate::devices::now_ts(),
         file: Some(chat_file),
@@ -244,7 +231,7 @@ pub async fn set_chat_config(
 
 #[tauri::command]
 pub async fn clear_chat_history(chat: State<'_, ChatState>) -> Result<(), String> {
-    let inner = chat.inner.lock().await;
+    let mut inner = chat.inner.lock().await;
     inner.store.clear_history()
 }
 
@@ -333,26 +320,13 @@ pub async fn send_chat_typing(
 
     drop(inner);
 
-    let desktop_name = std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "Lumen Desktop".to_string())
-        .replace('-', " ")
-        .split_whitespace()
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(c) => c.to_uppercase().to_string() + &chars.as_str().to_lowercase(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
+    let name = desktop_name();
 
-    store::broadcast_chat_typing(&device_state, "operator", &desktop_name, is_typing)?;
+    store::broadcast_chat_typing(&device_state, "operator", &name, is_typing)?;
 
     let _ = app.emit("chat_typing", serde_json::json!({
         "sender_id": "operator",
-        "sender_name": desktop_name,
+        "sender_name": name,
         "is_typing": is_typing,
     }));
 
