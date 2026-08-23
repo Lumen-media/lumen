@@ -36,6 +36,7 @@ export interface ChatConfig {
   enabled: boolean;
   persist_enabled: boolean;
   history_limit: number;
+  notification_mode: 'off' | 'toast' | 'os';
 }
 
 export interface ChatReactionResult {

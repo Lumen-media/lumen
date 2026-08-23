@@ -26,6 +26,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.23.1"
 futures-util = "0.3.30"
 uuid = { version = "1", features = ["v4"] }
+chrono = "0.4"
 local-ip-address = "0.6"
 rusqlite = { version = "0.31", features = ["bundled"] }
 tauri-plugin-notification = "2"

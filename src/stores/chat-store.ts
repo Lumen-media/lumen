@@ -1,4 +1,6 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
+import { toast } from 'sonner';
 import { create } from 'zustand';
 
 import { type ChatConfig, type ChatMessage, chatService } from '@/services/chat-service';
@@ -42,6 +44,7 @@ interface ChatStore {
   sendTyping: (isTyping: boolean) => Promise<void>;
   toggleEnabled: (enabled: boolean) => Promise<void>;
   setPersistEnabled: (persistEnabled: boolean) => Promise<void>;
+  setNotificationMode: (mode: 'off' | 'toast' | 'os') => Promise<void>;
   clearHistory: () => Promise<void>;
   deleteMessage: (messageId: number) => Promise<void>;
   markRead: () => void;
@@ -51,6 +54,7 @@ const DEFAULT_CONFIG: ChatConfig = {
   enabled: true,
   persist_enabled: false,
   history_limit: 200,
+  notification_mode: 'toast',
 };
 
 let unlistenMessage: UnlistenFn | null = null;
@@ -66,9 +70,14 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
 
 const messageIndex = new Map<number, ChatMessage>();
+const MAX_INDEX_SIZE = 500;
 
 function addToIndex(msg: ChatMessage) {
   messageIndex.set(msg.id, msg);
+  if (messageIndex.size > MAX_INDEX_SIZE) {
+    const oldest = messageIndex.keys().next().value;
+    if (oldest !== undefined) messageIndex.delete(oldest);
+  }
 }
 
 function mergeMessages(dbMessages: ChatMessage[], current: ChatMessage[]): ChatMessage[] {
@@ -145,6 +154,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
         unlistenMessage = await listen<ChatMessage>('chat_message', ({ payload }) => {
           const chatTabActive = useAsideStore.getState().activeTab === 'chat';
+          const isOwn = payload.sender_id === 'operator';
+
           set((state) => {
             if (state.messages.some((m) => m.id === payload.id)) {
               return state;
@@ -152,10 +163,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             addToIndex(payload);
             return {
               messages: [...state.messages, payload],
-              unread:
-                chatTabActive || payload.sender_id === 'operator' ? state.unread : state.unread + 1,
+              unread: chatTabActive || isOwn ? state.unread : state.unread + 1,
             };
           });
+
+          if (!chatTabActive && !isOwn) {
+            const mode = get().config.notification_mode;
+            const body = payload.text || (payload.file ? payload.file.file_name : '');
+
+            if (mode === 'toast') {
+              toast.info(payload.sender_name, { description: body });
+            } else if (mode === 'os') {
+              (async () => {
+                let granted = await isPermissionGranted();
+                if (!granted) {
+                  granted = await requestPermission();
+                }
+                if (granted) {
+                  sendNotification({ title: payload.sender_name, body });
+                }
+              })();
+            }
+          }
         });
 
         unlistenReaction = await listen<ChatReactionEvent>('chat_reaction', ({ payload }) => {
@@ -304,6 +333,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   setPersistEnabled: async (persistEnabled) => {
     const next = { ...get().config, persist_enabled: persistEnabled };
+    await chatService.setConfig(next);
+    set({ config: next });
+  },
+
+  setNotificationMode: async (mode) => {
+    const next = { ...get().config, notification_mode: mode };
     await chatService.setConfig(next);
     set({ config: next });
   },

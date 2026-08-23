@@ -19,6 +19,7 @@ export function AdvancedSection() {
   const { developerMode, setDeveloperMode } = useAppSettingsStore();
   const chatConfig = useChatStore((s) => s.config);
   const toggleChatEnabled = useChatStore((s) => s.toggleEnabled);
+  const setNotificationMode = useChatStore((s) => s.setNotificationMode);
 
   useEffect(() => {
     init().catch((err) => console.error('[streaming] init failed:', err));
@@ -249,6 +250,32 @@ export function AdvancedSection() {
             checked={chatConfig.enabled}
             onCheckedChange={(checked) => toggleChatEnabled(checked)}
           />
+        </CardContent>
+
+        <Separator />
+
+        <CardContent className="flex items-center justify-between rounded-lg p-4">
+          <div>
+            <p className="text-sm font-medium">{t('Notifications')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('How to notify when a new message arrives while the chat is closed.')}
+            </p>
+          </div>
+          <Select
+            value={chatConfig.notification_mode}
+            onValueChange={(value) =>
+              setNotificationMode(value as 'off' | 'toast' | 'os')
+            }
+          >
+            <SelectTrigger className="w-36 shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="off">{t('Off')}</SelectItem>
+              <SelectItem value="toast">{t('In-App')}</SelectItem>
+              <SelectItem value="os">{t('System')}</SelectItem>
+            </SelectContent>
+          </Select>
         </CardContent>
       </CardContent>
     </div>
