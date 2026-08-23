@@ -118,12 +118,16 @@ function getDownloadStatusLabel(item: QueueItem): string | null {
   }
 }
 
-const TABS: { value: TabValue; label: string }[] = [
+const BASE_TABS: { value: TabValue; label: string }[] = [
   { value: 'queue', label: t('Queue') },
   { value: 'notes', label: t('Notes') },
-  { value: 'themes', label: t('Themes') },
-  { value: 'chat', label: t('Chat') },
 ];
+
+function getChameleonTab(activeTab: TabValue): { value: TabValue; label: string } {
+  return activeTab === 'chat'
+    ? { value: 'chat', label: t('Chat') }
+    : { value: 'themes', label: t('Themes') };
+}
 
 export function AsidePanel() {
   const {
@@ -162,7 +166,7 @@ export function AsidePanel() {
             variant="line"
             className="w-full justify-between rounded-none border-none px-2 h-10"
           >
-            {TABS.map((tab) => (
+            {BASE_TABS.concat(getChameleonTab(activeTab)).map((tab) => (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
