@@ -1,13 +1,16 @@
+import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from '@aiden0z/pptx-renderer';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { animate } from 'animejs';
+import { toJpeg } from 'html-to-image';
 import {
   Check,
   CheckCheck,
   Copy,
   MessageCircle,
   Paperclip,
+  Presentation,
   Reply,
   Send,
   Trash2,
@@ -74,6 +77,19 @@ function openChatFile(filePath: string): void {
 
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif']);
 const PDF_EXTS = new Set(['pdf']);
+const PPT_EXTS = new Set(['ppt', 'pptx']);
+const PRESENTABLE_EXTS = new Set([
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'webp',
+  'svg',
+  'bmp',
+  'avif',
+  'ppt',
+  'pptx',
+]);
 const seenMessageIds = new Set<number>();
 
 function getFileExt(fileName: string): string {
@@ -88,9 +104,28 @@ function isPdf(fileName: string): boolean {
   return PDF_EXTS.has(getFileExt(fileName));
 }
 
-function FilePreview({ file }: { file: NonNullable<ChatMessage['file']> }) {
+function isPpt(fileName: string): boolean {
+  return PPT_EXTS.has(getFileExt(fileName));
+}
+
+function FilePreview({
+  file,
+  onPresentableClick,
+}: {
+  file: NonNullable<ChatMessage['file']>;
+  onPresentableClick?: (file: { file_name: string; file_path: string }) => void;
+}) {
   const [thumbnail, setThumbnail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const handleClick = useCallback(() => {
+    const ext = getFileExt(file.file_name);
+    if (PRESENTABLE_EXTS.has(ext) && onPresentableClick) {
+      onPresentableClick(file);
+    } else {
+      openChatFile(file.file_path);
+    }
+  }, [file, onPresentableClick]);
 
   useEffect(() => {
     if (isImage(file.file_name)) {
@@ -151,6 +186,25 @@ function FilePreview({ file }: { file: NonNullable<ChatMessage['file']> }) {
       };
     }
 
+    if (isPpt(file.file_name)) {
+      let cancelled = false;
+      setLoading(true);
+      getPptThumbnail(file.file_path)
+        .then((url) => {
+          if (!cancelled) {
+            setThumbnail(url);
+            setLoading(false);
+          }
+        })
+        .catch((err) => {
+          console.error('[chat] PPT thumbnail error:', err);
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     setLoading(false);
   }, [file.file_path, file.file_name]);
 
@@ -158,7 +212,7 @@ function FilePreview({ file }: { file: NonNullable<ChatMessage['file']> }) {
     return (
       <button
         type="button"
-        onClick={() => openChatFile(file.file_path)}
+        onClick={handleClick}
         className="mb-1.5 block w-full overflow-hidden rounded-lg"
       >
         {loading || !thumbnail ? (
@@ -198,10 +252,34 @@ function FilePreview({ file }: { file: NonNullable<ChatMessage['file']> }) {
     );
   }
 
+  if (isPpt(file.file_name)) {
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        className="mb-1.5 w-full overflow-hidden rounded-lg bg-background/40 hover:bg-background/60"
+      >
+        {loading || !thumbnail ? (
+          <div className="flex h-20 items-center justify-center bg-muted/30">
+            <div className="size-12 animate-pulse rounded bg-muted/40" />
+          </div>
+        ) : (
+          <img src={thumbnail} alt={file.file_name} className="h-20 w-full object-cover" />
+        )}
+        <div className="flex items-center gap-2 px-2.5 py-1.5">
+          <span className="truncate text-xs font-medium flex-1">{file.file_name}</span>
+          <span className="shrink-0 text-[10px] text-muted-foreground">
+            {formatFileSize(file.file_size)}
+          </span>
+        </div>
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
-      onClick={() => openChatFile(file.file_path)}
+      onClick={handleClick}
       className="mb-1.5 flex w-full items-center gap-2 rounded-lg bg-background/40 px-2 py-1.5 text-xs hover:bg-background/60"
     >
       <Paperclip className="size-3.5 shrink-0" />
@@ -330,109 +408,204 @@ interface YouTubeMeta {
   thumb: string | null;
 }
 
-function YouTubeDialog({ url, onClose }: { url: string | null; onClose: () => void }) {
-  const [meta, setMeta] = useState<YouTubeMeta | null>(null);
+type ChatFileDialogTarget =
+  | { type: 'youtube'; url: string }
+  | { type: 'file'; file_name: string; file_path: string }
+  | null;
+
+function ChatFileDialog({
+  target,
+  onClose,
+}: {
+  target: ChatFileDialogTarget;
+  onClose: () => void;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [ytMeta, setYtMeta] = useState<YouTubeMeta | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const isYoutube = target?.type === 'youtube';
+  const isPptFile = target?.type === 'file' && isPpt(target.file_name);
+  const isImage =
+    target?.type === 'file' &&
+    IMAGE_EXTS.has(target.file_name.split('.').pop()?.toLowerCase() ?? '');
+
   useEffect(() => {
-    if (!url) return;
+    if (!target) return;
     let cancelled = false;
-    setMeta(null);
-    setLoading(true);
+    setSrc(null);
+    setYtMeta(null);
+    setLoading(false);
 
-    (async () => {
-      try {
-        const parsed = urlMediaService.parseYouTubeUrl(url);
-        if (!parsed) return;
+    if (target.type === 'youtube') {
+      setLoading(true);
+      (async () => {
+        try {
+          const parsed = urlMediaService.parseYouTubeUrl(target.url);
+          if (!parsed) return;
+          const [metadata, stored] = await Promise.all([
+            urlMediaService.resolveYouTube(parsed.canonicalUrl),
+            mediaDbService.getFileInfoByOriginalUrl(parsed.canonicalUrl),
+          ]);
+          const fileInfo: FileInfo = {
+            name: metadata.title,
+            path: metadata.canonicalUrl,
+            size: 0,
+            modifiedAt: new Date(),
+            extension: 'url',
+            thumbnailPath: metadata.thumbnailPath,
+            remoteThumbnailUrl: metadata.remoteThumbnailUrl,
+          };
+          const thumb = await thumbnailService.getMediaThumbnail(fileInfo).catch(() => null);
+          if (cancelled) return;
+          setYtMeta({
+            title: metadata.title,
+            artist: metadata.artist,
+            duration: stored?.duration,
+            thumb,
+          });
+        } catch (err) {
+          console.error('[chat] dialog resolve failed:', err);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
 
-        const [metadata, stored] = await Promise.all([
-          urlMediaService.resolveYouTube(parsed.canonicalUrl),
-          mediaDbService.getFileInfoByOriginalUrl(parsed.canonicalUrl),
-        ]);
-
-        const fileInfo: FileInfo = {
-          name: metadata.title,
-          path: metadata.canonicalUrl,
-          size: 0,
-          modifiedAt: new Date(),
-          extension: 'url',
-          thumbnailPath: metadata.thumbnailPath,
-          remoteThumbnailUrl: metadata.remoteThumbnailUrl,
-        };
-        const thumb = await thumbnailService.getMediaThumbnail(fileInfo).catch(() => null);
-
-        if (cancelled) return;
-        setMeta({
-          title: metadata.title,
-          artist: metadata.artist,
-          duration: stored?.duration,
-          thumb,
+    if (target.type === 'file' && isImage) {
+      thumbnailService
+        .getThumbnail(target.file_path, 600)
+        .then((url) => {
+          if (!cancelled) setSrc(url);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          invoke<string>('get_thumbnail', { path: target.file_path, size: 600 })
+            .then((cachePath) => readFile(cachePath))
+            .then((bytes) => {
+              if (!cancelled)
+                setSrc(URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' })));
+            })
+            .catch(() => {});
         });
-      } catch (err) {
-        console.error('[chat] youtube resolve failed:', err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+      return () => {
+        cancelled = true;
+      };
+    }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [url]);
+    if (target.type === 'file' && isPptFile) {
+      setLoading(true);
+      getPptThumbnail(target.file_path)
+        .then((url) => {
+          if (!cancelled) setSrc(url);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [target, isImage, isPptFile]);
 
   const handlePlay = useCallback(() => {
-    if (!url) return;
+    if (!target) return;
+    const path = target.type === 'youtube' ? target.url : target.file_path;
     usePlayerStore
       .getState()
-      .loadFile(url)
-      .catch((err) => console.error('[chat] play youtube failed:', err));
+      .loadFile(path)
+      .catch((err) => console.error('[chat] play failed:', err));
     onClose();
-  }, [url, onClose]);
+  }, [target, onClose]);
 
   const handleQueue = useCallback(() => {
-    if (!url) return;
+    if (target?.type !== 'youtube') return;
     useQueueStore
       .getState()
-      .addUrlToQueue(url)
+      .addUrlToQueue(target.url)
       .catch((err) => console.error('[chat] add to queue failed:', err));
     onClose();
-  }, [url, onClose]);
+  }, [target, onClose]);
+
+  const ready = isYoutube ? !loading && !!ytMeta : isPptFile ? !loading : !!src;
+  const fileName = target?.type === 'file' ? target.file_name : null;
 
   return (
-    <Dialog open={!!url} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent showCloseButton={!loading} className="max-w-xs gap-3 p-4 bg-card">
-        <div className="flex items-center justify-center aspect-video w-full overflow-hidden rounded-lg bg-muted/40">
-          {meta?.thumb ? (
-            <img src={meta.thumb} alt={meta.title} className="size-full object-cover" />
+    <Dialog open={!!target} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent showCloseButton={ready} className="max-w-sm gap-3 p-4">
+        <div
+          className={cn(
+            'flex items-center justify-center overflow-hidden rounded-lg bg-muted/40',
+            isYoutube ? 'aspect-video w-full' : 'max-h-[60vh]'
+          )}
+        >
+          {isYoutube ? (
+            ytMeta?.thumb ? (
+              <img src={ytMeta.thumb} alt={ytMeta.title} className="size-full object-cover" />
+            ) : (
+              <div className="size-full animate-pulse bg-muted/60" />
+            )
+          ) : isPptFile ? (
+            src ? (
+              <img src={src} alt={fileName ?? ''} className="max-h-[60vh] w-full object-contain" />
+            ) : (
+              <div className="flex flex-col items-center gap-3 py-8">
+                <Presentation className="size-12 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">{t('Presentation')}</span>
+              </div>
+            )
+          ) : src ? (
+            <img src={src} alt={fileName ?? ''} className="max-h-[60vh] w-full object-contain" />
           ) : (
-            <div className="size-full animate-pulse bg-muted/60" />
+            <div className="h-48 w-full animate-pulse bg-muted/60" />
           )}
         </div>
 
-        <div className="min-w-0">
-          {loading || !meta ? (
-            <>
-              <div className="h-4 w-3/4 animate-pulse rounded bg-muted/60" />
-              <div className="mt-1.5 h-3 w-1/2 animate-pulse rounded bg-muted/40" />
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-medium leading-snug line-clamp-2">{meta.title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground truncate">
-                {meta.artist}
-                {meta.duration ? ` · ${formatDuration(meta.duration)}` : ''}
-              </p>
-            </>
-          )}
-        </div>
+        {isYoutube ? (
+          <div className="min-w-0">
+            {loading || !ytMeta ? (
+              <>
+                <div className="h-4 w-3/4 animate-pulse rounded bg-muted/60" />
+                <div className="mt-1.5 h-3 w-1/2 animate-pulse rounded bg-muted/40" />
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium leading-snug line-clamp-2">{ytMeta.title}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground truncate">
+                  {ytMeta.artist}
+                  {ytMeta.duration ? ` · ${formatDuration(ytMeta.duration)}` : ''}
+                </p>
+              </>
+            )}
+          </div>
+        ) : (
+          fileName && <p className="text-sm font-medium text-center truncate">{fileName}</p>
+        )}
 
         <div className="flex gap-2">
-          <Button size="sm" className="flex-1" onClick={handlePlay} disabled={loading}>
-            {t('Play now')}
-          </Button>
-          <Button size="sm" variant="outline" className="flex-1" onClick={handleQueue}>
-            {t('Add to queue')}
-          </Button>
+          {isYoutube ? (
+            <>
+              <Button size="sm" className="flex-1" onClick={handlePlay} disabled={loading}>
+                {t('Play now')}
+              </Button>
+              <Button size="sm" variant="outline" className="flex-1" onClick={handleQueue}>
+                {t('Add to queue')}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button size="sm" className="flex-1" onClick={handlePlay} disabled={!ready}>
+                {t('Present')}
+              </Button>
+              <Button size="sm" variant="outline" className="flex-1" onClick={onClose}>
+                {t('Cancel')}
+              </Button>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -444,11 +617,13 @@ function MessageBubble({
   showHeader,
   onReply,
   onLinkClick,
+  onPresentableClick,
 }: {
   message: ChatMessage;
   showHeader: boolean;
   onReply: (msg: ChatMessage) => void;
   onLinkClick: (url: string) => void;
+  onPresentableClick: (file: { file_name: string; file_path: string }) => void;
 }) {
   const { sendReaction, deleteMessage } = useChatStore();
   const [linkUrl, setLinkUrl] = useState<string | null>(null);
@@ -567,7 +742,9 @@ function MessageBubble({
                 </p>
               )}
 
-              {message.file && <FilePreview file={message.file} />}
+              {message.file && (
+                <FilePreview file={message.file} onPresentableClick={onPresentableClick} />
+              )}
               {message.text && (
                 <div className="wrap-break-word whitespace-pre-wrap select-text">
                   {renderMarkdown(message.text, onLinkClick)}
@@ -680,11 +857,42 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+async function getPptThumbnail(filePath: string): Promise<string | null> {
+  const bytes = await readFile(filePath);
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'absolute';
+  wrapper.style.left = '-9999px';
+  wrapper.style.overflow = 'hidden';
+  wrapper.style.width = '320px';
+  document.body.appendChild(wrapper);
+
+  try {
+    const viewer = await PptxViewer.open(bytes.buffer, wrapper, {
+      renderMode: 'slide',
+      fitMode: 'contain',
+      zipLimits: RECOMMENDED_ZIP_LIMITS,
+    });
+    const th = viewer.renderThumbnailToContainer(0, wrapper, { width: 320 });
+    await th?.ready;
+    let dataUrl = '';
+    if (th?.element) {
+      try {
+        dataUrl = await toJpeg(th.element, { quality: 0.7, pixelRatio: 2 });
+      } catch {}
+    }
+    th?.dispose();
+    viewer.destroy();
+    return dataUrl || null;
+  } finally {
+    wrapper.remove();
+  }
+}
+
 function ChatTab() {
   const { messages, config, init, sendMessage, sendFile, sendTyping, typingUsers } = useChatStore();
   const [sending, setSending] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
-  const [youtubeUrl, setYoutubeUrl] = useState<string | null>(null);
+  const [dialogTarget, setDialogTarget] = useState<ChatFileDialogTarget>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<TextEditorRef>(null);
   const firstScrollRef = useRef(true);
@@ -835,7 +1043,7 @@ function ChatTab() {
 
   return (
     <div className="flex h-full flex-col">
-      <YouTubeDialog url={youtubeUrl} onClose={() => setYoutubeUrl(null)} />
+      <ChatFileDialog target={dialogTarget} onClose={() => setDialogTarget(null)} />
       <ScrollArea className="flex-1 overflow-hidden" viewportProps={{ ref: viewportRef }}>
         {messages.length === 0 ? (
           <Empty className="flex-1 border-0">
@@ -871,7 +1079,8 @@ function ChatTab() {
                     message={message}
                     showHeader={showHeader}
                     onReply={setReplyTo}
-                    onLinkClick={setYoutubeUrl}
+                    onLinkClick={(url) => setDialogTarget({ type: 'youtube', url })}
+                    onPresentableClick={(file) => setDialogTarget({ type: 'file', ...file })}
                   />
                 </div>
               );
