@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { readFile } from '@tauri-apps/plugin-fs';
+import { animate } from 'animejs';
 import {
   Check,
   CheckCheck,
@@ -73,6 +74,7 @@ function openChatFile(filePath: string): void {
 
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif']);
 const PDF_EXTS = new Set(['pdf']);
+const seenMessageIds = new Set<number>();
 
 function getFileExt(fileName: string): string {
   return fileName.split('.').pop()?.toLowerCase() ?? '';
@@ -450,7 +452,21 @@ function MessageBubble({
 }) {
   const { sendReaction, deleteMessage } = useChatStore();
   const [linkUrl, setLinkUrl] = useState<string | null>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const deletingRef = useRef(false);
   const isOperator = message.sender_type === 'operator';
+
+  useEffect(() => {
+    const el = bubbleRef.current;
+    if (!el || seenMessageIds.has(message.id)) return;
+    seenMessageIds.add(message.id);
+    animate(el, {
+      opacity: [0, 1],
+      translateY: [12, 0],
+      duration: 260,
+      ease: 'outCubic',
+    });
+  }, [message.id]);
 
   const toggleReaction = useCallback(
     (emoji: string) => {
@@ -459,7 +475,19 @@ function MessageBubble({
     [message.id, sendReaction]
   );
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = useCallback(async () => {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
+    const el = bubbleRef.current;
+    if (!el) {
+      deleteMessage(message.id).catch((err) => console.error('[chat] delete failed:', err));
+      return;
+    }
+    el.style.pointerEvents = 'none';
+    try {
+      await animate(el, { opacity: [1, 0], translateY: [0, -8], duration: 160, ease: 'inQuad' });
+      await animate(el, { height: [el.offsetHeight, 0], duration: 180, ease: 'inOutQuad' });
+    } catch {}
     deleteMessage(message.id).catch((err) => console.error('[chat] delete failed:', err));
   }, [message.id, deleteMessage]);
 
@@ -484,130 +512,131 @@ function MessageBubble({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger
-        className={cn('group flex flex-col gap-1', isOperator ? 'items-end' : 'items-start')}
-        onContextMenu={handleTextContextMenu}
-      >
-        <HoverCard>
-          <HoverCardTrigger
-            render={
-              <Card
-                className={cn(
-                  'relative max-w-[85%] min-w-30 rounded-xl p-1.5 leading-relaxed gap-0 text-sm border-0 shadow-none cursor-default',
-                  isOperator
-                    ? 'rounded-br-sm bg-primary/15 text-foreground'
-                    : 'rounded-bl-sm bg-muted/40',
-                  'animate-in fade-in-0 zoom-in-95 duration-200'
-                )}
-              />
-            }
-          >
-            {message.reply_to && (
+      <ContextMenuTrigger onContextMenu={handleTextContextMenu}>
+        <div
+          ref={bubbleRef}
+          className={cn('group flex flex-col gap-1', isOperator ? 'items-end' : 'items-start')}
+        >
+          <HoverCard>
+            <HoverCardTrigger
+              render={
+                <Card
+                  className={cn(
+                    'relative max-w-[85%] min-w-30 rounded-xl p-1.5 leading-relaxed gap-0 text-sm border-0 shadow-none cursor-default',
+                    isOperator
+                      ? 'rounded-br-sm bg-primary/15 text-foreground'
+                      : 'rounded-bl-sm bg-muted/40'
+                  )}
+                />
+              }
+            >
+              {message.reply_to && (
+                <div
+                  className={cn(
+                    'mb-1 rounded-md px-2 py-1 text-[11px] leading-tight border-l-2 cursor-default',
+                    isOperator
+                      ? 'bg-foreground/[0.07] border-foreground/20'
+                      : 'bg-foreground/5 border-foreground/15'
+                  )}
+                >
+                  <p
+                    className={cn(
+                      'font-medium truncate',
+                      isOperator ? 'text-foreground/60' : 'text-muted-foreground'
+                    )}
+                  >
+                    {message.reply_to.sender_name}
+                  </p>
+                  <p
+                    className={cn(
+                      'truncate',
+                      isOperator ? 'text-foreground/40' : 'text-muted-foreground/50'
+                    )}
+                  >
+                    {message.reply_to.text || message.reply_to.file?.file_name || ''}
+                  </p>
+                </div>
+              )}
+
+              {showHeader && !isOperator && (
+                <p
+                  className="mb-1 text-xs font-medium"
+                  style={{ color: senderColor(message.sender_name) }}
+                >
+                  {message.sender_name}
+                </p>
+              )}
+
+              {message.file && <FilePreview file={message.file} />}
+              {message.text && (
+                <div className="wrap-break-word whitespace-pre-wrap select-text">
+                  {renderMarkdown(message.text, onLinkClick)}
+                </div>
+              )}
+
               <div
                 className={cn(
-                  'mb-1 rounded-md px-2 py-1 text-[11px] leading-tight border-l-2 cursor-default',
-                  isOperator
-                    ? 'bg-foreground/[0.07] border-foreground/20'
-                    : 'bg-foreground/5 border-foreground/15'
+                  'flex items-center gap-1 mt-0.5',
+                  isOperator ? 'justify-end' : 'justify-start'
                 )}
               >
-                <p
-                  className={cn(
-                    'font-medium truncate',
-                    isOperator ? 'text-foreground/60' : 'text-muted-foreground'
-                  )}
-                >
-                  {message.reply_to.sender_name}
-                </p>
-                <p
-                  className={cn(
-                    'truncate',
-                    isOperator ? 'text-foreground/40' : 'text-muted-foreground/50'
-                  )}
-                >
-                  {message.reply_to.text || message.reply_to.file?.file_name || ''}
-                </p>
+                <p className="text-[10px] text-muted-foreground">{formatTime(message.ts)}</p>
+                {isOperator && <ReadIndicator read={message.read ?? false} />}
               </div>
-            )}
 
-            {showHeader && !isOperator && (
-              <p
-                className="mb-1 text-xs font-medium"
-                style={{ color: senderColor(message.sender_name) }}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onReply(message)}
+                className={cn(
+                  'opacity-0 group-hover:opacity-100 transition-opacity absolute top-1/2 -translate-y-1/2',
+                  isOperator ? '-left-7.5' : '-right-7.5'
+                )}
+                title={t('Reply')}
               >
-                {message.sender_name}
-              </p>
-            )}
+                <Reply />
+              </Button>
+            </HoverCardTrigger>
 
-            {message.file && <FilePreview file={message.file} />}
-            {message.text && (
-              <div className="wrap-break-word whitespace-pre-wrap select-text">
-                {renderMarkdown(message.text, onLinkClick)}
-              </div>
-            )}
-
-            <div
-              className={cn(
-                'flex items-center gap-1 mt-0.5',
-                isOperator ? 'justify-end' : 'justify-start'
-              )}
+            <HoverCardContent
+              side="top"
+              align="end"
+              sideOffset={-6}
+              alignOffset={0}
+              className="w-auto p-0.5 rounded-lg"
             >
-              <p className="text-[10px] text-muted-foreground">{formatTime(message.ts)}</p>
-              {isOperator && <ReadIndicator read={message.read ?? false} />}
-            </div>
-          </HoverCardTrigger>
+              <div className="flex gap-0.5">
+                {REACTION_EMOJIS.map((emoji) => (
+                  <Button
+                    key={emoji}
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => toggleReaction(emoji)}
+                    title={emoji}
+                  >
+                    {emoji}
+                  </Button>
+                ))}
+              </div>
+            </HoverCardContent>
+          </HoverCard>
 
-          <HoverCardContent
-            side="top"
-            align="end"
-            sideOffset={-6}
-            alignOffset={0}
-            className="w-auto p-0.5 rounded-lg"
-          >
-            <div className="flex gap-0.5">
-              {REACTION_EMOJIS.map((emoji) => (
-                <Button
+          {message.reactions?.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {groupReactions(message.reactions).map(([emoji, count]) => (
+                <Badge
                   key={emoji}
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => toggleReaction(emoji)}
-                  title={emoji}
+                  variant="outline"
+                  render={<button type="button" onClick={() => toggleReaction(emoji)} />}
+                  className="cursor-pointer gap-1 animate-in fade-in-0 zoom-in-95 duration-150"
                 >
-                  {emoji}
-                </Button>
+                  <span>{emoji}</span>
+                  <span>{count}</span>
+                </Badge>
               ))}
             </div>
-          </HoverCardContent>
-        </HoverCard>
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => onReply(message)}
-          className={cn(
-            'opacity-0 group-hover:opacity-100 transition-opacity absolute top-1/2 -translate-y-1/2',
-            isOperator ? '-left-7' : '-right-7'
           )}
-          title={t('Reply')}
-        >
-          <Reply />
-        </Button>
-
-        {message.reactions?.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {groupReactions(message.reactions).map(([emoji, count]) => (
-              <Badge
-                key={emoji}
-                variant="outline"
-                render={<button type="button" onClick={() => toggleReaction(emoji)} />}
-                className="cursor-pointer gap-1 animate-in fade-in-0 zoom-in-95 duration-150"
-              >
-                <span>{emoji}</span>
-                <span>{count}</span>
-              </Badge>
-            ))}
-          </div>
-        )}
+        </div>
       </ContextMenuTrigger>
 
       <ContextMenuContent>
@@ -658,6 +687,7 @@ function ChatTab() {
   const [youtubeUrl, setYoutubeUrl] = useState<string | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<TextEditorRef>(null);
+  const firstScrollRef = useRef(true);
   const isNearBottomRef = useRef(true);
   const [charCount, setCharCount] = useState(0);
 
@@ -671,30 +701,31 @@ function ChatTab() {
   });
 
   const scrollToBottom = useCallback(() => {
-    if (messages.length > 0) {
-      virtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
-    }
+    if (messages.length === 0) return;
+    virtualizer.scrollToIndex(messages.length - 1, {
+      align: 'end',
+      behavior: firstScrollRef.current ? 'auto' : 'smooth',
+    });
   }, [messages.length, virtualizer]);
 
   const handleSend = useCallback(async () => {
     const md = editorRef.current?.getMarkdown().trim() ?? '';
     if (!md || sending) return;
     if (md.length > MAX_MESSAGE_LENGTH) return;
+    isNearBottomRef.current = true;
     setSending(true);
     try {
       await sendMessage(md, replyTo?.id);
       editorRef.current?.setMarkdown('');
       setReplyTo(null);
       setCharCount(0);
-      isNearBottomRef.current = true;
-      setTimeout(scrollToBottom, 150);
     } catch (err) {
       console.error('[chat] send failed:', err);
     } finally {
       setSending(false);
       editorRef.current?.focus();
     }
-  }, [sending, sendMessage, scrollToBottom, replyTo]);
+  }, [sending, sendMessage, replyTo]);
 
   const handleAttach = useCallback(async () => {
     const picked = await fileManagementService.openFilePicker('files');
@@ -774,11 +805,17 @@ function ChatTab() {
     return () => viewport.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: auto-scroll when near bottom
   useEffect(() => {
-    if (isNearBottomRef.current) {
-      setTimeout(scrollToBottom, 100);
-    }
+    if (messages.length === 0 || !isNearBottomRef.current) return;
+    const frame = requestAnimationFrame(() => requestAnimationFrame(scrollToBottom));
+    const correction = setTimeout(() => {
+      scrollToBottom();
+      firstScrollRef.current = false;
+    }, 250);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(correction);
+    };
   }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
