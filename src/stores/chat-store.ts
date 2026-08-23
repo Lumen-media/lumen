@@ -58,6 +58,7 @@ let unlistenReaction: UnlistenFn | null = null;
 let unlistenConfig: UnlistenFn | null = null;
 let unlistenTyping: UnlistenFn | null = null;
 let unlistenDeleted: UnlistenFn | null = null;
+let unlistenRead: UnlistenFn | null = null;
 let initPromise: Promise<void> | null = null;
 
 const TYPING_TIMEOUT_MS = 3_000;
@@ -140,6 +141,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         unlistenReaction?.();
         unlistenConfig?.();
         unlistenDeleted?.();
+        unlistenRead?.();
 
         unlistenMessage = await listen<ChatMessage>('chat_message', ({ payload }) => {
           const chatTabActive = useAsideStore.getState().activeTab === 'chat';
@@ -214,6 +216,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             messages: state.messages.filter((m) => m.id !== payload.message_id),
           }));
         });
+
+        unlistenRead = await listen<{ device_id: string; last_read_id: number }>(
+          'chat_read',
+          ({ payload }) => {
+            set((state) => ({
+              messages: state.messages.map((msg) =>
+                msg.sender_id === 'operator' && msg.id <= payload.last_read_id
+                  ? { ...msg, read: true }
+                  : msg
+              ),
+            }));
+          }
+        );
       } catch (err) {
         console.error('[chat-store] init failed:', err);
         initPromise = null;
