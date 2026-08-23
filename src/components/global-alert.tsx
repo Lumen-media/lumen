@@ -19,6 +19,11 @@ export function GlobalAlert() {
     await config.onConfirm?.();
   };
 
+  const handleExtra = async () => {
+    close();
+    await config.extraAction?.onClick();
+  };
+
   const handleCancel = () => {
     config.onCancel?.();
     close();
@@ -48,6 +53,16 @@ export function GlobalAlert() {
                 className="py-2 h-auto hover:shadow-[0_4px_20px_var(--primary)]/20 transition-all duration-200 ease-in"
               >
                 {config.confirmText}
+              </Button>
+            )}
+            {config.extraAction && (
+              <Button
+                type="button"
+                onClick={handleExtra}
+                variant="outline"
+                className="py-2 h-auto transition-all duration-200 ease-in"
+              >
+                {config.extraAction.text}
               </Button>
             )}
             {config.cancelText && (

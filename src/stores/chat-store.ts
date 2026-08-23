@@ -1,5 +1,9 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from '@tauri-apps/plugin-notification';
 import { toast } from 'sonner';
 import { create } from 'zustand';
 
@@ -177,7 +181,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               (async () => {
                 let granted = await isPermissionGranted();
                 if (!granted) {
-                  granted = await requestPermission();
+                  granted = (await requestPermission()) === 'granted';
                 }
                 if (granted) {
                   sendNotification({ title: payload.sender_name, body });
