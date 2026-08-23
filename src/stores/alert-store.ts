@@ -7,6 +7,10 @@ interface AlertConfig {
   description: string;
   confirmText?: string;
   cancelText?: string;
+  extraAction?: {
+    text: string;
+    onClick: () => void | Promise<void>;
+  };
   onConfirm?: () => void | Promise<void>;
   onCancel?: () => void;
 }
