@@ -1,7 +1,17 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { readFile } from '@tauri-apps/plugin-fs';
-import { Check, CheckCheck, MessageCircle, Paperclip, Reply, Send, Trash2, X } from 'lucide-react';
+import {
+  Check,
+  CheckCheck,
+  Copy,
+  MessageCircle,
+  Paperclip,
+  Reply,
+  Send,
+  Trash2,
+  X,
+} from 'lucide-react';
 import * as React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '@/lib/i18n';
@@ -9,8 +19,13 @@ import { cn } from '@/lib/utils';
 import type { ChatMessage, Reaction } from '@/services/chat-service';
 import { MAX_MESSAGE_LENGTH } from '@/services/chat-service';
 import { fileManagementService } from '@/services/file-management-service';
+import { mediaDbService } from '@/services/media-db-service';
 import { thumbnailService } from '@/services/thumbnail-service';
+import type { FileInfo } from '@/services/types';
+import { urlMediaService } from '@/services/url-media-service';
 import { useChatStore } from '@/stores/chat-store';
+import { usePlayerStore } from '@/stores/player-store';
+import { useQueueStore } from '@/stores/queue-store';
 import { TextEditor, type TextEditorRef } from './text-editor';
 import { TypingLoader } from './typing-loader';
 import { Badge } from './ui/badge';
@@ -22,6 +37,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from './ui/context-menu';
+import { Dialog, DialogContent } from './ui/dialog';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './ui/empty';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from './ui/hover-card';
 import { ScrollArea } from './ui/scroll-area';
@@ -193,7 +209,7 @@ function FilePreview({ file }: { file: NonNullable<ChatMessage['file']> }) {
   );
 }
 
-function renderMarkdown(text: string): React.ReactNode[] {
+function renderMarkdown(text: string, onYouTubeLink?: (url: string) => void): React.ReactNode[] {
   const lines = text.split('\n');
   return lines.map((line, lineIdx) => {
     const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g);
@@ -212,6 +228,21 @@ function renderMarkdown(text: string): React.ReactNode[] {
       if (link) {
         const href = link[2];
         const safe = /^https?:\/\//i.test(href);
+        if (safe && onYouTubeLink && urlMediaService.parseYouTubeUrl(href)) {
+          return (
+            <a
+              key={i}
+              href={href}
+              className="text-blue-400 underline underline-offset-4 hover:text-blue-300"
+              onClick={(e) => {
+                e.preventDefault();
+                onYouTubeLink(href);
+              }}
+            >
+              {link[1]}
+            </a>
+          );
+        }
         return (
           <a
             key={i}
@@ -280,16 +311,145 @@ function ReadIndicator({ read }: { read: boolean }) {
   );
 }
 
+function formatDuration(seconds?: number): string {
+  if (!seconds || seconds <= 0) return '';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+interface YouTubeMeta {
+  title: string;
+  artist?: string;
+  duration?: number;
+  thumb: string | null;
+}
+
+function YouTubeDialog({ url, onClose }: { url: string | null; onClose: () => void }) {
+  const [meta, setMeta] = useState<YouTubeMeta | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!url) return;
+    let cancelled = false;
+    setMeta(null);
+    setLoading(true);
+
+    (async () => {
+      try {
+        const parsed = urlMediaService.parseYouTubeUrl(url);
+        if (!parsed) return;
+
+        const [metadata, stored] = await Promise.all([
+          urlMediaService.resolveYouTube(parsed.canonicalUrl),
+          mediaDbService.getFileInfoByOriginalUrl(parsed.canonicalUrl),
+        ]);
+
+        const fileInfo: FileInfo = {
+          name: metadata.title,
+          path: metadata.canonicalUrl,
+          size: 0,
+          modifiedAt: new Date(),
+          extension: 'url',
+          thumbnailPath: metadata.thumbnailPath,
+          remoteThumbnailUrl: metadata.remoteThumbnailUrl,
+        };
+        const thumb = await thumbnailService.getMediaThumbnail(fileInfo).catch(() => null);
+
+        if (cancelled) return;
+        setMeta({
+          title: metadata.title,
+          artist: metadata.artist,
+          duration: stored?.duration,
+          thumb,
+        });
+      } catch (err) {
+        console.error('[chat] youtube resolve failed:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  const handlePlay = useCallback(() => {
+    if (!url) return;
+    usePlayerStore
+      .getState()
+      .loadFile(url)
+      .catch((err) => console.error('[chat] play youtube failed:', err));
+    onClose();
+  }, [url, onClose]);
+
+  const handleQueue = useCallback(() => {
+    if (!url) return;
+    useQueueStore
+      .getState()
+      .addUrlToQueue(url)
+      .catch((err) => console.error('[chat] add to queue failed:', err));
+    onClose();
+  }, [url, onClose]);
+
+  return (
+    <Dialog open={!!url} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent showCloseButton={!loading} className="max-w-xs gap-3 p-4 bg-card">
+        <div className="flex items-center justify-center aspect-video w-full overflow-hidden rounded-lg bg-muted/40">
+          {meta?.thumb ? (
+            <img src={meta.thumb} alt={meta.title} className="size-full object-cover" />
+          ) : (
+            <div className="size-full animate-pulse bg-muted/60" />
+          )}
+        </div>
+
+        <div className="min-w-0">
+          {loading || !meta ? (
+            <>
+              <div className="h-4 w-3/4 animate-pulse rounded bg-muted/60" />
+              <div className="mt-1.5 h-3 w-1/2 animate-pulse rounded bg-muted/40" />
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium leading-snug line-clamp-2">{meta.title}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground truncate">
+                {meta.artist}
+                {meta.duration ? ` · ${formatDuration(meta.duration)}` : ''}
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <Button size="sm" className="flex-1" onClick={handlePlay} disabled={loading}>
+            {t('Play now')}
+          </Button>
+          <Button size="sm" variant="outline" className="flex-1" onClick={handleQueue}>
+            {t('Add to queue')}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function MessageBubble({
   message,
   showHeader,
   onReply,
+  onLinkClick,
 }: {
   message: ChatMessage;
   showHeader: boolean;
   onReply: (msg: ChatMessage) => void;
+  onLinkClick: (url: string) => void;
 }) {
   const { sendReaction, deleteMessage } = useChatStore();
+  const [linkUrl, setLinkUrl] = useState<string | null>(null);
   const isOperator = message.sender_type === 'operator';
 
   const toggleReaction = useCallback(
@@ -303,10 +463,30 @@ function MessageBubble({
     deleteMessage(message.id).catch((err) => console.error('[chat] delete failed:', err));
   }, [message.id, deleteMessage]);
 
+  const handleCopyText = useCallback(() => {
+    navigator.clipboard
+      .writeText(message.text || message.file?.file_name || '')
+      .catch((err) => console.error('[chat] copy failed:', err));
+  }, [message]);
+
+  const handleTextContextMenu = useCallback((e: React.MouseEvent) => {
+    const anchor = (e.target as HTMLElement).closest('a');
+    const href = anchor?.getAttribute('href');
+    setLinkUrl(anchor && href && href !== '#' ? href : null);
+  }, []);
+
+  const handleCopyLink = useCallback(() => {
+    if (!linkUrl) return;
+    navigator.clipboard
+      .writeText(linkUrl)
+      .catch((err) => console.error('[chat] copy failed:', err));
+  }, [linkUrl]);
+
   return (
     <ContextMenu>
       <ContextMenuTrigger
         className={cn('group flex flex-col gap-1', isOperator ? 'items-end' : 'items-start')}
+        onContextMenu={handleTextContextMenu}
       >
         <HoverCard>
           <HoverCardTrigger
@@ -361,8 +541,8 @@ function MessageBubble({
 
             {message.file && <FilePreview file={message.file} />}
             {message.text && (
-              <div className="wrap-break-word whitespace-pre-wrap">
-                {renderMarkdown(message.text)}
+              <div className="wrap-break-word whitespace-pre-wrap select-text">
+                {renderMarkdown(message.text, onLinkClick)}
               </div>
             )}
 
@@ -431,6 +611,19 @@ function MessageBubble({
       </ContextMenuTrigger>
 
       <ContextMenuContent>
+        {linkUrl ? (
+          <ContextMenuItem onClick={handleCopyLink}>
+            <Copy />
+            {t('Copy link')}
+          </ContextMenuItem>
+        ) : (
+          (message.text || message.file) && (
+            <ContextMenuItem onClick={handleCopyText}>
+              <Copy />
+              {t('Copy text')}
+            </ContextMenuItem>
+          )
+        )}
         <ContextMenuItem onClick={() => onReply(message)}>
           <Reply />
           {t('Reply')}
@@ -462,6 +655,7 @@ function ChatTab() {
   const { messages, config, init, sendMessage, sendFile, sendTyping, typingUsers } = useChatStore();
   const [sending, setSending] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [youtubeUrl, setYoutubeUrl] = useState<string | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<TextEditorRef>(null);
   const isNearBottomRef = useRef(true);
@@ -604,6 +798,7 @@ function ChatTab() {
 
   return (
     <div className="flex h-full flex-col">
+      <YouTubeDialog url={youtubeUrl} onClose={() => setYoutubeUrl(null)} />
       <ScrollArea className="flex-1 overflow-hidden" viewportProps={{ ref: viewportRef }}>
         {messages.length === 0 ? (
           <Empty className="flex-1 border-0">
@@ -635,7 +830,12 @@ function ChatTab() {
                   )}
                   style={{ transform: `translateY(${virtualItem.start}px)` }}
                 >
-                  <MessageBubble message={message} showHeader={showHeader} onReply={setReplyTo} />
+                  <MessageBubble
+                    message={message}
+                    showHeader={showHeader}
+                    onReply={setReplyTo}
+                    onLinkClick={setYoutubeUrl}
+                  />
                 </div>
               );
             })}
