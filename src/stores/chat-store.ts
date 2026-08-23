@@ -253,13 +253,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         unlistenRead = await listen<{ device_id: string; last_read_id: number }>(
           'chat_read',
           ({ payload }) => {
-            set((state) => ({
-              messages: state.messages.map((msg) =>
-                msg.sender_id === 'operator' && msg.id <= payload.last_read_id
-                  ? { ...msg, read: true }
-                  : msg
-              ),
-            }));
+            set((state) => {
+              const hasUnread = state.messages.some(
+                (msg) => msg.sender_id === 'operator' && !msg.read && msg.id <= payload.last_read_id
+              );
+              if (!hasUnread) return state;
+              return {
+                messages: state.messages.map((msg) =>
+                  msg.sender_id === 'operator' && msg.id <= payload.last_read_id
+                    ? { ...msg, read: true }
+                    : msg
+                ),
+              };
+            });
           }
         );
       } catch (err) {

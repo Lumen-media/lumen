@@ -69,6 +69,16 @@ function senderColor(name: string): string {
   return SENDER_COLORS[Math.abs(hash) % SENDER_COLORS.length];
 }
 
+const senderColorCache = new Map<string, string>();
+function getCachedSenderColor(name: string): string {
+  let color = senderColorCache.get(name);
+  if (!color) {
+    color = senderColor(name);
+    senderColorCache.set(name, color);
+  }
+  return color;
+}
+
 function openChatFile(filePath: string): void {
   invoke('open_folder', { path: filePath }).catch((err) =>
     console.error('[chat] open file failed:', err)
@@ -289,9 +299,12 @@ function FilePreview({
   );
 }
 
+const markdownCache = new Map<string, React.ReactNode[]>();
 function renderMarkdown(text: string, onYouTubeLink?: (url: string) => void): React.ReactNode[] {
+  const cached = markdownCache.get(text);
+  if (cached) return cached;
   const lines = text.split('\n');
-  return lines.map((line, lineIdx) => {
+  const result = lines.map((line, lineIdx) => {
     const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g);
     const rendered = parts.map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
@@ -352,11 +365,19 @@ function renderMarkdown(text: string, onYouTubeLink?: (url: string) => void): Re
       rendered
     );
   });
+  markdownCache.set(text, result);
+  return result;
 }
 
+const formatTimeCache = new Map<number, string>();
 function formatTime(ts: number): string {
-  const date = new Date(ts * 1000);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  let formatted = formatTimeCache.get(ts);
+  if (!formatted) {
+    const date = new Date(ts * 1000);
+    formatted = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    formatTimeCache.set(ts, formatted);
+  }
+  return formatted;
 }
 
 function truncatePreview(text: string, maxLen: number): string {
@@ -618,12 +639,14 @@ function MessageBubble({
   onReply,
   onLinkClick,
   onPresentableClick,
+  onScrollToMessage,
 }: {
   message: ChatMessage;
   showHeader: boolean;
   onReply: (msg: ChatMessage) => void;
   onLinkClick: (url: string) => void;
   onPresentableClick: (file: { file_name: string; file_path: string }) => void;
+  onScrollToMessage?: (messageId: number) => void;
 }) {
   const { sendReaction, deleteMessage } = useChatStore();
   const [linkUrl, setLinkUrl] = useState<string | null>(null);
@@ -707,12 +730,24 @@ function MessageBubble({
             >
               {message.reply_to && (
                 <div
+                  role="button"
+                  tabIndex={0}
                   className={cn(
-                    'mb-1 rounded-md px-2 py-1 text-[11px] leading-tight border-l-2 cursor-default',
+                    'mb-1 rounded-md px-2 py-1 text-[11px] leading-tight border-l-2',
                     isOperator
                       ? 'bg-foreground/[0.07] border-foreground/20'
-                      : 'bg-foreground/5 border-foreground/15'
+                      : 'bg-foreground/5 border-foreground/15',
+                    onScrollToMessage && 'cursor-pointer hover:opacity-80'
                   )}
+                  onClick={() =>
+                    message.reply_to?.id != null && onScrollToMessage?.(message.reply_to.id)
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      message.reply_to?.id != null && onScrollToMessage?.(message.reply_to.id);
+                    }
+                  }}
                 >
                   <p
                     className={cn(
@@ -736,7 +771,7 @@ function MessageBubble({
               {showHeader && !isOperator && (
                 <p
                   className="mb-1 text-xs font-medium"
-                  style={{ color: senderColor(message.sender_name) }}
+                  style={{ color: getCachedSenderColor(message.sender_name) }}
                 >
                   {message.sender_name}
                 </p>
@@ -843,12 +878,29 @@ function MessageBubble({
   );
 }
 
+const MemoizedMessageBubble = React.memo(
+  MessageBubble,
+  (prev, next) =>
+    prev.message.id === next.message.id &&
+    prev.message.text === next.message.text &&
+    prev.message.read === next.message.read &&
+    prev.showHeader === next.showHeader &&
+    prev.message.reactions === next.message.reactions &&
+    prev.message.file?.file_path === next.message.file?.file_path &&
+    prev.onScrollToMessage === next.onScrollToMessage
+);
+
+const groupReactionsCache = new WeakMap<Reaction[], [string, number][]>();
 function groupReactions(reactions: Reaction[]): [string, number][] {
+  const cached = groupReactionsCache.get(reactions);
+  if (cached) return cached;
   const counts = new Map<string, number>();
   for (const r of reactions) {
     counts.set(r.emoji, (counts.get(r.emoji) ?? 0) + 1);
   }
-  return Array.from(counts.entries());
+  const result = Array.from(counts.entries());
+  groupReactionsCache.set(reactions, result);
+  return result;
 }
 
 function formatFileSize(bytes: number): string {
@@ -857,7 +909,10 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const pptThumbnailCache = new Map<string, string>();
 async function getPptThumbnail(filePath: string): Promise<string | null> {
+  const cached = pptThumbnailCache.get(filePath);
+  if (cached) return cached;
   const bytes = await readFile(filePath);
   const wrapper = document.createElement('div');
   wrapper.style.position = 'absolute';
@@ -882,6 +937,7 @@ async function getPptThumbnail(filePath: string): Promise<string | null> {
     }
     th?.dispose();
     viewer.destroy();
+    if (dataUrl) pptThumbnailCache.set(filePath, dataUrl);
     return dataUrl || null;
   } finally {
     wrapper.remove();
@@ -889,7 +945,13 @@ async function getPptThumbnail(filePath: string): Promise<string | null> {
 }
 
 function ChatTab() {
-  const { messages, config, init, sendMessage, sendFile, sendTyping, typingUsers } = useChatStore();
+  const messages = useChatStore((s) => s.messages);
+  const config = useChatStore((s) => s.config);
+  const init = useChatStore((s) => s.init);
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const sendFile = useChatStore((s) => s.sendFile);
+  const sendTyping = useChatStore((s) => s.sendTyping);
+  const typingUsers = useChatStore((s) => s.typingUsers);
   const [sending, setSending] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [dialogTarget, setDialogTarget] = useState<ChatFileDialogTarget>(null);
@@ -903,7 +965,7 @@ function ChatTab() {
     count: messages.length,
     getScrollElement: () => viewportRef.current,
     estimateSize: () => 60,
-    overscan: 15,
+    overscan: 5,
     measureElement: (el) => el.getBoundingClientRect().height,
     getItemKey: (index) => messages[index]?.id ?? index,
   });
@@ -1004,12 +1066,19 @@ function ChatTab() {
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
+    let ticking = false;
     const handleScroll = () => {
-      const threshold = 300;
-      const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-      isNearBottomRef.current = distanceFromBottom < threshold;
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const threshold = 300;
+        const distanceFromBottom =
+          viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+        isNearBottomRef.current = distanceFromBottom < threshold;
+        ticking = false;
+      });
     };
-    viewport.addEventListener('scroll', handleScroll);
+    viewport.addEventListener('scroll', handleScroll, { passive: true });
     return () => viewport.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -1038,6 +1107,25 @@ function ChatTab() {
     editor.view.dom.addEventListener('keydown', handleEditorKeyDown);
     return () => editor.view.dom.removeEventListener('keydown', handleEditorKeyDown);
   }, [handleSend]);
+
+  const handleYouTubeLink = useCallback(
+    (url: string) => setDialogTarget({ type: 'youtube', url }),
+    []
+  );
+  const handleFileClick = useCallback(
+    (file: { file_name: string; file_path: string }) => setDialogTarget({ type: 'file', ...file }),
+    []
+  );
+  const handleScrollToMessage = useCallback(
+    (messageId: number) => {
+      const idx = messages.findIndex((m) => m.id === messageId);
+      if (idx !== -1) {
+        isNearBottomRef.current = true;
+        virtualizer.scrollToIndex(idx, { align: 'center', behavior: 'smooth' });
+      }
+    },
+    [messages, virtualizer]
+  );
 
   const isOverLimit = charCount > MAX_MESSAGE_LENGTH;
 
@@ -1075,12 +1163,13 @@ function ChatTab() {
                   )}
                   style={{ transform: `translateY(${virtualItem.start}px)` }}
                 >
-                  <MessageBubble
+                  <MemoizedMessageBubble
                     message={message}
                     showHeader={showHeader}
                     onReply={setReplyTo}
-                    onLinkClick={(url) => setDialogTarget({ type: 'youtube', url })}
-                    onPresentableClick={(file) => setDialogTarget({ type: 'file', ...file })}
+                    onLinkClick={handleYouTubeLink}
+                    onPresentableClick={handleFileClick}
+                    onScrollToMessage={handleScrollToMessage}
                   />
                 </div>
               );
