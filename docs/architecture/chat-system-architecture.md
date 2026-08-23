@@ -18,9 +18,12 @@ Every message is attributable — `sender_id` / `sender_name` travel with the pa
 - **Feature flags:**
   - **Global:** `ChatConfig.enabled` — operator turns the whole chat on/off.
   - **Per device:** `permissions_chat` column — operator allows/denies chat per device.
-- **Persistence:** optional. When `persist_enabled` is off, messages are written to SQLite but the current day's messages are cleared on restart. When on, messages survive restarts.
-- **File attachments:** devices and operator can send files (up to 25 MB). Files are saved to the existing `files/media/files/` folder so Lumen's file manager can access them.
-- **UI:** deferred. This document defines the data contract (events, payloads, commands) only.
+- **Persistence:** optional. When `persist_enabled` is off, all DB rows are cleared on restart and the in-memory buffer starts empty. When on, messages survive restarts.
+- **File attachments:** devices and operator can send files (up to 25 MB). Files are saved to `files/media/files/` and served via a local HTTP file server for device access.
+- **Reactions:** emoji reactions on messages, toggled via `chat_reaction`.
+- **Reply:** messages can reference another message via `reply_to_id`.
+- **Read receipts:** devices send `chat_read` to indicate which messages they've seen; operator sees ✓✓ on read messages.
+- **Typing indicators:** ephemeral `chat_typing` events.
 
 ---
 
@@ -40,7 +43,12 @@ Every message is attributable — `sender_id` / `sender_name` travel with the pa
     ▲               │   │ send_chat_message / send_chat_file        │
     │               │   └──────────┐                                 │
     └── Tauri event "chat_message" ┘                                 │
-                    └─────────────────────────────────────────────────┘
+                    │                                                │
+                    │  ┌──────────────────┐                          │
+                    │  │ file_server (HTTP)│ ◄── devices download    │
+                    │  │ 127.0.0.1:port   │     files via URL       │
+                    │  └──────────────────┘                          │
+                    └────────────────────────────────────────────────┘
 ```
 
 Routing rule (single room, sender echo included so all peers agree on `id` / `ts`):
@@ -60,7 +68,8 @@ The sender also receives the canonical server-assigned message (with `id` and `t
 src-tauri/src/
 ├── chat/
 │   ├── mod.rs         — ChatState, Tauri commands, initialization
-│   └── store.rs       — ChatConfig, ChatMessage, ChatFile, ChatStore, persistence, broadcast
+│   ├── store.rs       — ChatConfig, ChatMessage, ChatFile, ChatStore, persistence, broadcast, validation
+│   └── file_server.rs — lightweight HTTP server for device file downloads
 └── websocket.rs       — routes chat_* events (after auth + permission check)
 ```
 
@@ -71,7 +80,7 @@ src-tauri/src/
 ```rust
 pub struct ChatFile {
     pub file_name: String,   // original filename
-    pub file_path: String,   // stored path on disk
+    pub file_path: String,   // stored path on disk (operator local access)
     pub file_size: u64,      // bytes
 }
 
@@ -89,7 +98,7 @@ pub struct ReplyRef {
 }
 
 pub struct ChatMessage {
-    pub id:          u64,              // server-assigned, monotonic
+    pub id:          u64,              // server-assigned, monotonic (always via next_id)
     pub sender_id:   String,           // device_id, or "operator"
     pub sender_type: String,           // "device" | "operator"
     pub sender_name: String,           // device_name, or desktop name
@@ -116,7 +125,8 @@ Wire format (as delivered to every participant):
     "file": {
       "file_name": "screenshot.jpg",
       "file_path": "C:/lumen/files/media/files/abc-uuid.jpg",
-      "file_size": 245760
+      "file_size": 245760,
+      "file_url": "http://127.0.0.1:PORT/files/abc-uuid.jpg"
     },
     "reactions": [
       { "emoji": "👍", "sender_id": "operator", "ts": 1710000005 }
@@ -131,6 +141,8 @@ Wire format (as delivered to every participant):
 }
 ```
 
+`file_url` is only present in the WebSocket broadcast (not stored in DB). It points to the local HTTP file server so devices can download the file.
+
 Operator-originated messages use `sender_type: "operator"` and the desktop name as `sender_name`.
 
 ### Constants
@@ -138,6 +150,11 @@ Operator-originated messages use `sender_type: "operator"` and the desktop name 
 ```rust
 pub const MAX_MESSAGE_LENGTH: usize = 4000;           // text is markdown, generous limit
 pub const MAX_FILE_SIZE: u64 = 25 * 1024 * 1024;      // 25 MB
+
+const BLOCKED_EXTENSIONS: &[&str] = &[
+    "exe", "bat", "cmd", "com", "msi", "scr", "pif", "ps1", "psm1", "vbs", "vbe",
+    "js", "jse", "wsf", "wsh", "hta", "cpl", "lnk", "inf", "reg", "rgs",
+];
 ```
 
 ---
@@ -152,13 +169,18 @@ pub struct ChatState {
 }
 
 pub struct ChatStateInner {
-    pub config: ChatConfig,
-    pub store:  ChatStore,
-    db_path:    PathBuf,    // lumen.db — shared with devices
+    pub config:          ChatConfig,
+    pub store:           ChatStore,
+    pub file_server_port: u16,   // HTTP port for device file downloads
+    db_path:             PathBuf, // lumen.db — shared with devices
 }
 ```
 
 `store.messages` (in-memory `VecDeque`) is always kept up to date regardless of persistence. When `persist_enabled` is `true`, every append is also written to SQLite; `history_limit` still caps the in-memory window returned by `chat_history`.
+
+### ID Generation
+
+IDs are always generated via `ChatStore.next_id` (monotonic counter). When `persist_enabled` is `true`, the ID is also inserted explicitly into SQLite (`INSERT ... VALUES (?1, ...)`) so the AUTOINCREMENT sequence stays in sync. When toggling persistence ON mid-session, `set_persist_enabled` rebases the SQLite sequence to avoid collisions.
 
 ---
 
@@ -170,66 +192,71 @@ pub struct ChatConfig {
     pub persist_enabled: bool,   // write-through to SQLite
     pub history_limit:   u32,    // in-memory window (default 200)
 }
-
-impl Default for ChatConfig {
-    fn default() -> Self {
-        Self {
-            enabled:         true,
-            persist_enabled: false,
-            history_limit:   200,
-        }
-    }
-}
 ```
 
-Persisted in: `chat_settings` table in `{exe_dir}/lumen/lumen.db` (key/value rows). No JSON files.
+Persisted in: `chat_settings` table in `{exe_dir}/lumen/lumen.db` (key/value rows).
 
 **Semantics of `enabled = false`:**
-- Incoming `chat_send` / `chat_file_send` from devices is rejected with `chat_error { reason: "disabled" }`.
+- Incoming `chat_send` / `chat_file_send` / `chat_reaction` from devices is rejected with `chat_error { reason: "disabled" }`.
 - The operator can still call `get_chat_messages` (reads the buffer).
 - History remains available to the operator; it is just not broadcastable to devices.
 
 **Semantics of `persist_enabled = false`:**
 - Messages are still written to SQLite during the session (in-memory ring buffer + DB).
-- On restart, `clear_today()` deletes the current day's messages from `chat_messages`.
+- On restart, **all** rows in `chat_messages` and `chat_reactions` are deleted.
 - The in-memory buffer starts empty.
 
 ---
 
 ## Protocol Extension (WebSocket — port 8080)
 
-New events routed in `websocket.rs`. All `chat_*` events require an authenticated session and the `chat` permission.
+Events routed in `websocket.rs`. All `chat_*` events require an authenticated session and the `chat` permission.
 
 ### Device → Desktop
 
 ```jsonc
-// send a text message (markdown)
-{ "event": "chat_send", "text": "projection froze on slide two" }
+// send a text message (markdown), optional reply_to_id
+{ "event": "chat_send", "text": "projection froze on slide two", "reply_to_id": 40 }
 
-// send a file attachment (+ optional text)
-{ "event": "chat_file_send", "file_name": "photo.jpg", "data": "<base64>", "text": "check this" }
+// send a file attachment (+ optional text + optional reply_to_id)
+{ "event": "chat_file_send", "file_name": "photo.jpg", "data": "<base64>", "text": "check this", "reply_to_id": 40 }
 
 // toggle a reaction on a message (same emoji+sender = remove)
 { "event": "chat_reaction", "message_id": 42, "emoji": "👍" }
 
 // request recent history
 { "event": "chat_history", "limit": 50 }
+
+// signal that device has read messages up to this id
+{ "event": "chat_read", "last_read_id": 42 }
+
+// typing indicator
+{ "event": "chat_typing", "is_typing": true }
 ```
 
 ### Desktop → Device
 
 ```jsonc
 // a message broadcast to the room (everyone, including sender echo)
-{ "event": "chat_message", "message": { "id": 42, "sender_id": "...", "sender_type": "device", "sender_name": "...", "text": "...", "ts": 1710000000, "file": null, "reactions": [] } }
+{ "event": "chat_message", "message": { "id": 42, ..., "file": { ..., "file_url": "http://127.0.0.1:PORT/files/uuid.jpg" } } }
 
-// reaction broadcast (includes the reaction object if added, null if removed)
-{ "event": "chat_reaction", "message_id": 42, "emoji": "👍", "sender_id": "device-abc", "reaction": { "emoji": "👍", "sender_id": "device-abc", "ts": 1710000005 } }
+// reaction broadcast
+{ "event": "chat_reaction", "message_id": 42, "emoji": "👍", "sender_id": "device-abc", "reaction": { ... } }
 
-// history response to chat_history request
-{ "event": "chat_history", "messages": [ { "id": 42, ... } ] }
+// typing indicator
+{ "event": "chat_typing", "sender_id": "device-abc", "sender_name": "...", "is_typing": true }
 
-// rejection
-{ "event": "chat_error", "reason": "no_permission" | "disabled" | "file_too_large" | "invalid_file" }
+// message deleted
+{ "event": "chat_deleted", "message_id": 42 }
+
+// history response
+{ "event": "chat_history", "messages": [ ... ] }
+
+// read receipt (from another device)
+{ "event": "chat_read", "device_id": "device-abc", "last_read_id": 42 }
+
+// error
+{ "event": "chat_error", "reason": "disabled" | "empty_message" | "message_too_long" | "file_too_large" | "invalid_file" | "file_save_error" | "blocked_file_type" | "no_permission" | "missing_message_id" | "missing_emoji" | "message_not_found" }
 ```
 
 ### Permission Mapping
@@ -237,14 +264,13 @@ New events routed in `websocket.rs`. All `chat_*` events require an authenticate
 ```rust
 fn map_event_permission(event: &str) -> Option<&'static str> {
     match event {
-        // existing...
-        "chat_send" | "chat_file_send" | "chat_history" | "chat_reaction" => Some("chat"),
+        "chat_send" | "chat_file_send" | "chat_history" | "chat_reaction" | "chat_typing" | "chat_read" => Some("chat"),
         _ => None,
     }
 }
 ```
 
-When an authenticated device without `permissions_chat` sends a chat event, it receives `chat_error { reason: "no_permission" }` — the same pattern as `stream_error { reason: "no_permission" }` in the streaming layer. The connection stays open.
+When an authenticated device without `permissions_chat` sends a chat event, it receives `chat_error { reason: "no_permission" }`. The connection stays open.
 
 ---
 
@@ -254,27 +280,12 @@ Uses the existing session registry (`DeviceState.sessions`), the same source tha
 
 ```rust
 pub fn broadcast_chat_message(
-    state: &State<'_, DeviceState>,
+    state: &DeviceState,
     message: &ChatMessage,
+    file_server_port: u16,
 ) -> Result<(), String> {
-    let payload = serde_json::to_string(&json!({
-        "event": "chat_message",
-        "message": message,
-    }))
-    .map(Message::Text)
-    .map_err(|e| e.to_string())?;
-
-    let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
-    for session in sessions.values() {
-        if !is_permission_allowed(&session.permissions, "chat") {
-            continue; // per-device feature flag
-        }
-        if let Some(sender) = &session.sender {
-            let _ = sender.send(payload.clone()); // includes sender echo
-        }
-    }
-
-    Ok(())
+    // Builds JSON payload with file_url when file is present
+    // Sends to all sessions with chat permission (including sender echo)
 }
 ```
 
@@ -284,22 +295,38 @@ A message only exists after it is committed to `ChatState` (and SQLite when pers
 
 ## File Attachments
 
-Files are saved to `{exe_dir}/lumen/files/media/files/` — the same folder Lumen's file manager already indexes. This means:
-- Files sent through chat are immediately available to the operator via the existing media library.
+Files are saved to `{exe_dir}/lumen/files/media/files/` — the same folder Lumen's file manager already indexes.
+
 - UUID-based filenames prevent collisions; the original filename is stored in `ChatFile.file_name`.
+- **Blocked extensions:** `.exe`, `.bat`, `.cmd`, `.com`, `.msi`, `.scr`, `.pif`, `.ps1`, `.vbs`, `.js`, `.hta`, `.cpl`, `.lnk`, `.inf`, `.reg` — rejected with `chat_error { reason: "blocked_file_type" }`.
+- **Operator file access:** via local `file_path` (direct disk access).
+- **Device file access:** via `file_url` in the broadcast payload, pointing to the local HTTP file server (`http://127.0.0.1:PORT/files/uuid.ext`). CORS enabled (`Access-Control-Allow-Origin: *`).
 
 ### Device → Desktop (`chat_file_send`)
 
-The device sends base64-encoded file data. The server decodes it, saves to disk, creates a `ChatMessage` with the `file` field populated, and broadcasts.
+1. Device sends base64-encoded file data.
+2. Pre-check: `data.len() * 3/4` must be ≤ `MAX_FILE_SIZE` (prevents memory DoS).
+3. Server decodes base64, validates extension, saves to disk with UUID filename.
+4. Creates `ChatMessage` with `file` populated, broadcasts with `file_url`.
 
 ### Operator (`send_chat_file`)
 
-The operator sends a local file path. The server reads it, copies to the chat files directory, creates the message, and broadcasts.
+1. Reads file from `file_path` on disk.
+2. Saves to `files/media/files/` with UUID filename.
+3. Same commit → broadcast → emit → return flow.
 
-### Limits
+### File Server
 
-- Max file size: 25 MB (`MAX_FILE_SIZE`)
-- Files exceeding the limit receive `chat_error { reason: "file_too_large" }`
+A lightweight HTTP server (`chat/file_server.rs`) runs on a random port at `127.0.0.1`. It serves files from `files/media/files/` with:
+- CORS headers for cross-origin access
+- MIME type guessing (jpg, png, gif, pdf, mp4, etc.)
+- Path traversal protection (`..` and `\` blocked)
+
+---
+
+## Read Receipts
+
+Devices indicate which messages they've seen by sending `chat_read { last_read_id: <id> }`. The server emits a `chat_read` Tauri event to the operator. The frontend marks all operator messages with `id ≤ last_read_id` as `read: true`, showing a double check mark (✓✓).
 
 ---
 
@@ -310,8 +337,8 @@ The operator does **not** appear in the device session registry, so chat is brid
 ### Tauri Commands
 
 ```rust
-#[tauri::command] async fn send_chat_message(text: String) -> Result<ChatMessage, String>
-#[tauri::command] async fn send_chat_file(file_path: String, text: Option<String>) -> Result<ChatMessage, String>
+#[tauri::command] async fn send_chat_message(text: String, reply_to_id: Option<u64>) -> Result<ChatMessage, String>
+#[tauri::command] async fn send_chat_file(file_path: String, text: Option<String>, reply_to_id: Option<u64>) -> Result<ChatMessage, String>
 #[tauri::command] async fn send_chat_reaction(message_id: u64, emoji: String) -> Result<ChatReactionResult, String>
 #[tauri::command] async fn send_chat_typing(is_typing: bool) -> Result<(), String>
 #[tauri::command] async fn delete_chat_message(message_id: u64) -> Result<(), String>
@@ -323,24 +350,26 @@ The operator does **not** appear in the device session registry, so chat is brid
 
 `send_chat_message`:
 1. Validates text (non-empty, under `MAX_MESSAGE_LENGTH`).
-2. Builds `ChatMessage { sender_type: "operator", sender_name: <formatted_desktop_name>, ... }`.
-3. Commits it to `ChatState` (+ SQLite if persistence enabled). ID is generated by SQLite `AUTOINCREMENT` via `last_insert_rowid()`.
-4. Calls `broadcast_chat_message` to device sessions.
-5. Emits `chat_message` Tauri event (echo).
-6. Returns the committed `ChatMessage` to the caller.
+2. Builds `ChatMessage { sender_type: "operator", sender_name: <desktop_name()>, ... }`.
+3. If `reply_to_id` is provided, looks up the referenced message and builds `ReplyRef`.
+4. Commits it to `ChatState` via `store.push()` (ID from `next_id`, persisted if enabled).
+5. Calls `broadcast_chat_message` to device sessions (includes `file_url` for file messages).
+6. Emits `chat_message` Tauri event (echo).
+7. Returns the committed `ChatMessage` to the caller.
 
 `send_chat_file`:
 1. Reads file from `file_path` on disk.
-2. Saves to `files/media/files/` with UUID filename.
+2. Saves to `files/media/files/` with UUID filename (validates extension).
 3. Builds `ChatMessage` with `file` populated.
 4. Same commit → broadcast → emit → return flow.
 
 `send_chat_reaction`:
-1. Toggles the reaction: same emoji + same sender = removes it; otherwise adds it.
-2. Persists to `chat_reactions` table.
-3. Broadcasts `chat_reaction` to device sessions.
-4. Emits `chat_reaction` Tauri event.
-5. Returns `ChatReactionResult { message_id, emoji, sender_id, reaction }`.
+1. Validates message exists (`message_not_found` error if not).
+2. Toggles the reaction: same emoji + same sender = removes it; otherwise adds it.
+3. Persists to `chat_reactions` table (UNIQUE constraint on message_id+emoji+sender_id).
+4. Broadcasts `chat_reaction` to device sessions.
+5. Emits `chat_reaction` Tauri event.
+6. Returns `ChatReactionResult { message_id, emoji, sender_id, reaction }`.
 
 `send_chat_typing`:
 1. Broadcasts `chat_typing` event to all device sessions with `chat` permission.
@@ -348,26 +377,16 @@ The operator does **not** appear in the device session registry, so chat is brid
 3. No persistence — ephemeral event.
 
 `delete_chat_message`:
-1. Removes message from the in-memory `VecDeque`.
-2. Deletes message and its reactions from SQLite (`chat_messages` + `chat_reactions`).
-3. Broadcasts `chat_deleted` to device sessions.
-4. Emits `chat_deleted` Tauri event for the frontend.
+1. Removes file from disk (if present).
+2. Removes message from the in-memory `VecDeque`.
+3. Deletes message and its reactions from SQLite (`chat_messages` + `chat_reactions`).
+4. Broadcasts `chat_deleted` to device sessions.
+5. Emits `chat_deleted` Tauri event for the frontend.
 
 `clear_chat_history`:
-1. Deletes all rows from `chat_messages` and `chat_reactions`.
-2. Does not affect the in-memory buffer (operator can still see current session messages).
-
-### ChatReactionResult
-
-```rust
-#[derive(Serialize)]
-pub struct ChatReactionResult {
-    pub message_id: u64,
-    pub emoji: String,
-    pub sender_id: String,
-    pub reaction: Option<Reaction>,
-}
-```
+1. Removes all files referenced in `chat_messages` from disk.
+2. Clears in-memory buffer.
+3. Deletes all rows from `chat_messages` and `chat_reactions`.
 
 ### Tauri Events Emitted
 
@@ -377,6 +396,7 @@ pub struct ChatReactionResult {
 | `chat_reaction` | `{ message_id, emoji, sender_id, reaction }` | reaction toggled on a message |
 | `chat_typing` | `{ sender_id, sender_name, is_typing }` | typing status changed |
 | `chat_deleted` | `{ message_id }` | message deleted by operator |
+| `chat_read` | `{ device_id, last_read_id }` | device read messages up to this id |
 | `chat_config_changed` | `ChatConfig` | global config changed via `set_chat_config` |
 
 ---
@@ -408,15 +428,28 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     created_at  INTEGER NOT NULL,
     file_name   TEXT,
     file_path   TEXT,
-    file_size   INTEGER
+    file_size   INTEGER,
+    reply_to_id INTEGER
+);
+```
+
+### `chat_reactions` table
+
+```sql
+CREATE TABLE IF NOT EXISTS chat_reactions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL,
+    emoji      TEXT NOT NULL,
+    sender_id  TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(message_id, emoji, sender_id)
 );
 ```
 
 - Created via `ensure_tables()` during `initialize_chat_state()`.
 - Write-through on every message commit when `persist_enabled` is `true`.
-- When `persist_enabled` is `false`, messages are still written to SQLite during the session but `clear_today()` deletes the current day's rows on restart.
-- `get_chat_messages` reads the in-memory buffer; may page older rows from SQLite.
-- History survives restarts only when persistence is on.
+- When `persist_enabled` is `false`, **all** rows are deleted from `chat_messages` and `chat_reactions` on restart.
+- `get_chat_messages` reads the in-memory buffer (capped by `history_limit`).
 
 ---
 
@@ -431,7 +464,7 @@ pub struct DevicePermissions {
     pub bible:     bool,
     pub media:     bool,
     pub streaming: bool,
-    pub chat:      bool,   // NEW
+    pub chat:      bool,
 }
 ```
 
@@ -443,106 +476,33 @@ ALTER TABLE devices ADD COLUMN permissions_chat INTEGER NOT NULL DEFAULT 0;
 
 Applied in `ensure_devices_schema()` with the same pattern used for `permissions_streaming` (PRAGMA `table_info` check + `ALTER TABLE ADD COLUMN`), so existing databases upgrade in place.
 
-**Default `0` (off):** the operator must explicitly allow chat per device. This matches the default for `streaming` and keeps chat private by default.
-
-### `is_permission_allowed`
-
-```rust
-"chat" => permissions.chat,
-```
+**Default `0` (off):** the operator must explicitly allow chat per device.
 
 ---
 
-## Frontend — Data Contract Only (UI Deferred)
+## Error Responses
 
-The UI is out of scope for now. The data contract that a future panel will consume:
+All chat errors are delivered as `{ "event": "chat_error", "reason": "..." }`.
 
-### `src/services/chat-service.ts`
-
-```typescript
-import { invoke } from "@tauri-apps/api/core";
-
-export interface ChatFile {
-  file_name: string;
-  file_path: string;
-  file_size: number;
-}
-
-export interface ChatMessage {
-  id: number;
-  sender_id: string;
-  sender_type: "device" | "operator";
-  sender_name: string;
-  text: string;
-  ts: number;
-  file: ChatFile | null;
-}
-
-export interface ChatConfig {
-  enabled: boolean;
-  persist_enabled: boolean;
-  history_limit: number;
-}
-
-export const chatService = {
-  sendMessage:  (text: string)                  => invoke("send_chat_message", { text }),
-  sendFile:     (filePath: string, text?: string) => invoke("send_chat_file", { filePath, text: text ?? null }),
-  getMessages:  (limit?: number)                => invoke<ChatMessage[]>("get_chat_messages", { limit: limit ?? null }),
-  getConfig:    ()                              => invoke<ChatConfig>("get_chat_config"),
-  setConfig:    (config: Partial<ChatConfig>)   => invoke("set_chat_config", { config }),
-  clearHistory: ()                              => invoke("clear_chat_history"),
-};
-```
-
-### `src/stores/chat-store.ts`
-
-```typescript
-import { create } from "zustand";
-import { chatService, ChatMessage, ChatConfig } from "@/services/chat-service";
-import { listen } from "@tauri-apps/api/event";
-
-interface ChatStore {
-  messages: ChatMessage[];
-  config: ChatConfig;
-  init: () => Promise<void>;
-  send: (text: string) => Promise<void>;
-  sendFile: (filePath: string, text?: string) => Promise<void>;
-  setEnabled: (enabled: boolean) => Promise<void>;
-  setPersist: (persist: boolean) => Promise<void>;
-  clearHistory: () => Promise<void>;
-}
-
-// init():
-//   const [messages, config] = await Promise.all([
-//     chatService.getMessages(200),
-//     chatService.getConfig(),
-//   ]);
-//   set({ messages, config });
-//   listen<ChatMessage>("chat_message", ({ payload }) =>
-//     set((s) => ({ messages: [...s.messages, payload].slice(-s.config.history_limit) })));
-```
-
----
-
-## Existing Files — Modified
-
-| File | Change |
+| Reason | When |
 |---|---|
-| `src-tauri/src/chat/mod.rs` | NEW — `ChatState`, `ChatStateInner`, Tauri commands, initialization |
-| `src-tauri/src/chat/store.rs` | NEW — `ChatConfig`, `ChatMessage`, `ChatFile`, `ChatStore`, SQLite tables, broadcast, validation |
-| `src-tauri/src/websocket.rs` | Route `chat_send`, `chat_file_send`, `chat_history` after auth + permission check |
-| `src-tauri/src/devices.rs` | + `chat` in `DevicePermissions`; `permissions_chat` column migration; `map_event_permission`; `is_permission_allowed` |
-| `src-tauri/src/main.rs` | Initialize `ChatState`; register `send_chat_message`, `send_chat_file`, `get_chat_messages`, `get_chat_config`, `set_chat_config`, `clear_chat_history` |
-| `src/services/chat-service.ts` | NEW — invoke wrapper (deferred) |
-| `src/stores/chat-store.ts` | NEW — zustand store + `chat_message` listener (deferred) |
+| `disabled` | `ChatConfig.enabled = false` |
+| `empty_message` | `chat_send` with empty/whitespace-only text |
+| `message_too_long` | Text exceeds 4000 bytes |
+| `file_too_large` | File exceeds 25 MB |
+| `invalid_file` | Base64 decode failed |
+| `file_save_error` | Disk I/O error (message masked, no path leaked) |
+| `blocked_file_type` | Extension in `BLOCKED_EXTENSIONS` |
+| `no_permission` | Device lacks `permissions_chat` |
+| `missing_message_id` | `chat_reaction` without `message_id` |
+| `missing_emoji` | `chat_reaction` without `emoji` |
+| `message_not_found` | Reaction on nonexistent/deleted message |
 
 ---
 
 ## Deferred / Out of Scope
 
-- **UI** (panel, input, device management toggle) — data contract is ready, visual design deferred.
-- **Song suggestions** — frontend-only concern; operator sends markdown with a link/text, device renders as clickable card. No server-side API needed.
-- **System notifications** — explicitly rejected: operators already see playback/queue state elsewhere in the app, so `playback-started` / `queue-item-added` do not emit chat messages.
-- **Typing indicators** — no `chat_typing` event yet; can be added later without breaking the model.
-- **Moderation** (mute/kick/delete) — the per-device `permissions_chat` flag is the only control for now.
+- **Song suggestions** — frontend-only concern; operator sends markdown with a link/text, device renders as clickable card.
+- **System notifications** — explicitly rejected: operators already see playback/queue state elsewhere in the app.
+- **Moderation** (mute/kick) — the per-device `permissions_chat` flag is the only control for now.
 - **Multiple rooms / channels** — single private room only.

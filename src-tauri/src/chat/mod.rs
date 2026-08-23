@@ -1,3 +1,4 @@
+pub mod file_server;
 pub mod store;
 
 use std::path::PathBuf;
@@ -19,6 +20,7 @@ pub struct ChatState {
 pub struct ChatStateInner {
     pub config: ChatConfig,
     pub store: ChatStore,
+    pub file_server_port: u16,
     db_path: PathBuf,
 }
 
@@ -68,14 +70,19 @@ pub fn initialize_chat_state() -> Result<ChatState, String> {
         config.history_limit,
         config.persist_enabled,
         db_path.clone(),
-        files_dir,
+        files_dir.clone(),
     );
     chat_store.load_from_disk()?;
+
+    let mut file_server = file_server::ChatFileServer::new(files_dir);
+    tauri::async_runtime::block_on(file_server.start())?;
+    let file_server_port = file_server.port();
 
     Ok(ChatState {
         inner: Arc::new(Mutex::new(ChatStateInner {
             config,
             store: chat_store,
+            file_server_port,
             db_path,
         })),
     })
@@ -120,10 +127,11 @@ pub async fn send_chat_message(
     };
 
     let committed = inner.store.push(msg);
+    let port = inner.file_server_port;
 
     drop(inner);
 
-    store::broadcast_chat_message(&device_state, &committed)?;
+    store::broadcast_chat_message(&device_state, &committed, port)?;
 
     let _ = app.emit("chat_message", &committed);
 
@@ -145,7 +153,7 @@ pub async fn send_chat_file(
         return Err("chat_disabled".to_string());
     }
 
-    let data = std::fs::read(&file_path).map_err(|e| format!("read_file:{}", e))?;
+    let data = std::fs::read(&file_path).map_err(|_| "read_file_error".to_string())?;
 
     let file_name = std::path::Path::new(&file_path)
         .file_name()
@@ -178,10 +186,11 @@ pub async fn send_chat_file(
     };
 
     let committed = inner.store.push(msg);
+    let port = inner.file_server_port;
 
     drop(inner);
 
-    store::broadcast_chat_message(&device_state, &committed)?;
+    store::broadcast_chat_message(&device_state, &committed, port)?;
 
     let _ = app.emit("chat_message", &committed);
 

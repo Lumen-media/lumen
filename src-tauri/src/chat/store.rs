@@ -71,6 +71,11 @@ impl Default for ChatConfig {
 pub const MAX_MESSAGE_LENGTH: usize = 4000;
 pub const MAX_FILE_SIZE: u64 = 25 * 1024 * 1024; // 25 MB
 
+const BLOCKED_EXTENSIONS: &[&str] = &[
+    "exe", "bat", "cmd", "com", "msi", "scr", "pif", "ps1", "psm1", "vbs", "vbe",
+    "js", "jse", "wsf", "wsh", "hta", "cpl", "lnk", "inf", "reg", "rgs",
+];
+
 fn open_db(db_path: &PathBuf) -> Result<Connection, String> {
     Connection::open(db_path).map_err(|e| e.to_string())
 }
@@ -455,12 +460,18 @@ impl ChatStore {
             return Err("file_too_large".to_string());
         }
 
-        std::fs::create_dir_all(&self.files_dir).map_err(|e| e.to_string())?;
-
         let ext = std::path::Path::new(file_name)
             .extension()
             .and_then(|e| e.to_str())
-            .unwrap_or("");
+            .unwrap_or("")
+            .to_lowercase();
+        if BLOCKED_EXTENSIONS.contains(&ext.as_str()) {
+            return Err("blocked_file_type".to_string());
+        }
+
+        std::fs::create_dir_all(&self.files_dir)
+            .map_err(|_| "file_save_error".to_string())?;
+
         let stored_name = if ext.is_empty() {
             Uuid::new_v4().to_string()
         } else {
@@ -468,7 +479,8 @@ impl ChatStore {
         };
 
         let dest = self.files_dir.join(&stored_name);
-        std::fs::write(&dest, data).map_err(|e| e.to_string())?;
+        std::fs::write(&dest, data)
+            .map_err(|_| "file_save_error".to_string())?;
 
         Ok(ChatFile {
             file_name: file_name.to_string(),
@@ -558,10 +570,36 @@ fn load_reactions_for_message(conn: &Connection, message_id: u64) -> Result<Vec<
 pub fn broadcast_chat_message(
     state: &DeviceState,
     message: &ChatMessage,
+    file_server_port: u16,
 ) -> Result<(), String> {
+    let file_url = message.file.as_ref().map(|f| {
+        let filename = std::path::Path::new(&f.file_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        format!("http://127.0.0.1:{}/files/{}", file_server_port, filename)
+    });
+
     let payload = serde_json::to_string(&json!({
         "event": "chat_message",
-        "message": message,
+        "message": {
+            "id": message.id,
+            "sender_id": message.sender_id,
+            "sender_type": message.sender_type,
+            "sender_name": message.sender_name,
+            "text": message.text,
+            "ts": message.ts,
+            "file": message.file.as_ref().map(|f| {
+                json!({
+                    "file_name": f.file_name,
+                    "file_path": f.file_path,
+                    "file_size": f.file_size,
+                    "file_url": file_url,
+                })
+            }),
+            "reactions": message.reactions,
+            "reply_to": message.reply_to,
+        }
     }))
     .map(Message::Text)
     .map_err(|e| e.to_string())?;
