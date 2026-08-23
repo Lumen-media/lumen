@@ -818,6 +818,16 @@ async fn handle_chat_event(
                     .unwrap_or_else(|| device_id.to_string())
             };
 
+            let reply_to_id = value.get("reply_to_id").and_then(Value::as_u64);
+            let reply_to = reply_to_id.and_then(|rid| {
+                inner.store.find_message(rid).map(|m| store::ReplyRef {
+                    id: m.id,
+                    sender_name: m.sender_name.clone(),
+                    text: m.text.clone(),
+                    file: m.file.clone(),
+                })
+            });
+
             let msg = ChatMessage {
                 id: 0,
                 sender_id: device_id.to_string(),
@@ -827,15 +837,16 @@ async fn handle_chat_event(
                 ts: crate::devices::now_ts(),
                 file: None,
                 reactions: Vec::new(),
-                reply_to: None,
-                reply_to_id: None,
+                reply_to,
+                reply_to_id,
             };
 
             let committed = inner.store.push(msg);
+            let port = inner.file_server_port;
 
             drop(inner);
 
-            store::broadcast_chat_message(&device_state, &committed)?;
+            store::broadcast_chat_message(&device_state, &committed, port)?;
 
             let _ = app.emit("chat_message", committed);
 
@@ -861,6 +872,12 @@ async fn handle_chat_event(
                 .get("data")
                 .and_then(Value::as_str)
                 .unwrap_or("");
+
+            let approx_decoded = (base64_data.len() * 3) / 4;
+            if approx_decoded as u64 > store::MAX_FILE_SIZE {
+                let _ = store::send_chat_error(sender, "file_too_large");
+                return Ok(true);
+            }
 
             let file_data = match decode_base64(base64_data) {
                 Ok(d) => d,
@@ -900,6 +917,16 @@ async fn handle_chat_event(
                     .unwrap_or_else(|| device_id.to_string())
             };
 
+            let reply_to_id = value.get("reply_to_id").and_then(Value::as_u64);
+            let reply_to = reply_to_id.and_then(|rid| {
+                inner.store.find_message(rid).map(|m| store::ReplyRef {
+                    id: m.id,
+                    sender_name: m.sender_name.clone(),
+                    text: m.text.clone(),
+                    file: m.file.clone(),
+                })
+            });
+
             let msg = ChatMessage {
                 id: 0,
                 sender_id: device_id.to_string(),
@@ -909,15 +936,16 @@ async fn handle_chat_event(
                 ts: crate::devices::now_ts(),
                 file: Some(chat_file),
                 reactions: Vec::new(),
-                reply_to: None,
-                reply_to_id: None,
+                reply_to,
+                reply_to_id,
             };
 
             let committed = inner.store.push(msg);
+            let port = inner.file_server_port;
 
             drop(inner);
 
-            store::broadcast_chat_message(&device_state, &committed)?;
+            store::broadcast_chat_message(&device_state, &committed, port)?;
 
             let _ = app.emit("chat_message", committed);
 
@@ -1023,6 +1051,19 @@ async fn handle_chat_event(
                 "sender_id": device_id,
                 "sender_name": device_name,
                 "is_typing": is_typing,
+            }));
+
+            Ok(true)
+        }
+        "chat_read" => {
+            let last_read_id = value
+                .get("last_read_id")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+
+            let _ = app.emit("chat_read", serde_json::json!({
+                "device_id": device_id,
+                "last_read_id": last_read_id,
             }));
 
             Ok(true)
