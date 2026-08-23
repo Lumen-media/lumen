@@ -51,11 +51,17 @@ pub struct ChatMessage {
     pub reply_to_id: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChatConfig {
     pub enabled: bool,
     pub persist_enabled: bool,
     pub history_limit: u32,
+    #[serde(default = "default_notification_mode")]
+    pub notification_mode: String,
+}
+
+fn default_notification_mode() -> String {
+    "toast".to_string()
 }
 
 impl Default for ChatConfig {
@@ -64,6 +70,7 @@ impl Default for ChatConfig {
             enabled: true,
             persist_enabled: false,
             history_limit: 200,
+            notification_mode: "toast".to_string(),
         }
     }
 }
@@ -75,10 +82,6 @@ const BLOCKED_EXTENSIONS: &[&str] = &[
     "exe", "bat", "cmd", "com", "msi", "scr", "pif", "ps1", "psm1", "vbs", "vbe",
     "js", "jse", "wsf", "wsh", "hta", "cpl", "lnk", "inf", "reg", "rgs",
 ];
-
-fn open_db(db_path: &PathBuf) -> Result<Connection, String> {
-    Connection::open(db_path).map_err(|e| e.to_string())
-}
 
 pub fn ensure_tables(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
@@ -145,6 +148,9 @@ pub fn load_config(conn: &Connection) -> Result<ChatConfig, String> {
             "history_limit" => {
                 config.history_limit = value.parse().unwrap_or(200);
             }
+            "notification_mode" => {
+                config.notification_mode = value.clone();
+            }
             _ => {}
         }
     }
@@ -159,6 +165,7 @@ pub fn save_config(conn: &Connection, config: &ChatConfig) -> Result<(), String>
             "persist_enabled",
             if config.persist_enabled { "1" } else { "0" },
         ),
+        ("notification_mode", &config.notification_mode),
     ];
 
     for (key, value) in &entries {
@@ -183,7 +190,7 @@ pub struct ChatStore {
     next_id: u64,
     history_limit: usize,
     persist_enabled: bool,
-    db_path: PathBuf,
+    conn: Connection,
     files_dir: PathBuf,
 }
 
@@ -194,43 +201,42 @@ impl ChatStore {
         db_path: PathBuf,
         files_dir: PathBuf,
     ) -> Self {
+        let conn = Connection::open(&db_path).expect("failed to open chat db");
         Self {
             messages: VecDeque::new(),
             next_id: 1,
             history_limit: history_limit as usize,
             persist_enabled,
-            db_path,
+            conn,
             files_dir,
         }
     }
 
     pub fn set_persist_enabled(&mut self, enabled: bool) {
         if enabled && !self.persist_enabled {
-            if let Ok(conn) = open_db(&self.db_path) {
-                let max_db_id: u64 = conn
-                    .query_row(
-                        "SELECT COALESCE(MAX(id), 0) FROM chat_messages",
-                        [],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(0);
-                if self.next_id <= max_db_id {
-                    self.next_id = max_db_id + 1;
-                }
-                let _ = conn.execute(
-                    "DELETE FROM sqlite_sequence WHERE name = 'chat_messages'",
+            let max_db_id: u64 = self.conn
+                .query_row(
+                    "SELECT COALESCE(MAX(id), 0) FROM chat_messages",
                     [],
-                );
-                let _ = conn.execute(
-                    "INSERT INTO chat_messages (id, sender_id, sender_type, sender_name, text, created_at)
-                     VALUES (?1, '_seq_rebase', '_', '_', '', 0)",
-                    params![self.next_id],
-                );
-                let _ = conn.execute(
-                    "DELETE FROM chat_messages WHERE sender_id = '_seq_rebase'",
-                    [],
-                );
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            if self.next_id <= max_db_id {
+                self.next_id = max_db_id + 1;
             }
+            let _ = self.conn.execute(
+                "DELETE FROM sqlite_sequence WHERE name = 'chat_messages'",
+                [],
+            );
+            let _ = self.conn.execute(
+                "INSERT INTO chat_messages (id, sender_id, sender_type, sender_name, text, created_at)
+                 VALUES (?1, '_seq_rebase', '_', '_', '', 0)",
+                params![self.next_id],
+            );
+            let _ = self.conn.execute(
+                "DELETE FROM chat_messages WHERE sender_id = '_seq_rebase'",
+                [],
+            );
         }
         self.persist_enabled = enabled;
     }
@@ -244,7 +250,7 @@ impl ChatStore {
 
     pub fn load_from_disk(&mut self) -> Result<(), String> {
         if !self.persist_enabled {
-            let conn = open_db(&self.db_path)?;
+            let conn = &self.conn;
             conn.execute("DELETE FROM chat_reactions", [])
                 .map_err(|e| e.to_string())?;
             conn.execute("DELETE FROM chat_messages", [])
@@ -252,7 +258,7 @@ impl ChatStore {
             return Ok(());
         }
 
-        let conn = open_db(&self.db_path)?;
+        let conn = &self.conn;
         let mut statement = conn
             .prepare(
                 "SELECT id, sender_id, sender_type, sender_name, text, created_at,
@@ -296,10 +302,19 @@ impl ChatStore {
             .map_err(|e| e.to_string())?;
 
         let mut loaded: VecDeque<ChatMessage> = VecDeque::new();
+        let mut msg_ids: Vec<u64> = Vec::new();
         for row in rows {
-            let mut msg = row.map_err(|e| e.to_string())?;
-            msg.reactions = load_reactions_for_message(&conn, msg.id)?;
+            let msg = row.map_err(|e| e.to_string())?;
+            msg_ids.push(msg.id);
+            loaded.push_back(msg);
+        }
 
+        let mut all_reactions = load_reactions_batch(&conn, &msg_ids)?;
+        for msg in loaded.iter_mut() {
+            msg.reactions = all_reactions.remove(&msg.id).unwrap_or_default();
+        }
+
+        for msg in loaded.iter_mut() {
             if let Some(rid) = msg.reply_to_id {
                 if let Ok(replied) = conn.query_row(
                     "SELECT sender_name, text, file_name, file_path, file_size FROM chat_messages WHERE id = ?1",
@@ -321,8 +336,6 @@ impl ChatStore {
                     msg.reply_to = Some(replied);
                 }
             }
-
-            loaded.push_front(msg);
         }
 
         if let Some(max) = loaded.iter().map(|m| m.id).max() {
@@ -336,7 +349,7 @@ impl ChatStore {
     pub fn clear_history(&mut self) -> Result<(), String> {
         self.messages.clear();
 
-        let conn = open_db(&self.db_path)?;
+        let conn = &self.conn;
 
         let files: Vec<String> = conn
             .prepare("SELECT file_path FROM chat_messages WHERE file_path IS NOT NULL")
@@ -365,7 +378,7 @@ impl ChatStore {
 
         self.messages.retain(|m| m.id != message_id);
 
-        let conn = open_db(&self.db_path)?;
+        let conn = &self.conn;
         conn.execute(
             "DELETE FROM chat_reactions WHERE message_id = ?1",
             params![message_id],
@@ -381,13 +394,15 @@ impl ChatStore {
     }
 
     pub fn clear_today(&self) -> Result<(), String> {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let today_start = now - (now % 86400);
+        use chrono::{Local, NaiveTime};
+        let today_start = Local::now()
+            .date_naive()
+            .and_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap())
+            .and_local_timezone(Local)
+            .unwrap()
+            .timestamp() as u64;
 
-        let conn = open_db(&self.db_path)?;
+        let conn = &self.conn;
         conn.execute(
             "DELETE FROM chat_reactions WHERE message_id IN (SELECT id FROM chat_messages WHERE created_at >= ?1)",
             params![today_start],
@@ -433,7 +448,7 @@ impl ChatStore {
     }
 
     fn persist_message(&self, msg: &ChatMessage) -> Result<(), String> {
-        let conn = open_db(&self.db_path)?;
+        let conn = &self.conn;
         conn.execute(
             "INSERT INTO chat_messages
              (id, sender_id, sender_type, sender_name, text, created_at, file_name, file_path, file_size, reply_to_id)
@@ -500,7 +515,7 @@ impl ChatStore {
             return Err("message_not_found".to_string());
         }
 
-        let conn = open_db(&self.db_path)?;
+        let conn = &self.conn;
 
         let existing = conn
             .query_row(
@@ -545,26 +560,44 @@ impl ChatStore {
     }
 }
 
-fn load_reactions_for_message(conn: &Connection, message_id: u64) -> Result<Vec<Reaction>, String> {
-    let mut stmt = conn
-        .prepare("SELECT emoji, sender_id, created_at FROM chat_reactions WHERE message_id = ?1")
-        .map_err(|e| e.to_string())?;
+fn load_reactions_batch(conn: &Connection, message_ids: &[u64]) -> Result<std::collections::HashMap<u64, Vec<Reaction>>, String> {
+    if message_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    let placeholders: Vec<String> = message_ids.iter().map(|_| "?".to_string()).collect();
+    let sql = format!(
+        "SELECT message_id, emoji, sender_id, created_at FROM chat_reactions WHERE message_id IN ({})",
+        placeholders.join(",")
+    );
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+
+    let params: Vec<Box<dyn rusqlite::types::ToSql>> = message_ids
+        .iter()
+        .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
+        .collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
     let rows = stmt
-        .query_map(params![message_id], |row| {
-            Ok(Reaction {
-                emoji: row.get(0)?,
-                sender_id: row.get(1)?,
-                ts: row.get::<_, u64>(2)?,
-            })
+        .query_map(param_refs.as_slice(), |row| {
+            Ok((
+                row.get::<_, u64>(0)?,
+                Reaction {
+                    emoji: row.get(1)?,
+                    sender_id: row.get(2)?,
+                    ts: row.get::<_, u64>(3)?,
+                },
+            ))
         })
         .map_err(|e| e.to_string())?;
 
-    let mut reactions = Vec::new();
+    let mut map = std::collections::HashMap::new();
     for row in rows {
-        reactions.push(row.map_err(|e| e.to_string())?);
+        let (msg_id, reaction) = row.map_err(|e| e.to_string())?;
+        map.entry(msg_id).or_insert_with(Vec::new).push(reaction);
     }
-    Ok(reactions)
+    Ok(map)
 }
 
 pub fn broadcast_chat_message(
@@ -600,6 +633,30 @@ pub fn broadcast_chat_message(
             "reactions": message.reactions,
             "reply_to": message.reply_to,
         }
+    }))
+    .map(Message::Text)
+    .map_err(|e| e.to_string())?;
+
+    let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+    for session in sessions.values() {
+        if !is_permission_allowed(&session.permissions, "chat") {
+            continue;
+        }
+        if let Some(sender) = &session.sender {
+            let _ = sender.send(payload.clone());
+        }
+    }
+
+    Ok(())
+}
+
+pub fn broadcast_chat_config(
+    state: &DeviceState,
+    config: &ChatConfig,
+) -> Result<(), String> {
+    let payload = serde_json::to_string(&json!({
+        "event": "chat_config_changed",
+        "enabled": config.enabled,
     }))
     .map(Message::Text)
     .map_err(|e| e.to_string())?;

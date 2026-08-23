@@ -129,9 +129,9 @@ pub async fn send_chat_message(
     let committed = inner.store.push(msg);
     let port = inner.file_server_port;
 
-    drop(inner);
-
     store::broadcast_chat_message(&device_state, &committed, port)?;
+
+    drop(inner);
 
     let _ = app.emit("chat_message", &committed);
 
@@ -188,9 +188,9 @@ pub async fn send_chat_file(
     let committed = inner.store.push(msg);
     let port = inner.file_server_port;
 
-    drop(inner);
-
     store::broadcast_chat_message(&device_state, &committed, port)?;
+
+    drop(inner);
 
     let _ = app.emit("chat_message", &committed);
 
@@ -216,9 +216,12 @@ pub async fn get_chat_config(chat: State<'_, ChatState>) -> Result<ChatConfig, S
 pub async fn set_chat_config(
     app: AppHandle,
     chat: State<'_, ChatState>,
+    device_state: State<'_, DeviceState>,
     config: ChatConfig,
 ) -> Result<(), String> {
     let mut inner = chat.inner.lock().await;
+
+    let enabled_changed = inner.config.enabled != config.enabled;
 
     if inner.config.persist_enabled != config.persist_enabled {
         inner.store.set_persist_enabled(config.persist_enabled);
@@ -232,6 +235,10 @@ pub async fn set_chat_config(
 
     let conn = rusqlite::Connection::open(&inner.db_path).map_err(|e| e.to_string())?;
     store::save_config(&conn, &config)?;
+
+    if enabled_changed {
+        store::broadcast_chat_config(&device_state, &config)?;
+    }
 
     let _ = app.emit("chat_config_changed", config);
 
