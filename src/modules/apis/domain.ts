@@ -722,14 +722,12 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
         const profile = state.profiles.find((p) => p.id === state.activeProfileId);
         const bg = profile?.defaultBackground ?? null;
         const src = bg?.src ?? null;
-        console.log('[host] onDefaultBackgroundChange subscribe fired, src:', src, 'lastSrc:', lastSrc);
         if (src === lastSrc) return;
         lastSrc = src;
         fire(bg);
       });
 
       const { profiles, activeProfileId } = useProfileStore.getState();
-      console.log('[host] onDefaultBackgroundChange init check, profiles:', profiles.length, 'activeProfileId:', activeProfileId);
       const profile = profiles.find((p) => p.id === activeProfileId);
       const current = profile?.defaultBackground ?? null;
       if (current?.src) {

@@ -15,11 +15,7 @@ export function useSingleInstance(enabled = true) {
     const setupListener = async () => {
       try {
         unlisten = await listen("single-instance", (event: SingleInstanceEvent) => {
-          console.log("Single instance event received:", event.payload);
-
           if (event.payload && event.payload.length > 0) {
-            console.log("Arguments from second instance:", event.payload);
-
             const filePaths = event.payload.filter(arg => 
               arg.includes('/') || arg.includes('\\') || arg.includes('.')
             );
