@@ -120,7 +120,6 @@ class QueueDbService {
        VALUES ($1, $2, $3, 0, 0, '', 0, $4, $5, $6, 'downloaded')`,
       [position, filePath, triggerId, title, tag, configJson]
     );
-    console.log('[db] addTriggerEntry inserted id=', result.lastInsertId);
     return result.lastInsertId!;
   }
 
