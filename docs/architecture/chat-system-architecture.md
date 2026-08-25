@@ -506,3 +506,122 @@ All chat errors are delivered as `{ "event": "chat_error", "reason": "..." }`.
 - **System notifications** — explicitly rejected: operators already see playback/queue state elsewhere in the app.
 - **Moderation** (mute/kick) — the per-device `permissions_chat` flag is the only control for now.
 - **Multiple rooms / channels** — single private room only.
+
+---
+
+## Frontend Architecture
+
+### Component Tree
+
+```
+AsidePanel (aside-panel.tsx)
+├── Tabs (queue | notes | themes | chat)
+│   └── TabsContent value="chat"
+│       └── ChatTab (chat-panel.tsx)
+│           ├── ChatFileDialog (modal for YouTube links, images, PPTs)
+│           ├── ScrollArea + useVirtualizer (TanStack Virtual)
+│           │   └── MemoizedMessageBubble[] (virtualized)
+│           │       ├── ContextMenu (copy text, copy link, reply, delete)
+│           │       ├── Reply ghost (click → scroll to message)
+│           │       ├── FilePreview (image, PDF, PPT thumbnails)
+│           │       ├── Text (renderMarkdown)
+│           │       └── Reactions + timestamp + read indicator
+│           └── TextEditor (TipTap) + send/attach buttons
+```
+
+### Tab Chameleon
+
+The aside has a dynamic third tab slot (`getChameleonTab` in `aside-panel.tsx`). When `activeTab === 'chat'`, the slot shows **Chat** (selected). Otherwise it shows **Themes**. The chat tab only mounts when `activeTab === 'chat'` (Radix unmounts inactive `TabsContent`). Entry via the header chat button (`openChat` in `app-header.tsx`) — `Ctrl+Shift+C`.
+
+### Zustand Store (`chat-store.ts`)
+
+Single `useChatStore` with the following shape:
+
+```typescript
+interface ChatStore {
+  messages: ChatMessage[];
+  config: ChatConfig;
+  typingUsers: Record<string, { name: string; isTyping: boolean }>;
+  unread: number;
+  notificationMode: 'toast' | 'in-app' | 'system';
+
+  init(): Promise<void>;
+  sendMessage(text: string, replyToId?: number): Promise<void>;
+  sendFile(filePath: string, text?: string, replyToId?: number): Promise<void>;
+  sendReaction(messageId: number, emoji: string): Promise<void>;
+  sendTyping(isTyping: boolean): Promise<void>;
+  deleteMessage(messageId: number): Promise<void>;
+  markRead(): void;
+  toggleEnabled(): void;
+  setPersistEnabled(v: boolean): Promise<void>;
+  setHistoryLimit(limit: number): Promise<void>;
+  setNotificationMode(mode: string): void;
+}
+```
+
+**Initialization (`init`):** loads `chat_history` from Rust backend, then sets up Tauri event listeners: `chat_message`, `chat_reaction`, `chat_config_changed`, `chat_deleted`, `chat_read`, `chat_typing`. Each listener updates the store via `set()`.
+
+**Listeners:**
+- `chat_message`: deduplicates by `id` (ignores if already present), appends to array, caps at `messageIndex` (500), increments unread if not on chat tab.
+- `chat_reaction`: finds message by `id`, applies/removes reaction via `applyReaction` helper.
+- `chat_config_changed`: replaces config state.
+- `chat_deleted`: removes message by `id`.
+- `chat_read`: marks operator messages with `id ≤ last_read_id` as read (bails out early if no unread changes).
+- `chat_typing`: debounced per-device typing status (auto-clears after 3s).
+
+**Retry queue:** failed `sendMessage` calls are queued and retried with exponential backoff (max 3 retries, 2s interval).
+
+**Notification mode:** controls how new message notifications appear.
+
+### ChatTab (`chat-panel.tsx`)
+
+**Virtualization:** uses `@tanstack/react-virtual` with `overscan: 5`. Elements are measured via `measureElement` on mount. Auto-scrolls to bottom on new messages (gated by `isNearBottomRef` with 300px threshold — respects scroll-up state).
+
+**Scroll behavior:** first scroll after opening is `'auto'` (instant), subsequent scrolls are `'smooth'`. Scroll listener uses `requestAnimationFrame` throttling to track `isNearBottomRef`.
+
+**State management:** uses individual zustand selectors (`useChatStore((s) => s.messages)`) to minimize re-renders. Callbacks wrapped in `useCallback` with stable dependencies.
+
+**Memoization strategy:**
+- `React.memo` on `MessageBubble` with custom comparator (id, text, read, showHeader, reactions, file_path, onScrollToMessage).
+- `markdownCache` (Map): caches rendered markdown nodes per text content (max 1000 entries, FIFO eviction).
+- `senderColorCache`, `formatTimeCache`: Map caches for expensive formatting.
+- `groupReactionsCache` (WeakMap): caches reaction groupings by reactions array reference.
+- `pptThumbnailCache` (Map): caches PPT thumbnail data URLs by file path (prevents re-rendering PPT for each view).
+
+### MessageBubble
+
+Props: `message`, `showHeader`, `onReply`, `onLinkClick`, `onPresentableClick`, `onScrollToMessage`.
+
+- **Reply ghost:** clicking the quoted reply scrolls the virtualizer to the original message (`handleScrollToMessage` → `virtualizer.scrollToIndex`).
+- **Animations:** entry animation via `anime.js` (opacity 0→1, translateY 12→0, 260ms). Exit animation on delete (fade + height collapse). Guarded by module-level `seenMessageIds` Set to prevent replay on virtualizer remount.
+- **Context menu:** Copy text, Copy link (when right-clicking a link), Reply, Delete.
+- **Link handling:** YouTube links (`parseYouTubeUrl`) open `ChatFileDialog` with preview. Other links open in new tab.
+
+### ChatFileDialog
+
+Handles three target types via discriminated union:
+- `{ type: 'youtube'; url }` — fetches oEmbed metadata (title, artist, thumb), looks up duration from media DB. Buttons: Play Now (loadFile), Add to Queue.
+- `{ type: 'file'; file_name; file_path }` — generates thumbnail via `thumbnailService` (images) or `getPptThumbnail` (PPT). Button: Present (loadFile with auto-detect).
+
+**PPT thumbnail generation:** `getPptThumbnail` reads file bytes → opens hidden PptxViewer → renders slide 0 to 320px → captures as JPEG via `html-to-image` → caches result. Expensive operation, hence the module-level cache.
+
+### Markdown Rendering (`renderMarkdown`)
+
+Parses text for: `**bold**`, `*italic*`, `[text](url)` markdown links. YouTube URLs are detected via `parseYouTubeUrl` and rendered as clickable `<a>` with `onClick` that calls the callback (opens ChatFileDialog). Non-YouTube links render with `target="_blank"`.
+
+**Note:** raw URLs (not in markdown `[text](url)` format) are rendered as plain text — they are not auto-linked.
+
+### Performance Optimization Summary
+
+| Technique | Target | Impact |
+|---|---|---|
+| Individual zustand selectors | ChatTab re-renders | Only re-renders when specific state slices change |
+| `React.memo` with comparator | MessageBubble | Skips render when message unchanged |
+| `markdownCache` (Map, max 1000) | Markdown parsing | Avoids re-parsing same text |
+| `senderColorCache`, `formatTimeCache` | String formatting | O(1) lookup after first computation |
+| `groupReactionsCache` (WeakMap) | Reaction grouping | Reuses result when reactions array unchanged |
+| `pptThumbnailCache` (Map) | PPT thumbnail rendering | Prevents re-opening PptxViewer for same file |
+| `overscan: 5` | Virtualizer items | Fewer heavy components off-screen |
+| Scroll rAF throttling | Scroll listener | Limits scroll handler execution |
+| `chat_read` early bail-out | Store listener | Avoids full message array clone when no change |
+
