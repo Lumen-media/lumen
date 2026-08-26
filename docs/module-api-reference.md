@@ -215,6 +215,23 @@ host.panels.add({
 
 Active surfaces in the current app shell: `dialog`, `surface.window`, `presenter.content`, `presenter.controls.item`, `sidebar.right.tabs`, and `app.header.trailing`.
 
+### Presenter controls opt-in
+
+The presenter controls bar only appears when the module explicitly requests it via `host.presentation.requestPresenterControls()`. If a module projects content without calling this method, the controls bar stays hidden.
+
+```ts
+// Show the presenter controls bar
+host.presentation.requestPresenterControls();
+
+// Set custom slide components rendered in the sequence strip (16:9 aspect ratio)
+host.presentation.controls.slides([
+  SlideComponentA,
+  SlideComponentB,
+]);
+```
+
+Each slide component is rendered inside a `16:9` aspect ratio container in the horizontal thumbnail strip. The controls bar is automatically hidden when the projection is cleared.
+
 ---
 
 ## `host.commands` ✅
@@ -1016,7 +1033,7 @@ Still only wired via bus — read methods return empty/default data.
 |---|---|---|
 | `host.lyrics` | `list()` → `[]`, `get()` → `null`, `currentSlide()` → `null` | `advance()`, `back()` emit on bus |
 | `host.library` | `list()` → `[]`, `get()` → `null` | — |
-| `host.presentation` | `state()` → `'idle'`, `isWindowOpen()` → `false` | `project()`, `clear()` emit on bus |
+| `host.presentation` | `state()` → `'idle'`, `isWindowOpen()` → `false` | `project()`, `clear()`, `requestPresenterControls()`, `controls.slides()` |
 
 ---
 

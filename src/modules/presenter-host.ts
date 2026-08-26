@@ -137,6 +137,10 @@ export async function createPresenterHost(
               emit('module:surface-presenter-project', { viewId, props }).catch(() => {});
             }
           : noop,
+      requestPresenterControls: noop,
+      controls: {
+        slides: noop,
+      },
       clear:
         window === 'surface'
           ? () => {
