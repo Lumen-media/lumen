@@ -93,7 +93,6 @@ async function playAudio(source: string, seekTime: number): Promise<void> {
     audioBlobUrl = null;
   }
 
-  // Use convertFileSrc for local files - no need to read into memory
   const assetUrl = convertFileSrc(source);
   audioBlobUrl = assetUrl;
   audio.src = assetUrl;
@@ -565,7 +564,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setIsDragging: (dragging) => set({ isDragging: dragging }),
 
   loadFile: async (filePath: string, seekTime = 0) => {
-    // Check if this is a downloaded YouTube URL - use local file instead
     let source = normalizeMediaSource(filePath);
     if (urlMediaService.parseYouTubeUrl(source)) {
       try {
@@ -578,7 +576,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           source = fileInfo.path;
         }
       } catch {
-        // Fall through to streaming
       }
     }
 
