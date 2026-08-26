@@ -2,6 +2,7 @@
 
 mod chat;
 mod devices;
+mod download;
 mod module_runtime;
 mod presentation;
 mod streaming;
@@ -435,6 +436,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             app.manage(streaming_state);
             let chat_state = chat::initialize_chat_state()?;
             app.manage(chat_state.clone());
+            let download_state = download::initialize_download_state(&app.handle())?;
+            app.manage(download_state);
             let app_handle = app.handle();
             let app_handle_clone = app_handle.clone();
             async_runtime::spawn(async move {
@@ -597,6 +600,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             module_runtime::net::module_net_request,
             module_runtime::themes::module_theme_add,
             presentation::extract_presentation_metadata,
+            download::check_dependencies,
+            download::download_dependencies,
+            download::list_dependencies,
+            download::download_video,
+            download::cancel_download,
+            download::get_download_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
