@@ -11,7 +11,6 @@ import type {
   FileInfo,
 } from '@/services/types';
 
-// Raw payloads emitted by Rust (snake_case)
 interface RawDownloadProgress {
   download_id: string;
   progress: number;
@@ -91,7 +90,6 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     const url = file.originalUrl || file.path;
     const provider: DownloadProvider = 'youtube';
 
-    // Mutating ref so listeners can match the correct download_id
     let targetDownloadId = '';
 
     const activeDownload: ActiveDownload = {
@@ -106,7 +104,6 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
       status: 'starting',
     };
 
-    // Set up event listeners BEFORE calling invoke
     const progressUnlisten = await listen<RawDownloadProgress>(
       'video-download-progress',
       (event) => {
@@ -201,7 +198,6 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
 
     const result = await downloadService.downloadVideo(url, provider, quality);
 
-    // Now listeners know which download_id to respond to
     targetDownloadId = result.downloadId;
 
     activeDownload.downloadId = result.downloadId;

@@ -129,9 +129,7 @@ pub async fn start_download(
         return Err("yt-dlp not installed. Run download_dependencies first.".to_string());
     }
 
-    // Determine ffmpeg location - on macOS, use system ffmpeg if available
     let ffmpeg_location = if cfg!(target_os = "macos") {
-        // Try to find ffmpeg in PATH
         if std::process::Command::new("ffmpeg").arg("-version").output().is_ok() {
             String::new() // Let yt-dlp find it in PATH
         } else {
@@ -146,7 +144,6 @@ pub async fn start_download(
     std::fs::create_dir_all(&dl_dir)
         .map_err(|e| format!("Failed to create downloads directory: {}", e))?;
 
-    // Use title as filename with restricted characters for safety
     let output_template = dl_dir.join("%(title)s.%(ext)s").to_string_lossy().to_string();
 
     let mut args = vec![
@@ -164,7 +161,6 @@ pub async fn start_download(
         output_template,
     ];
 
-    // Use cookies.txt from tools dir if present (needed when YouTube blocks the IP)
     let cookies_path = tools_dir.join("cookies.txt");
     if cookies_path.exists() {
         println!("[download] Using cookies file: {}", cookies_path.display());
@@ -172,7 +168,6 @@ pub async fn start_download(
         args.push(cookies_path.to_string_lossy().to_string());
     }
 
-    // Only add --ffmpeg-location if we have a specific path (not empty for macOS PATH)
     if !ffmpeg_location.is_empty() {
         args.push("--ffmpeg-location".to_string());
         args.push(ffmpeg_location.clone());
@@ -237,7 +232,6 @@ pub async fn start_download(
         println!("[download] Download {} added to active_downloads", download_id);
     }
 
-    // Spawn background task to monitor the download
     let app_clone = app.clone();
     let dl_id_clone = download_id.clone();
     let active_clone = active_downloads.clone();
@@ -248,7 +242,6 @@ pub async fn start_download(
 
     tokio::spawn(async move {
         println!("[download] Background task started for {}", dl_id_clone);
-        // Read stdout for progress
         let stdout = {
             let mut downloads = active_clone.lock().await;
             if let Some(dl) = downloads.get_mut(&dl_id_clone) {
@@ -260,7 +253,6 @@ pub async fn start_download(
             }
         };
 
-        // Read stderr for error messages
         let stderr = {
             let mut downloads = active_clone.lock().await;
             if let Some(dl) = downloads.get_mut(&dl_id_clone) {
@@ -272,7 +264,6 @@ pub async fn start_download(
             }
         };
 
-        // Spawn stderr reader
         let stderr_handle = if let Some(stderr) = stderr {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
@@ -288,7 +279,6 @@ pub async fn start_download(
             tokio::spawn(async { Vec::new() })
         };
 
-        // Read stdout for progress
         if let Some(stdout) = stdout {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
@@ -311,7 +301,6 @@ pub async fn start_download(
             }
         }
 
-        // Wait for process to finish
         let status = {
             let mut downloads = active_clone.lock().await;
             if let Some(dl) = downloads.get_mut(&dl_id_clone) {
@@ -325,7 +314,6 @@ pub async fn start_download(
             }
         };
 
-        // Remove from active downloads
         {
             let mut downloads = active_clone.lock().await;
             downloads.remove(&dl_id_clone);
@@ -334,11 +322,9 @@ pub async fn start_download(
         match status {
             Ok(status) if status.success() => {
                 println!("[download] Download {} completed successfully", dl_id_clone);
-                // Find the downloaded file
                 match find_downloaded_file(&dl_dir_clone) {
                     Ok(downloaded_file) => {
                         println!("[download] Found downloaded file: {:?}", downloaded_file);
-                        // Determine media type and destination
                         let media_type = if quality_clone.is_audio_only() {
                             "audio"
                         } else {
@@ -367,10 +353,8 @@ pub async fn start_download(
                                         .map(|m| m.len())
                                         .unwrap_or(0);
 
-                                    // Clean up downloads directory
                                     let _ = std::fs::remove_dir_all(&dl_dir_clone);
 
-                                    // Determine file extension from the destination path
                                     let file_ext = dest_path
                                         .extension()
                                         .map(|e| format!(".{}", e.to_string_lossy()))
@@ -417,7 +401,6 @@ pub async fn start_download(
             }
             Ok(status) => {
                 println!("[download] Download {} failed with status: {}", dl_id_clone, status);
-                // Get stderr output for better error messages
                 let stderr_output = stderr_handle.await.unwrap_or_default();
                 let error_detail = stderr_output.join("\n");
                 println!("[download] stderr output: {}", error_detail);
@@ -463,7 +446,6 @@ pub async fn start_download(
         }
     });
 
-    // Return immediately with the download_id
     println!("[download] Returning download_id: {}", download_id);
     Ok(DownloadResult {
         download_id,
@@ -495,8 +477,6 @@ pub async fn cancel_download(
 }
 
 fn parse_progress(line: &str) -> Option<(f64, String, String)> {
-    // yt-dlp progress format:
-    // [download]  45.2% of  120.50MiB at  5.23MiB/s ETA 00:12
     if !line.contains("[download]") || !line.contains("%") {
         return None;
     }

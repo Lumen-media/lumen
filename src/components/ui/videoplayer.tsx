@@ -196,7 +196,6 @@ export const Videoplayer = ({
           return;
         }
 
-        // Use convertFileSrc for local files - no need to read into memory
         const assetUrl = convertFileSrc(filePath);
         if (loadSeqRef.current !== seq) return;
         currentFilePath.current = filePath;

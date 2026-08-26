@@ -51,7 +51,6 @@ fn match_ytdlp_asset(assets: &[GitHubAsset]) -> Option<&GitHubAsset> {
         _ => None,
     }
     .or_else(|| {
-        // Fallback: try to find any matching binary
         assets.iter().find(|a| {
             a.name.starts_with("yt-dlp")
                 && !a.name.ends_with(".tar.gz")
@@ -65,7 +64,6 @@ fn match_ytdlp_asset(assets: &[GitHubAsset]) -> Option<&GitHubAsset> {
 fn match_ffmpeg_asset(assets: &[GitHubAsset]) -> Option<&GitHubAsset> {
     let platform = platform_key();
 
-    // BtbN only has Windows and Linux builds - no macOS
     let prefix = match platform {
         "win_x64" => "ffmpeg-master-latest-win64-gpl",
         "win_x86" => "ffmpeg-master-latest-win32-gpl",
@@ -75,14 +73,12 @@ fn match_ffmpeg_asset(assets: &[GitHubAsset]) -> Option<&GitHubAsset> {
         _ => return None, // macOS not available from BtbN
     };
 
-    // Match the exact zip file (not shared, not lgpl)
     assets.iter().find(|a| {
         a.name.starts_with(prefix) 
             && a.name.ends_with(".zip") 
             && !a.name.contains("shared")
             && !a.name.contains("lgpl")
     })
-    // Fallback to any matching zip
     .or_else(|| assets.iter().find(|a| a.name.starts_with(prefix) && a.name.ends_with(".zip")))
 }
 
