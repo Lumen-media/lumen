@@ -12,11 +12,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { HeaderTrailingSlot } from '@/modules/components/HeaderTrailingSlot';
 import { useAsideStore } from '@/stores/aside-store';
 import { useChatStore } from '@/stores/chat-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { useStreamingStore } from '@/stores/streaming-store';
-import { HeaderTrailingSlot } from '@/modules/components/HeaderTrailingSlot';
 import { SettingsDialog } from './settings-dialog';
 import { Card } from './ui/card';
 
@@ -145,13 +145,13 @@ export function AppHeader() {
 
   return (
     <header>
-      <Card className="flex flex-row min-h-12 py-1 items-center justify-between bg-card px-4 border-b border-border shrink-0">
-        <div className="flex items-center gap-2 w-40">
+      <Card className="flex flex-row min-h-12 py-1 items-center bg-card px-4 border-b border-border shrink-0">
+        <div className="flex-1 flex items-center gap-2">
           <Star className="size-5 text-primary fill-primary" strokeWidth={1.5} />
           <span className="font-semibold text-sm tracking-wide text-foreground">Lumen</span>
         </div>
 
-        <nav ref={navRef} className="relative flex items-center gap-1">
+        <nav ref={navRef} className="flex-1 relative flex justify-center items-center gap-1">
           {NAV_TABS.map((tab) => (
             <Link
               key={tab.to}
@@ -177,12 +177,17 @@ export function AppHeader() {
           />
         </nav>
 
-        <div className="flex min-w-0 items-center justify-end gap-3 w-56">
+        <div className="flex-1 flex min-w-0 items-center justify-end gap-3">
           <HeaderTrailingSlot />
           <span className="relative inline-flex">
-            <Smartphone className={cn('size-4 shrink-0', mobileConnected ? 'text-primary' : 'text-muted-foreground')} />
+            <Smartphone
+              className={cn(
+                'size-4 shrink-0',
+                mobileConnected ? 'text-primary' : 'text-muted-foreground'
+              )}
+            />
             {mobileCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 flex min-w-[14px] h-3.5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground px-[3px] leading-none">
+              <span className="absolute -top-1.5 -right-1.5 flex min-w-3.5 h-3.5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground px-[3px] leading-none">
                 {mobileCount > 9 ? '+9' : mobileCount}
               </span>
             )}
@@ -194,7 +199,12 @@ export function AppHeader() {
               className="relative inline-flex items-center justify-center"
               title="Chat (Ctrl+Shift+C)"
             >
-              <MessageCircle className={cn('size-4 shrink-0', asideActiveTab === 'chat' ? 'text-primary' : 'text-muted-foreground')} />
+              <MessageCircle
+                className={cn(
+                  'size-4 shrink-0',
+                  asideActiveTab === 'chat' ? 'text-primary' : 'text-muted-foreground'
+                )}
+              />
               {chatBlink && (
                 <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-primary animate-pulse" />
               )}
@@ -221,12 +231,8 @@ export function AppHeader() {
                     onClick={() => setActiveProfile(p.id)}
                     className="flex items-center gap-2"
                   >
-                    {p.id === activeProfileId && (
-                      <CheckIcon className="size-3.5 shrink-0" />
-                    )}
-                    <span className={p.id !== activeProfileId ? 'pl-5' : ''}>
-                      {p.name}
-                    </span>
+                    {p.id === activeProfileId && <CheckIcon className="size-3.5 shrink-0" />}
+                    <span className={p.id !== activeProfileId ? 'pl-5' : ''}>{p.name}</span>
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
