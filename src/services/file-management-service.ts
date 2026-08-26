@@ -81,14 +81,11 @@ class FileManagementServiceImpl implements FileManagementService {
     const url = file.originalUrl || file.path;
     const provider: DownloadProvider = 'youtube';
 
-    // Update status to downloading; completion is handled by the
-    // download store via video-download-complete/error events.
     await mediaDbService.updateDownloadStatus(url, 'downloading');
 
     try {
       await downloadService.downloadVideo(url, provider, quality);
     } catch (error) {
-      // Revert status on error
       await mediaDbService.updateDownloadStatus(url, 'not_downloaded');
       throw error;
     }

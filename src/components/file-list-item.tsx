@@ -229,14 +229,12 @@ export function FileListItem({
     e.stopPropagation();
 
     try {
-      // Check dependencies first
       let deps = dependencyStatus;
       if (!deps) {
         deps = await checkDeps();
       }
 
       if (!deps.ytdlpInstalled || !deps.ffmpegInstalled) {
-        // Install dependencies with toast.promise
         await toast.promise(installDeps(), {
           loading: 'Installing download tools...',
           success: 'Download tools installed',
@@ -244,10 +242,8 @@ export function FileListItem({
         });
       }
 
-      // Show toast that download is starting
       const downloadToast = toast.loading('Starting download...');
 
-      // Start download
       await startDownload(file, 'best', {
         onComplete: () => {
           toast.dismiss(downloadToast);
@@ -259,7 +255,6 @@ export function FileListItem({
         },
       });
 
-      // Update toast to show download is in progress
       toast.loading('Downloading...', { id: downloadToast });
     } catch (error) {
       toast.error(`Download failed: ${error instanceof Error ? error.message : String(error)}`);

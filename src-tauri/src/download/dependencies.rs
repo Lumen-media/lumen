@@ -165,7 +165,6 @@ pub async fn download_dependencies(app: AppHandle) -> Result<(), String> {
 
     let mut versions = load_versions(&dir);
 
-    // Download yt-dlp
     if !dir.join(ytdlp_binary_name()).exists() {
         app.emit("dependency-download-progress", serde_json::json!({
             "tool": "ytdlp",
@@ -186,12 +185,10 @@ pub async fn download_dependencies(app: AppHandle) -> Result<(), String> {
         let dest_path = downloads_dir.join(&release.file_name);
         download_file(&release.download_url, &dest_path, &app, "ytdlp").await?;
 
-        // Move to final location
         let final_path = dir.join(ytdlp_binary_name());
         std::fs::rename(&dest_path, &final_path)
             .map_err(|e| format!("Failed to move yt-dlp binary: {}", e))?;
 
-        // Make executable on Unix
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -215,13 +212,10 @@ pub async fn download_dependencies(app: AppHandle) -> Result<(), String> {
         .ok();
     }
 
-    // Download FFmpeg (not available on macOS from BtbN)
     if !dir.join(ffmpeg_binary_name()).exists() {
-        // Check if FFmpeg is available for this platform
         let platform = super::github::platform_key();
         if platform.starts_with("macos") {
             println!("[ffmpeg] macOS detected - FFmpeg must be installed manually (e.g., via Homebrew: brew install ffmpeg)");
-            // Don't fail, just skip - user can install manually
         } else {
             app.emit("dependency-download-progress", serde_json::json!({
                 "tool": "ffmpeg",
@@ -242,38 +236,35 @@ pub async fn download_dependencies(app: AppHandle) -> Result<(), String> {
             let dest_path = downloads_dir.join(&release.file_name);
             download_file(&release.download_url, &dest_path, &app, "ffmpeg").await?;
 
-        // Extract zip
-        app.emit("dependency-download-progress", serde_json::json!({
-            "tool": "ffmpeg",
-            "progress": 0.9,
-            "status": "extracting"
-        }))
-        .ok();
+            app.emit("dependency-download-progress", serde_json::json!({
+                "tool": "ffmpeg",
+                "progress": 0.9,
+                "status": "extracting"
+            }))
+            .ok();
 
-        extract_ffmpeg_zip(&dest_path, &dir)?;
+            extract_ffmpeg_zip(&dest_path, &dir)?;
 
-        // Clean up zip
-        let _ = std::fs::remove_file(&dest_path);
+            let _ = std::fs::remove_file(&dest_path);
 
-        versions.ffmpeg = Some(ToolInfo {
-            version: release.version,
-            path: dir.join(ffmpeg_binary_name()).to_string_lossy().to_string(),
-            downloaded_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-        });
-        save_versions(&dir, &versions)?;
+            versions.ffmpeg = Some(ToolInfo {
+                version: release.version,
+                path: dir.join(ffmpeg_binary_name()).to_string_lossy().to_string(),
+                downloaded_at: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            });
+            save_versions(&dir, &versions)?;
 
-        app.emit("dependency-download-complete", serde_json::json!({
-            "tool": "ffmpeg",
-            "version": versions.ffmpeg.as_ref().unwrap().version
-        }))
-        .ok();
-        } // end else (not macOS)
+            app.emit("dependency-download-complete", serde_json::json!({
+                "tool": "ffmpeg",
+                "version": versions.ffmpeg.as_ref().unwrap().version
+            }))
+            .ok();
+        }
     }
 
-    // Clean up downloads directory
     let _ = std::fs::remove_dir_all(&downloads_dir);
 
     Ok(())
@@ -356,9 +347,8 @@ fn extract_ffmpeg_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
         let name = file.name().to_string();
         println!("[ffmpeg] Checking entry: {}", name);
 
-        // Look for ffmpeg.exe and ffprobe.exe in any subdirectory
-        if name.ends_with(&format!("/{}", bin_name)) || name.ends_with(&format!("\\{}", bin_name)) 
-            || name == bin_name || name.ends_with(&format!("/{}", probe_name)) 
+        if name.ends_with(&format!("/{}", bin_name)) || name.ends_with(&format!("\\{}", bin_name))
+            || name == bin_name || name.ends_with(&format!("/{}", probe_name))
             || name.ends_with(&format!("\\{}", probe_name)) || name == probe_name {
             
             let out_name = if name.contains("ffprobe") { &probe_name } else { &bin_name };
@@ -374,7 +364,6 @@ fn extract_ffmpeg_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
             let file_size = std::fs::metadata(&out_path).map(|m| m.len()).unwrap_or(0);
             println!("[ffmpeg] Extracted {} ({} bytes)", out_name, file_size);
 
-            // Make executable on Unix
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -384,7 +373,6 @@ fn extract_ffmpeg_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
         }
     }
 
-    // Verify extraction
     let ffmpeg_path = dest_dir.join(&bin_name);
     if !ffmpeg_path.exists() {
         return Err("Failed to extract ffmpeg binary from zip".to_string());
