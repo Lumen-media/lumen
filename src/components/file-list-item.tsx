@@ -1,6 +1,7 @@
 import { useDraggable } from '@dnd-kit/core';
 import { invoke } from '@tauri-apps/api/core';
 import {
+  Download,
   File,
   FileText,
   FolderOpen,
@@ -28,6 +29,7 @@ import {
 import type { FileInfo, MediaType } from '@/services';
 import { thumbnailService } from '@/services/thumbnail-service';
 import { useDeleteFileStore } from '@/stores/delete-file-store';
+import { useDownloadStore } from '@/stores/download-store';
 
 interface FileListItemProps {
   file: FileInfo;
@@ -56,6 +58,8 @@ function downloadStatusLabel(file: FileInfo): string | null {
   switch (file.downloadStatus) {
     case 'downloaded':
       return 'Downloaded';
+    case 'downloading':
+      return 'Downloading';
     case 'missing':
       return 'Missing download';
     default:
@@ -64,16 +68,36 @@ function downloadStatusLabel(file: FileInfo): string | null {
 }
 
 const ICON_BY_EXT: Record<string, typeof File> = {
-  '.mp3': Headphones, '.wav': Headphones, '.ogg': Headphones,
-  '.flac': Headphones, '.m4a': Headphones,
-  '.mp4': Video, '.avi': Video, '.mov': Video, '.mkv': Video, '.webm': Video,
-  '.jpg': ImageIcon, '.jpeg': ImageIcon, '.png': ImageIcon,
-  '.gif': ImageIcon, '.webp': ImageIcon, '.svg': ImageIcon,
-  '.txt': FileText, '.md': FileText, '.doc': FileText,
-  '.docx': FileText, '.pdf': FileText,
-  '.ppt': Presentation, '.pptx': Presentation, '.pptm': Presentation,
-  '.potx': Presentation, '.ppsx': Presentation, '.odp': Presentation, '.key': Presentation,
-  '.lrc': Music, '.srt': Music,
+  '.mp3': Headphones,
+  '.wav': Headphones,
+  '.ogg': Headphones,
+  '.flac': Headphones,
+  '.m4a': Headphones,
+  '.mp4': Video,
+  '.avi': Video,
+  '.mov': Video,
+  '.mkv': Video,
+  '.webm': Video,
+  '.jpg': ImageIcon,
+  '.jpeg': ImageIcon,
+  '.png': ImageIcon,
+  '.gif': ImageIcon,
+  '.webp': ImageIcon,
+  '.svg': ImageIcon,
+  '.txt': FileText,
+  '.md': FileText,
+  '.doc': FileText,
+  '.docx': FileText,
+  '.pdf': FileText,
+  '.ppt': Presentation,
+  '.pptx': Presentation,
+  '.pptm': Presentation,
+  '.potx': Presentation,
+  '.ppsx': Presentation,
+  '.odp': Presentation,
+  '.key': Presentation,
+  '.lrc': Music,
+  '.srt': Music,
 };
 
 function iconForMedia(mediaType: MediaType, extension?: string): typeof File {
@@ -162,6 +186,7 @@ export function FileListItem({
   isFocused,
 }: FileListItemProps) {
   const { openDeleteDialog } = useDeleteFileStore();
+  const { startDownload, checkDeps, installDeps, dependencyStatus } = useDownloadStore();
   const urlMedia = isUrlMedia(file);
   const statusLabel = downloadStatusLabel(file);
   const fileSizeLabel = urlMedia ? 'URL' : formatFileSize(file.size);
@@ -198,6 +223,42 @@ export function FileListItem({
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     openDeleteDialog(file);
+  };
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    try {
+      let deps = dependencyStatus;
+      if (!deps) {
+        deps = await checkDeps();
+      }
+
+      if (!deps.ytdlpInstalled || !deps.ffmpegInstalled) {
+        await toast.promise(installDeps(), {
+          loading: 'Installing download tools...',
+          success: 'Download tools installed',
+          error: 'Failed to install download tools',
+        });
+      }
+
+      const downloadToast = toast.loading('Starting download...');
+
+      await startDownload(file, 'best', {
+        onComplete: () => {
+          toast.dismiss(downloadToast);
+          toast.success(`Downloaded: ${file.title || file.name}`);
+        },
+        onError: (error) => {
+          toast.dismiss(downloadToast);
+          toast.error(`Download failed: ${error.message}`);
+        },
+      });
+
+      toast.loading('Downloading...', { id: downloadToast });
+    } catch (error) {
+      toast.error(`Download failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const fileDescription = `${file.name}, ${fileSizeLabel}, modified ${formatDate(file.modifiedAt)}`;
@@ -284,12 +345,20 @@ export function FileListItem({
             <ContextMenuSeparator />
           </>
         )}
-        {!urlMedia && (
+        {(!urlMedia || file.downloadStatus === 'downloaded') && (
           <ContextMenuItem onClick={handleOpenFolder}>
             <FolderOpen className="h-4 w-4" aria-hidden="true" />
             Open folder
           </ContextMenuItem>
         )}
+        {urlMedia &&
+          file.downloadStatus !== 'downloaded' &&
+          file.downloadStatus !== 'downloading' && (
+            <ContextMenuItem onClick={handleDownload}>
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Download
+            </ContextMenuItem>
+          )}
         <ContextMenuItem onClick={handleDeleteClick} variant="destructive">
           <Trash2 className="h-4 w-4" aria-hidden="true" />
           Delete

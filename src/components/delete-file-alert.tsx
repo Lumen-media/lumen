@@ -9,8 +9,19 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useTranslation } from '@/lib/i18n';
 import { mediaDbService } from '@/services/media-db-service';
 import { useDeleteFileStore } from '@/stores/delete-file-store';
+
+const MAX_NAME_LENGTH = 40;
+
+function shortenName(name?: string): string {
+  if (!name) return '';
+  if (name.length <= MAX_NAME_LENGTH) return name;
+  const head = Math.ceil((MAX_NAME_LENGTH - 1) / 2);
+  const tail = Math.floor((MAX_NAME_LENGTH - 1) / 2);
+  return `${name.slice(0, head)}…${name.slice(name.length - tail)}`;
+}
 
 interface DeleteFileAlertProps {
   onDelete?: (filePath: string) => void;
@@ -19,7 +30,9 @@ interface DeleteFileAlertProps {
 export function DeleteFileAlert({ onDelete }: DeleteFileAlertProps) {
   const { isOpen, file, closeDeleteDialog } = useDeleteFileStore();
   const [isDeleting, setIsDeleting] = useState(false);
+  const { t } = useTranslation();
   const isUrlMedia = file?.extension === 'url' || Boolean(file?.originalUrl);
+  const displayName = shortenName(file?.name);
 
   const handleConfirmDelete = async () => {
     if (!file) return;
@@ -32,14 +45,14 @@ export function DeleteFileAlert({ onDelete }: DeleteFileAlertProps) {
         await remove(file.path);
       }
       closeDeleteDialog();
-      toast.success(`${file.name} removed`);
+      toast.success(t('{{name}} removed', { name: displayName }));
 
       if (onDelete) {
         onDelete(file.path);
       }
     } catch (error) {
       console.error('Failed to delete file:', error);
-      toast.error('Failed to delete file');
+      toast.error(t('Failed to delete file'));
     } finally {
       setIsDeleting(false);
     }
@@ -48,20 +61,25 @@ export function DeleteFileAlert({ onDelete }: DeleteFileAlertProps) {
   return (
     <AlertDialog open={isOpen} onOpenChange={closeDeleteDialog}>
       <AlertDialogContent>
-        <AlertDialogTitle>{isUrlMedia ? 'Remove media?' : 'Delete file?'}</AlertDialogTitle>
-        <AlertDialogDescription>
+        <AlertDialogTitle>{isUrlMedia ? t('Remove media?') : t('Delete file?')}</AlertDialogTitle>
+        <AlertDialogDescription className="break-words [overflow-wrap:anywhere]">
           {isUrlMedia
-            ? `Remove "${file?.name}" from the library? The YouTube video itself will not be deleted.`
-            : `Are you sure you want to delete "${file?.name}"? This action cannot be undone.`}
+            ? t(
+                'Remove "{{name}}" from the library? The YouTube video itself will not be deleted.',
+                { name: displayName }
+              )
+            : t('Are you sure you want to delete "{{name}}"? This action cannot be undone.', {
+                name: displayName,
+              })}
         </AlertDialogDescription>
         <div className="flex gap-3 justify-end">
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleConfirmDelete}
             disabled={isDeleting}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {isDeleting ? 'Deleting...' : isUrlMedia ? 'Remove' : 'Delete'}
+            {isDeleting ? t('Deleting...') : isUrlMedia ? t('Remove') : t('Delete')}
           </AlertDialogAction>
         </div>
       </AlertDialogContent>

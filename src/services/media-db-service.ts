@@ -3,7 +3,7 @@ import { exists, mkdir } from '@tauri-apps/plugin-fs';
 import Database from '@tauri-apps/plugin-sql';
 import { getAppBasePath, getDbPath } from './app-paths';
 import { extractMetadata } from './metadata-extractor';
-import type { FileInfo, MediaType } from './types';
+import type { DownloadStatus, FileInfo, MediaType } from './types';
 import { urlMediaService } from './url-media-service';
 
 interface DbRow {
@@ -104,7 +104,9 @@ class MediaDbService {
       `CREATE INDEX IF NOT EXISTS idx_mf_original_url ON media_files (original_url)`
     );
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_mf_content ON media_files (content)`);
-    await db.execute(`CREATE INDEX IF NOT EXISTS idx_mf_type_content ON media_files (media_type, content)`);
+    await db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_mf_type_content ON media_files (media_type, content)`
+    );
 
     await db.execute(`
       CREATE TABLE IF NOT EXISTS theme_files (
@@ -394,6 +396,56 @@ class MediaDbService {
     await db.execute('DELETE FROM media_files WHERE path = $1', [path]);
   }
 
+  async updateDownloadStatus(
+    originalUrl: string,
+    status: DownloadStatus,
+    newPath?: string,
+    newSize?: number,
+    newMediaType?: string,
+    newExtension?: string
+  ): Promise<void> {
+    const db = await this.ready();
+
+    const updates: string[] = ['download_status = $1'];
+    const params: unknown[] = [status];
+    let paramIndex = 2;
+
+    if (newPath !== undefined) {
+      updates.push(`path = $${paramIndex}`);
+      params.push(newPath);
+      paramIndex++;
+    }
+
+    if (newSize !== undefined) {
+      updates.push(`size = $${paramIndex}`);
+      params.push(newSize);
+      paramIndex++;
+    }
+
+    if (newMediaType !== undefined) {
+      updates.push(`media_type = $${paramIndex}`);
+      params.push(newMediaType);
+      paramIndex++;
+    }
+
+    if (newExtension !== undefined) {
+      updates.push(`extension = $${paramIndex}`);
+      params.push(newExtension);
+      paramIndex++;
+    }
+
+    updates.push(`modified_at = $${paramIndex}`);
+    params.push(Date.now());
+    paramIndex++;
+
+    params.push(originalUrl);
+
+    await db.execute(
+      `UPDATE media_files SET ${updates.join(', ')} WHERE original_url = $${paramIndex} OR path = $${paramIndex}`,
+      params
+    );
+  }
+
   async syncThemes(fsFiles: FileInfo[]): Promise<void> {
     const db = await this.ready();
     const existing = await db.select<{ path: string }[]>('SELECT path FROM theme_files');
@@ -510,9 +562,7 @@ async function extractPresentationContent(path: string): Promise<string | null> 
       title?: string;
     }>('extract_presentation_metadata', { path });
 
-    const parts = meta.slides
-      .filter((s) => s.text.trim().length > 0)
-      .map((s) => s.text.trim());
+    const parts = meta.slides.filter((s) => s.text.trim().length > 0).map((s) => s.text.trim());
 
     return parts.length > 0 ? parts.join('\n\n') : null;
   } catch (err) {

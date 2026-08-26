@@ -1,6 +1,6 @@
 'use client';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { readFile } from '@tauri-apps/plugin-fs';
 import { LucidePause, LucidePlay, LucideVolume2, LucideVolumeOff } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
@@ -196,34 +196,15 @@ export const Videoplayer = ({
           return;
         }
 
-        const mimeTypes: Record<string, string> = {
-          mp4: 'video/mp4',
-          webm: 'video/webm',
-          mkv: 'video/x-matroska',
-          avi: 'video/x-msvideo',
-          mov: 'video/quicktime',
-          mp3: 'audio/mpeg',
-          wav: 'audio/wav',
-          ogg: 'audio/ogg',
-          flac: 'audio/flac',
-          aac: 'audio/aac',
-          m4a: 'audio/mp4',
-        };
-        const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
-        const mime = mimeTypes[ext] ?? 'application/octet-stream';
-        const data = await readFile(filePath);
+        const assetUrl = convertFileSrc(filePath);
         if (loadSeqRef.current !== seq) return;
-        const blobUrl = URL.createObjectURL(new Blob([data], { type: mime }));
-        currentBlobUrl.current = blobUrl;
         currentFilePath.current = filePath;
         pendingSeekTime.current = seekTime > 0 ? seekTime : null;
-        pendingThumbnail.current = mime.startsWith('video/')
-          ? await thumbnailService.getThumbnail(filePath).catch(() => null)
-          : null;
+        pendingThumbnail.current = await thumbnailService.getThumbnail(filePath).catch(() => null);
         if (loadSeqRef.current !== seq) return;
         switchingUrlRef.current = true;
         setPlayed(0);
-        setActiveUrl(blobUrl);
+        setActiveUrl(assetUrl);
         setPlaying(true);
       }),
     ]).then((fns) => {
