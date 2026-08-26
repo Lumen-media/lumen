@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type React from 'react';
 import type { ModuleRecord, ModuleStatus, PanelSpec, QueueActionSpec, QueueTriggerSpec, SurfaceWindowOptions } from './types';
 
 export interface ModuleSurfaceState {
@@ -16,6 +17,8 @@ interface ModuleStore {
   openDialogId: string | null;
   presenterViewId: string | null;
   presenterProps: unknown;
+  presenterControlsRequested: boolean;
+  presenterSlideComponents: React.ComponentType[];
   surfaceWindows: Map<string, ModuleSurfaceState>;
 
   registerModule(record: ModuleRecord): void;
@@ -36,6 +39,8 @@ interface ModuleStore {
   openDialog(id: string): void;
   closeDialog(): void;
   projectPanel(viewId: string, props?: unknown): void;
+  requestPresenterControls(): void;
+  setPresenterControlSlides(slides: React.ComponentType[]): void;
   clearPresenter(): void;
   openSurfaceWindow(moduleId: string, panelId: string, props?: unknown, options?: SurfaceWindowOptions): void;
   clearSurfaceWindow(moduleId: string): void;
@@ -50,6 +55,8 @@ export const useModuleStore = create<ModuleStore>((set, get) => ({
   openDialogId: null,
   presenterViewId: null,
   presenterProps: undefined,
+  presenterControlsRequested: false,
+  presenterSlideComponents: [],
   surfaceWindows: new Map(),
 
   registerModule(record) {
@@ -173,8 +180,16 @@ export const useModuleStore = create<ModuleStore>((set, get) => ({
     set({ presenterViewId: viewId, presenterProps: props });
   },
 
+  requestPresenterControls() {
+    set({ presenterControlsRequested: true });
+  },
+
+  setPresenterControlSlides(slides) {
+    set({ presenterSlideComponents: slides });
+  },
+
   clearPresenter() {
-    set({ presenterViewId: null, presenterProps: undefined });
+    set({ presenterViewId: null, presenterProps: undefined, presenterControlsRequested: false, presenterSlideComponents: [] });
   },
 
   openSurfaceWindow(moduleId, panelId, props, options) {

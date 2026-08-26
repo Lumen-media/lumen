@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { emit, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import type React from 'react';
 import { lyricService } from '@/services/lyric-service';
 import { mediaDbService } from '@/services/media-db-service';
 import { thumbnailService } from '@/services/thumbnail-service';
@@ -498,6 +499,14 @@ export function createPresentationHostAPI(): PresentationHostAPI {
           return emit('module:presenter-project', { viewId, props });
         })
         .catch(() => {});
+    },
+    requestPresenterControls() {
+      useModuleStore.getState().requestPresenterControls();
+    },
+    controls: {
+      slides(components: React.ComponentType[]) {
+        useModuleStore.getState().setPresenterControlSlides(components);
+      },
     },
     clear() {
       useModuleStore.getState().clearPresenter();

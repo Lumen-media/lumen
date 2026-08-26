@@ -1018,6 +1018,7 @@ function PresenterSequence({
   profileBackground,
   fallbackSlides,
   moduleData,
+  moduleSlideComponents,
   sequenceRef,
   sequenceContentRef,
   isMinimized,
@@ -1032,6 +1033,7 @@ function PresenterSequence({
   profileBackground?: string;
   fallbackSlides: FallbackSlide[];
   moduleData: ModuleSlideData | null;
+  moduleSlideComponents: React.ComponentType[];
   sequenceRef: React.RefObject<HTMLDivElement | null>;
   sequenceContentRef: React.RefObject<HTMLDivElement | null>;
   isMinimized: boolean;
@@ -1068,7 +1070,16 @@ function PresenterSequence({
                   }}
                 />
               ))
-              : kind === 'module' && moduleData
+              : kind === 'module' && moduleSlideComponents.length > 0
+                ? moduleSlideComponents.map((SlideComponent, index) => (
+                  <div
+                    key={`module-slide-${index}`}
+                    className="shrink-0 w-40 aspect-video rounded-lg overflow-hidden ring-1 ring-border/40 hover:ring-border/70"
+                  >
+                    <SlideComponent />
+                  </div>
+                ))
+                : kind === 'module' && moduleData
                 ? (
                   <ModuleSequenceThumbnail
                     data={moduleData}
@@ -1105,6 +1116,7 @@ export function PresenterControls({ className }: PresenterControlsProps) {
   const imagePath = usePlayerStore((s) => s.currentImagePath);
   const presenterViewId = useModuleStore((s) => s.presenterViewId);
   const presenterProps = useModuleStore((s) => s.presenterProps);
+  const moduleSlideComponents = useModuleStore((s) => s.presenterSlideComponents);
   const moduleName = useModuleStore((s) => {
     if (!s.presenterViewId) return null;
     for (const [moduleId, specs] of s.panels.entries()) {
@@ -1248,6 +1260,10 @@ export function PresenterControls({ className }: PresenterControlsProps) {
     meta.title;
 
   if (!presenter.active || !presenter.kind) return null;
+
+  if (presenter.kind === 'module' && !useModuleStore.getState().presenterControlsRequested) {
+    return null;
+  }
   return (
     <Card
       ref={controlsRef}
@@ -1283,6 +1299,7 @@ export function PresenterControls({ className }: PresenterControlsProps) {
         profileBackground={profileBackground}
         fallbackSlides={fallbackSlides}
         moduleData={moduleData}
+        moduleSlideComponents={moduleSlideComponents}
         sequenceRef={sequenceRef}
         sequenceContentRef={sequenceContentRef}
         isMinimized={isMinimized}
