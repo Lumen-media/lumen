@@ -1,15 +1,15 @@
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { readFile } from '@tauri-apps/plugin-fs';
 import { create } from 'zustand';
 import { useModuleStore } from '@/modules/store';
 import { getSetting, saveSetting } from '@/services/db';
+import { mediaDbService } from '@/services/media-db-service';
 import { remoteSyncService } from '@/services/remote-sync-service';
 import { urlMediaService } from '@/services/url-media-service';
+import { usePresentationStore } from '@/stores/presentation-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 import { useQueueStore } from '@/stores/queue-store';
-import { usePresentationStore } from '@/stores/presentation-store';
 
 interface PlayerStore {
   localTime: number;
@@ -93,9 +93,10 @@ async function playAudio(source: string, seekTime: number): Promise<void> {
     audioBlobUrl = null;
   }
 
-  const blobUrl = URL.createObjectURL(new Blob([await readFile(source)]));
-  audioBlobUrl = blobUrl;
-  audio.src = blobUrl;
+  // Use convertFileSrc for local files - no need to read into memory
+  const assetUrl = convertFileSrc(source);
+  audioBlobUrl = assetUrl;
+  audio.src = assetUrl;
 
   if (seekTime > 0) {
     audio.currentTime = seekTime;
@@ -564,7 +565,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setIsDragging: (dragging) => set({ isDragging: dragging }),
 
   loadFile: async (filePath: string, seekTime = 0) => {
-    const source = normalizeMediaSource(filePath);
+    // Check if this is a downloaded YouTube URL - use local file instead
+    let source = normalizeMediaSource(filePath);
+    if (urlMediaService.parseYouTubeUrl(source)) {
+      try {
+        const fileInfo = await mediaDbService.getFileInfoByOriginalUrl(source);
+        if (
+          fileInfo?.downloadStatus === 'downloaded' &&
+          fileInfo.path &&
+          !fileInfo.path.startsWith('http')
+        ) {
+          source = fileInfo.path;
+        }
+      } catch {
+        // Fall through to streaming
+      }
+    }
+
     const ext = source.split('.').pop()?.toLowerCase() ?? '';
     const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'tiff', 'svg'];
     const isPresentation = ext === 'ppt' || ext === 'pptx';
