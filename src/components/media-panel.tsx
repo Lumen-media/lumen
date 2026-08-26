@@ -212,6 +212,16 @@ export function MediaPanel() {
     }
   }, [activeMedia, isInitialized, loadFiles]);
 
+  useEffect(() => {
+    const onFilesChanged = () => {
+      if (activeMedia) {
+        loadFiles(activeMedia);
+      }
+    };
+    window.addEventListener('lumen:media-files-changed', onFilesChanged);
+    return () => window.removeEventListener('lumen:media-files-changed', onFilesChanged);
+  }, [activeMedia, loadFiles]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!activeMedia || files.length === 0) return;
 
