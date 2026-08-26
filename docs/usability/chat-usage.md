@@ -1,131 +1,131 @@
-# Chat — Guia de Uso
+# Chat — Usage Guide
 
-Chat privado entre o **operador** (desktop) e os **dispositivos pareados** (controles remotos via WebSocket). Não é um chat público: apenas dispositivos autenticados com permissão `chat` participam.
-
----
-
-## Abrir o Chat
-
-- **Botão no header:** clique no ícone 💬 (ou `Ctrl+Shift+C`).
-- **Comportamento da tab:** o aside tem 3 tabs visíveis: Queue, Notes e um slot que muda entre **Chat** e **Themes**.
-  - Ao clicar no botão do header, o slot vira **Chat** (selecionado).
-  - Ao mudar para Queue ou Notes, o slot volta para **Themes**.
-  - Para voltar ao chat, clique novamente no botão do header.
-
-> Se o chat não está habilitado nas configurações, o ícone do header aparece mas não abre mensagens até ser ativado.
+Private chat between the **operator** (desktop) and **paired devices** (remote controls via WebSocket). Not a public chat: only authenticated devices with the `chat` permission participate.
 
 ---
 
-## Enviar Mensagens
+## Opening the Chat
 
-1. Digite na caixa de texto na parte inferior do chat.
-2. Pressione `Enter` para enviar, ou `Shift+Enter` para nova linha.
-3. **Responder:** clique no ícone de reply ↩ que aparece ao passar o mouse sobre uma mensagem, ou clique com botão direito → Reply.
-4. **Limite:** 4000 caracteres por mensagem. O contador aparece no canto inferior direito da caixa de texto e fica vermelho se exceder.
+- **Header button:** click the 💬 icon (or `Ctrl+Shift+C`).
+- **Tab behavior:** the aside has 3 visible tabs: Queue, Notes, and a slot that switches between **Chat** and **Themes**.
+  - Clicking the header button makes the slot **Chat** (selected).
+  - Switching to Queue or Notes reverts the slot to **Themes**.
+  - To return to chat, click the header button again.
 
----
-
-## Enviar Arquivos
-
-1. Clique no ícone 📎 (clip) ao lado da caixa de texto.
-2. Selecione o arquivo no dialog.
-3. Opcionalmente adicione uma legenda na caixa de texto.
-4. **Limite:** 25 MB por arquivo.
-5. **Tipos bloqueados:** `.exe`, `.bat`, `.cmd`, `.com`, `.msi`, `.scr`, `.pif`, `.ps1`, `.vbs`, `.js`, `.hta`, `.cpl`, `.lnk`, `.inf`, `.reg`.
+> If chat is not enabled in settings, the header icon appears but does not open messages until activated.
 
 ---
 
-## Reagir a Mensagens
+## Sending Messages
 
-1. Passe o mouse sobre a mensagem.
-2. Os botões de emoji aparecem abaixo (ou no canto).
-3. Clique para adicionar/remover a reação (toggle — mesmo emoji do mesmo remetente = remove).
-
----
-
-## Deletar Mensagens
-
-1. Clique com botão direito na mensagem → **Delete**.
-2. A mensagem é removida do chat e do histórico.
-3. Se a mensagem tinha um arquivo anexado, o arquivo também é removido do disco.
+1. Type in the text box at the bottom of the chat.
+2. Press `Enter` to send, or `Shift+Enter` for a new line.
+3. **Reply:** click the reply icon ↩ that appears when hovering over a message, or right-click → Reply.
+4. **Limit:** 4000 characters per message. The counter appears in the bottom-right corner of the text box and turns red when exceeded.
 
 ---
 
-## Links do YouTube
+## Sending Files
 
-- **Links em formato markdown** (`[texto](url)`) com URL do YouTube são clicáveis e abrem um dialog com preview (thumbnail, título, canal, duração).
-- **No dialog:**
-  - **Play Now:** abre a mídia no player do Lumen.
-  - **Add to Queue:** adiciona à fila de reprodução.
-- **Links de outros sites:** abrem no navegador padrão.
-- **URLs cruas** (coladas como texto puro, sem formatação markdown) **não são clicáveis** — são exibidas como texto normal.
+1. Click the 📎 (clip) icon next to the text box.
+2. Select the file in the dialog.
+3. Optionally add a caption in the text box.
+4. **Limit:** 25 MB per file.
+5. **Blocked types:** `.exe`, `.bat`, `.cmd`, `.com`, `.msi`, `.scr`, `.pif`, `.ps1`, `.vbs`, `.js`, `.hta`, `.cpl`, `.lnk`, `.inf`, `.reg`.
 
 ---
 
-## Preview de Arquivos
+## Reacting to Messages
 
-### Imagens
-- Miniatura exibida na bolha da mensagem.
-- Clique para abrir em tamanho maior no dialog.
-- **Tipos:** `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`, `.svg`.
+1. Hover over the message.
+2. Emoji buttons appear below (or in the corner).
+3. Click to add/remove the reaction (toggle — same emoji from same sender = removes it).
+
+---
+
+## Deleting Messages
+
+1. Right-click the message → **Delete**.
+2. The message is removed from the chat and history.
+3. If the message had an attached file, the file is also removed from disk.
+
+---
+
+## YouTube Links
+
+- **Markdown-formatted links** (`[text](url)`) with YouTube URLs are clickable and open a preview dialog (thumbnail, title, channel, duration).
+- **In the dialog:**
+  - **Play Now:** opens the media in Lumen's player.
+  - **Add to Queue:** adds to the playback queue.
+- **Links from other sites:** open in the default browser.
+- **Raw URLs** (pasted as plain text, without markdown formatting) **are not clickable** — they are displayed as normal text.
+
+---
+
+## File Previews
+
+### Images
+- Thumbnail displayed in the message bubble.
+- Click to open larger in a dialog.
+- **Types:** `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`, `.svg`.
 
 ### PDFs
-- Miniatura da primeira página exibida na bolha.
-- Clique abre o visualizador de PDF do Lumen.
+- First page thumbnail displayed in the bubble.
+- Click opens Lumen's PDF viewer.
 
-### Apresentações (PPT/PPTX)
-- Miniatura do primeiro slide gerada automaticamente.
-- Clique abre no dialog com botão **Present** → abre a apresentação em janela separada.
-- **Nota:** gerar a miniatura de PPT é pesado (abre o arquivo, renderiza slide, captura imagem). O resultado é cacheado — na segunda vez que o mesmo arquivo for visualizado, carrega instantaneamente.
-
----
-
-## Indicado de Leitura (Read Receipts)
-
-- ✓ (check simples) = mensagem enviada.
-- ✓✓ (check duplo azul) = pelo menos um dispositivo leu a mensagem.
-- O indicador aparece ao lado do timestamp, apenas para mensagens do operador.
+### Presentations (PPT/PPTX)
+- First slide thumbnail generated automatically.
+- Click opens in a dialog with a **Present** button → opens the presentation in a separate window.
+- **Note:** generating PPT thumbnails is heavy (opens the file, renders the slide, captures the image). The result is cached — the second time the same file is viewed, it loads instantly.
 
 ---
 
-## Indicador de Digitação
+## Read Receipts
 
-Quando um dispositivo está digitando, aparece o nome do dispositivo + animação de pontos suspensivos na parte inferior do chat. O indicador some automaticamente após 3 segundos sem atividade.
+- ✓ (single check) = message sent.
+- ✓✓ (blue double check) = at least one device read the message.
+- The indicator appears next to the timestamp, only for operator messages.
 
 ---
 
-## Notificações
+## Typing Indicator
 
-Configurável em **Settings → Advanced → Chat → Notifications**:
+When a device is typing, the device name + ellipsis animation appears at the bottom of the chat. The indicator automatically disappears after 3 seconds of inactivity.
 
-| Modo | Comportamento |
+---
+
+## Notifications
+
+Configurable in **Settings → Advanced → Chat → Notifications**:
+
+| Mode | Behavior |
 |---|---|
-| **Off** | Sem notificações. |
-| **In-App** | Toast dentro do aplicativo. |
-| **System** | Notificação do sistema operacional. |
+| **Off** | No notifications. |
+| **In-App** | Toast inside the application. |
+| **System** | Operating system notification. |
 
-> Um ponto pulsante no ícone do header indica mensagens não lidas.
-
----
-
-## Configurações do Chat
-
-Em **Settings → Advanced → Chat**:
-
-| Configuração | Descrição |
-|---|---|
-| **Enable Chat** | Liga/desliga o chat globalmente. Quando desligado, dispositivos não podem enviar mensagens. |
-| **Persist Messages** | Se desligado, as mensagens são apagadas ao reiniciar o app. Se ligado, sobrevivem a restarts. |
-| **History Limit** | Quantas mensagens manter em memória (padrão: 200). |
-| **Notifications** | Modo de notificação (Off / In-App / System). |
-| **Per-Device Permissions** | Em Devices, cada dispositivo tem uma flag "Chat" para permitir/negar acesso ao chat. |
+> A pulsing dot on the header icon indicates unread messages.
 
 ---
 
-## Atalhos de Teclado
+## Chat Settings
 
-| Atalho | Ação |
+In **Settings → Advanced → Chat**:
+
+| Setting | Description |
 |---|---|
-| `Ctrl+Shift+C` | Abre o chat (foca no editor). |
-| `Enter` | Envia a mensagem. |
-| `Shift+Enter` | Nova linha na caixa de texto. |
+| **Enable Chat** | Turns chat on/off globally. When off, devices cannot send messages. |
+| **Persist Messages** | When off, messages are deleted on app restart. When on, they survive restarts. |
+| **History Limit** | How many messages to keep in memory (default: 200). |
+| **Notifications** | Notification mode (Off / In-App / System). |
+| **Per-Device Permissions** | In Devices, each device has a "Chat" flag to allow/deny chat access. |
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Shift+C` | Opens the chat (focuses the editor). |
+| `Enter` | Sends the message. |
+| `Shift+Enter` | New line in the text box. |
