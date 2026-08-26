@@ -1,8 +1,9 @@
 import { basename, extname, join } from '@tauri-apps/api/path';
 import { copyFile, exists, readDir, remove, stat } from '@tauri-apps/plugin-fs';
+import { downloadService } from './download-service';
 import { fileInitService } from './file-init-service';
 import { mediaDbService } from './media-db-service';
-import type { FileInfo, MediaType } from './types';
+import type { DownloadProvider, DownloadQuality, FileInfo, MediaType } from './types';
 import { urlMediaService } from './url-media-service';
 
 export interface FileManagementService {
@@ -74,6 +75,23 @@ class FileManagementServiceImpl implements FileManagementService {
     }
 
     return mediaDbService.insertUrlMedia(url);
+  }
+
+  async downloadMedia(file: FileInfo, quality: DownloadQuality): Promise<void> {
+    const url = file.originalUrl || file.path;
+    const provider: DownloadProvider = 'youtube';
+
+    // Update status to downloading; completion is handled by the
+    // download store via video-download-complete/error events.
+    await mediaDbService.updateDownloadStatus(url, 'downloading');
+
+    try {
+      await downloadService.downloadVideo(url, provider, quality);
+    } catch (error) {
+      // Revert status on error
+      await mediaDbService.updateDownloadStatus(url, 'not_downloaded');
+      throw error;
+    }
   }
 
   async listFiles(mediaType: MediaType): Promise<FileInfo[]> {
