@@ -766,6 +766,135 @@ try {
 
 ---
 
+## `host.download` 🚧
+
+Download YouTube videos for offline playback. Uses `yt-dlp` as the download engine and `FFmpeg` for audio/video muxing. Both tools are downloaded on-demand from GitHub releases when first needed.
+
+```ts
+// Check if download dependencies are installed
+const status = await host.download.checkDependencies();
+// { ytdlp: { installed: true, version: string }, ffmpeg: { installed: true, version: string } }
+
+// Install missing dependencies (shows GlobalAlert if called from UI context)
+await host.download.installDependencies();
+
+// Download a video
+const handle = await host.download.video({
+  provider: 'youtube',
+  url: 'https://www.youtube.com/watch?v=VIDEO_ID',
+  quality: 'best',
+  onProgress: (progress) => {
+    console.log(`Download: ${progress.percent}%`);
+  },
+  onComplete: (result) => {
+    console.log(`Downloaded to: ${result.filePath}`);
+  },
+  onError: (error) => {
+    console.error(`Download failed: ${error.message}`);
+  },
+});
+
+// Cancel an active download
+await host.download.cancel(handle.downloadId);
+
+// Get download status for a file
+const status = await host.download.getStatus(fileId);
+// { status: 'not_downloaded' | 'downloading' | 'downloaded' | 'missing', progress?: number }
+
+// List supported providers
+const providers = host.download.supportedProviders();
+// ['youtube']
+```
+
+### `DownloadHostAPI`
+
+| Method | Returns | Description |
+|---|---|---|
+| `checkDependencies()` | `Promise<DependencyStatus>` | Check if yt-dlp and FFmpeg are installed |
+| `installDependencies()` | `Promise<void>` | Download and install missing dependencies |
+| `video(options)` | `Promise<DownloadHandle>` | Download a video with progress callbacks |
+| `cancel(downloadId)` | `Promise<void>` | Cancel an active download |
+| `getStatus(fileId)` | `Promise<DownloadStatusInfo>` | Get download status for a media file |
+| `supportedProviders()` | `DownloadProvider[]` | List supported download providers |
+
+### `DownloadVideoOptions`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `provider` | `DownloadProvider` | ✓ | Video source provider (e.g., `'youtube'`) |
+| `url` | `string` | ✓ | Video URL from the specified provider |
+| `quality` | `'best' \| 'high' \| 'medium' \| 'low' \| 'audio_only'` | | Default: `'best'`. `audio_only` saves to audio section, others to video. |
+| `onProgress` | `(progress: DownloadProgress) => void` | | Progress callback |
+| `onComplete` | `(result: DownloadResult) => void` | | Completion callback |
+| `onError` | `(error: DownloadError) => void` | | Error callback |
+
+### `DownloadProvider`
+
+```ts
+type DownloadProvider = 'youtube';
+```
+
+Currently supported providers:
+| Provider | URL patterns | Notes |
+|---|---|---|
+| `youtube` | `youtube.com/watch?v=`, `youtu.be/`, `youtube.com/shorts/`, `youtube.com/embed/` | Full support |
+
+Future providers may include: `vimeo`, `dailymotion`, `twitch`, etc.
+
+### `DownloadProgress`
+
+| Field | Type | Description |
+|---|---|---|
+| `percent` | `number` | Download progress (0-100) |
+| `speed` | `string` | Current download speed (e.g., "5.23 MiB/s") |
+| `eta` | `string` | Estimated time remaining (e.g., "00:12") |
+| `status` | `string` | Current status (e.g., "downloading", "merging") |
+
+### `DownloadResult`
+
+| Field | Type | Description |
+|---|---|---|
+| `downloadId` | `string` | Unique download identifier |
+| `filePath` | `string` | Path to the downloaded file |
+| `fileSize` | `number` | File size in bytes |
+| `duration` | `number` (optional) | Video duration in seconds |
+| `mediaType` | `'audio' \| 'video'` | Determined media type (audio for `audio_only`, video for all others) |
+
+> When `quality: 'audio_only'` is used, the file is saved to `files/media/audio/` and `mediaType` is `'audio'`. All other qualities save to `files/media/video/` with `mediaType` is `'video'`.
+
+### `DownloadError`
+
+| Field | Type | Description |
+|---|---|---|
+| `message` | `string` | Human-readable error message |
+| `code` | `string` | Error code for programmatic handling |
+
+Error codes:
+- `dependency_missing` — yt-dlp or FFmpeg not installed
+- `dependency_install_failed` — Failed to install dependencies
+- `unsupported_provider` — Provider not supported
+- `invalid_url` — URL not valid for the specified provider
+- `download_failed` — yt-dlp download failed
+- `merge_failed` — FFmpeg merge failed
+- `disk_full` — Not enough disk space
+- `cancelled` — Download was cancelled by user
+- `ffmpeg_not_found_macos` — FFmpeg not found on macOS (install via: brew install ffmpeg)
+
+### Bus Events
+
+Modules can also listen to download events via `host.bus`:
+
+| Topic | Payload | Description |
+|---|---|---|
+| `'download:started'` | `{ downloadId, url }` | Download started |
+| `'download:progress'` | `{ downloadId, progress }` | Download progress update |
+| `'download:complete'` | `{ downloadId, filePath, fileSize }` | Download completed |
+| `'download:error'` | `{ downloadId, error }` | Download failed |
+| `'download:cancelled'` | `{ downloadId }` | Download cancelled |
+| `'dependencies:installed'` | `{ tool, version }` | Dependency installed |
+
+---
+
 ## `host.log` ✅
 
 Logger prefixed with the module id. Output goes to the console and Tauri logs.
