@@ -33,6 +33,19 @@ import { useQueueStore } from '@/stores/queue-store';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
 
 const PRESENTATION_PREVIEW_STORAGE_KEY = 'lumen:presentation-preview-file';
+const mimeTypes: Record<string, string> = {
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mkv: 'video/x-matroska',
+  avi: 'video/x-msvideo',
+  mov: 'video/quicktime',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  flac: 'audio/flac',
+  aac: 'audio/aac',
+  m4a: 'audio/mp4',
+};
 const PRESENTATION_PREVIEW_EVENT = 'lumen:presentation-preview-selected';
 
 function selectPresentationPreview(filePath: string) {
