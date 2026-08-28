@@ -1080,20 +1080,20 @@ function PresenterSequence({
                   </div>
                 ))
                 : kind === 'module' && moduleData
-                ? (
-                  <ModuleSequenceThumbnail
-                    data={moduleData}
-                    isSelected={true}
-                    onClick={() => onSelectSlide?.(0)}
-                  />
-                )
-                : fallbackSlides.map((slide, index) => (
-                  <FallbackSequenceThumbnail
-                    key={slide.id}
-                    slide={slide}
-                    onClick={() => onSelectSlide?.(index)}
-                  />
-                ))}
+                  ? (
+                    <ModuleSequenceThumbnail
+                      data={moduleData}
+                      isSelected={true}
+                      onClick={() => onSelectSlide?.(0)}
+                    />
+                  )
+                  : fallbackSlides.map((slide, index) => (
+                    <FallbackSequenceThumbnail
+                      key={slide.id}
+                      slide={slide}
+                      onClick={() => onSelectSlide?.(index)}
+                    />
+                  ))}
           </div>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
@@ -1261,8 +1261,10 @@ export function PresenterControls({ className }: PresenterControlsProps) {
 
   if (!presenter.active || !presenter.kind) return null;
 
-  if (presenter.kind === 'module' && !useModuleStore.getState().presenterControlsRequested) {
-    return null;
+  if (presenter.kind === 'module') {
+    const hasRequestedControls = useModuleStore.getState().presenterControlsRequested;
+    const hasPresenterContent = moduleData != null || moduleSlideComponents.length > 0;
+    if (!hasRequestedControls || !hasPresenterContent) return null;
   }
   return (
     <Card
