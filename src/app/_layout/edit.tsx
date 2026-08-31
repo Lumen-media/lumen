@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pencil } from 'lucide-react';
-import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useEventListener, useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -23,32 +25,97 @@ function RouteComponent() {
   const { t } = useTranslation();
   const openLyricModal = useLyricModalStore((s) => s.open);
   const { filePath, lyricData, slideIds, selectedSlideIndex, selectSlide, isLoading, restore } =
-    useLyricEditStore();
+    useLyricEditStore(
+      useShallow((s) => ({
+        filePath: s.filePath,
+        lyricData: s.lyricData,
+        slideIds: s.slideIds,
+        selectedSlideIndex: s.selectedSlideIndex,
+        selectSlide: s.selectSlide,
+        isLoading: s.isLoading,
+        restore: s.restore,
+      }))
+    );
   const presentLyric = usePlayerStore((s) => s.presentLyric);
-  const { profiles, activeProfileId } = useProfileStore();
+  const { profiles, activeProfileId } = useProfileStore(
+    useShallow((s) => ({ profiles: s.profiles, activeProfileId: s.activeProfileId }))
+  );
   const profileBackground =
     profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.src ?? undefined;
 
   const thumbRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const slideRowRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+  const rowViewportRef = useRef<HTMLDivElement>(null);
+  const thumbViewportRef = useRef<HTMLDivElement>(null);
+
+  const slideCount = lyricData?.slides.length ?? 0;
+  const rowVirtualizer = useVirtualizer({
+    count: slideCount,
+    getScrollElement: () => rowViewportRef.current,
+    estimateSize: () => 72,
+    overscan: 8,
+    measureElement: (el) => el.getBoundingClientRect().height,
+  });
+
+  const thumbVirtualizer = useVirtualizer({
+    count: slideCount,
+    horizontal: true,
+    getScrollElement: () => thumbViewportRef.current,
+    estimateSize: () => THUMB_WIDTH + THUMB_GAP,
+    overscan: 8,
+  });
+
+  const presentRef = useRef(presentLyric);
+  presentRef.current = presentLyric;
+  const filePathRef = useRef(filePath);
+  filePathRef.current = filePath;
 
   const handleSelectSlide = useCallback(
     (index: number) => {
       const next = selectedSlideIndex === index ? null : index;
       selectSlide(next);
-      if (next !== null) {
-        thumbRefs.current
-          .get(next)
-          ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-        slideRowRefs.current.get(next)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
     },
     [selectedSlideIndex, selectSlide]
+  );
+
+  const handleRowClick = useCallback(
+    (index: number, e: React.MouseEvent<HTMLButtonElement>) => {
+      const file = filePathRef.current;
+      if (e.detail === 2 && file) presentRef.current(file, index);
+      else handleSelectSlide(index);
+    },
+    [handleSelectSlide]
+  );
+
+  const handleThumbClick = useCallback(
+    (index: number, e: React.MouseEvent<HTMLButtonElement>) => {
+      const file = filePathRef.current;
+      if (e.detail === 2 && file) presentRef.current(file, index);
+      else handleSelectSlide(index);
+    },
+    [handleSelectSlide]
   );
 
   useEffect(() => {
     if (!filePath) restore();
   }, [filePath, restore]);
+
+  useEffect(() => {
+    if (selectedSlideIndex === null) return;
+    // Keep the selected row within view for keyboard navigation (slice may not be mounted yet)
+    const el = slideRowRefs.current.get(selectedSlideIndex);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      rowVirtualizer.scrollToIndex(selectedSlideIndex, { align: 'auto' });
+    }
+    const thumb = thumbRefs.current.get(selectedSlideIndex);
+    if (thumb) {
+      thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    } else {
+      thumbVirtualizer.scrollToIndex(selectedSlideIndex, { align: 'center' });
+    }
+  }, [selectedSlideIndex, rowVirtualizer, thumbVirtualizer]);
 
   useEventListener('keydown', (e: KeyboardEvent) => {
     if (!lyricData) return;
@@ -92,27 +159,36 @@ function RouteComponent() {
       <ScrollArea
         className="flex-1 min-h-0"
         viewportClassName="focus-visible:ring-0 focus-visible:outline-none"
+        viewportProps={{ ref: rowViewportRef }}
       >
-        <div className="flex flex-col px-6 pb-4 py-1">
-          {lyricData.slides.map((slide, index) => (
-            <div key={slideIds[index]}>
-              {index > 0 && <Separator className="my-1" />}
-              <SlideRow
-                ref={(el: HTMLButtonElement | null) => {
-                  if (el) slideRowRefs.current.set(index, el);
-                  else slideRowRefs.current.delete(index);
-                }}
-                slide={slide}
-                index={index}
-                isSelected={selectedSlideIndex === index}
-                onClick={(e) => {
-                  if (e.detail === 2 && filePath) presentLyric(filePath, index);
-                  else handleSelectSlide(index);
-                }}
-                font={lyricData.metadata.font}
-              />
-            </div>
-          ))}
+        <div className="relative w-full px-6 pb-4 py-1" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+          {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+            const index = virtualItem.index;
+            const slide = lyricData.slides[index];
+            if (!slide) return null;
+            return (
+              <div
+                key={slideIds[index]}
+                data-index={index}
+                ref={rowVirtualizer.measureElement}
+                className="absolute top-0 left-0 w-full"
+                style={{ transform: `translateY(${virtualItem.start}px)` }}
+              >
+                {index > 0 && <Separator className="my-1" />}
+                <SlideRow
+                  ref={(el: HTMLButtonElement | null) => {
+                    if (el) slideRowRefs.current.set(index, el);
+                    else slideRowRefs.current.delete(index);
+                  }}
+                  slide={slide}
+                  index={index}
+                  isSelected={selectedSlideIndex === index}
+                  onClick={handleRowClick}
+                  font={lyricData.metadata.font}
+                />
+              </div>
+            );
+          })}
         </div>
       </ScrollArea>
 
@@ -120,25 +196,41 @@ function RouteComponent() {
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
           {t('Sequence Preview')}
         </h3>
-        <ScrollArea className="w-full">
-          <div className="flex gap-3 py-1 pb-3 px-1">
-            {lyricData.slides.map((slide, index) => (
-              <SequenceThumbnail
-                ref={(el: HTMLButtonElement | null) => {
-                  if (el) thumbRefs.current.set(index, el);
-                  else thumbRefs.current.delete(index);
-                }}
-                key={slideIds[index]}
-                slide={slide}
-                isSelected={selectedSlideIndex === index}
-                lyricData={lyricData}
-                profileBackground={profileBackground}
-                onClick={(e) => {
-                  if (e.detail === 2 && filePath) presentLyric(filePath, index);
-                  else handleSelectSlide(index);
-                }}
-              />
-            ))}
+        <ScrollArea className="w-full" viewportProps={{ ref: thumbViewportRef }}>
+          <div
+            className="relative w-full py-1 pb-3"
+            style={{ height: THUMB_HEIGHT_PX, width: `${thumbVirtualizer.getTotalSize()}px` }}
+          >
+            {thumbVirtualizer.getVirtualItems().map((virtualItem) => {
+              const index = virtualItem.index;
+              const slide = lyricData.slides[index];
+              if (!slide) return null;
+              return (
+                <div
+                  key={slideIds[index]}
+                  data-index={index}
+                  className="absolute top-0"
+                  style={{
+                    width: THUMB_WIDTH,
+                    transform: `translateX(${virtualItem.start}px)`,
+                    paddingRight: THUMB_GAP,
+                  }}
+                >
+                  <SequenceThumbnail
+                    ref={(el: HTMLButtonElement | null) => {
+                      if (el) thumbRefs.current.set(index, el);
+                      else thumbRefs.current.delete(index);
+                    }}
+                    slide={slide}
+                    isSelected={selectedSlideIndex === index}
+                    lyricData={lyricData}
+                    profileBackground={profileBackground}
+                    index={index}
+                    onClick={handleThumbClick}
+                  />
+                </div>
+              );
+            })}
           </div>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
@@ -147,21 +239,22 @@ function RouteComponent() {
   );
 }
 
-const SlideRow = forwardRef<
-  HTMLButtonElement,
-  {
-    slide: LyricSlide;
-    index: number;
-    isSelected: boolean;
-    onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
-    font?: string;
-  }
->(({ slide, index, isSelected, onClick, font }, ref) => {
-  return (
-    <Button
-      ref={ref}
-      variant="ghost"
-      onClick={onClick}
+const SlideRow = memo(
+  forwardRef<
+    HTMLButtonElement,
+    {
+      slide: LyricSlide;
+      index: number;
+      isSelected: boolean;
+      onClick: (index: number, e: React.MouseEvent<HTMLButtonElement>) => void;
+      font?: string;
+    }
+  >(({ slide, index, isSelected, onClick, font }, ref) => {
+    return (
+      <Button
+        ref={ref}
+        variant="ghost"
+        onClick={(e) => onClick(index, e)}
       className={cn(
         'flex items-start justify-start w-full gap-4 text-left h-auto px-4 py-3 whitespace-normal',
         isSelected && 'bg-primary/10'
@@ -176,18 +269,22 @@ const SlideRow = forwardRef<
           fontFamily: font || undefined,
         }}
       >
-        {slide.lines.map((line) => {
-          const id = crypto.randomUUID();
-          return (
-            <p key={id} className="text-sm font-semibold leading-relaxed">
-              {line}
-            </p>
-          );
-        })}
+        {slide.lines.map((line, li) => (
+          <p key={li} className="text-sm font-semibold leading-relaxed">
+            {line}
+          </p>
+        ))}
       </div>
     </Button>
   );
-});
+  }),
+  (a, b) =>
+    a.slide === b.slide &&
+    a.index === b.index &&
+    a.isSelected === b.isSelected &&
+    a.onClick === b.onClick &&
+    a.font === b.font
+);
 
 function getSlideLabel(index: number): string {
   return `Slide ${index + 1}`;
@@ -196,6 +293,11 @@ function getSlideLabel(index: number): string {
 const THUMB_VIRTUAL_W = 1920;
 const THUMB_VIRTUAL_H = 1080;
 const THUMB_AVAILABLE_H = THUMB_VIRTUAL_H - THUMB_VIRTUAL_W * 0.1;
+const THUMB_WIDTH = 160;
+const THUMB_GAP = 12;
+const THUMB_HEIGHT_PX = 118;
+
+const thumbnailFontSizeCache = new WeakMap<readonly string[], number>();
 
 function useBackgroundSrc(path?: string) {
   const [src, setSrc] = useState<string | undefined>();
@@ -224,16 +326,18 @@ function useBackgroundSrc(path?: string) {
   return src;
 }
 
-const SequenceThumbnail = forwardRef<
-  HTMLButtonElement,
-  {
-    slide: LyricSlide;
-    isSelected: boolean;
-    lyricData: LyricData;
-    profileBackground?: string;
-    onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  }
->(({ slide, isSelected, lyricData, profileBackground, onClick }, ref) => {
+const SequenceThumbnail = memo(
+  forwardRef<
+    HTMLButtonElement,
+    {
+      slide: LyricSlide;
+      isSelected: boolean;
+      lyricData: LyricData;
+      profileBackground?: string;
+      index: number;
+      onClick: (index: number, e: React.MouseEvent<HTMLButtonElement>) => void;
+    }
+  >(({ slide, isSelected, lyricData, profileBackground, index, onClick }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null!);
   const textRef = useRef<HTMLDivElement>(null);
   const { width: containerWidth = 0 } = useResizeObserver({ ref: containerRef });
@@ -247,24 +351,31 @@ const SequenceThumbnail = forwardRef<
     const text = textRef.current;
     if (!text) return;
 
-    let lo = 1;
-    let hi = fontSizeNum;
+    let size = thumbnailFontSizeCache.get(slide.lines);
+    if (!size) {
+      let lo = 1;
+      let hi = fontSizeNum;
 
-    while (hi - lo > 1) {
-      const mid = Math.floor((lo + hi) / 2);
-      text.style.fontSize = `${mid}px`;
-      if (text.scrollHeight <= THUMB_AVAILABLE_H) {
-        lo = mid;
-      } else {
-        hi = mid;
+      while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2);
+        text.style.fontSize = `${mid}px`;
+        if (text.scrollHeight <= THUMB_AVAILABLE_H) {
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+
+      size = lo;
+      if (text.scrollHeight > THUMB_AVAILABLE_H) {
+        size = Math.max(lo - 1, 1);
       }
     }
 
-    text.style.fontSize = `${lo}px`;
-    if (text.scrollHeight > THUMB_AVAILABLE_H) {
-      text.style.fontSize = `${Math.max(lo - 1, 1)}px`;
-    }
-  });
+    text.style.fontSize = `${size}px`;
+    thumbnailFontSizeCache.set(slide.lines, size);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slide.lines, fontSizeNum]);
 
   const textAlign = (lyricData.metadata.alignment || 'center') as React.CSSProperties['textAlign'];
 
@@ -272,7 +383,7 @@ const SequenceThumbnail = forwardRef<
     <button
       ref={ref}
       type="button"
-      onClick={(e) => onClick(e)}
+      onClick={(e) => onClick(index, e)}
       className={cn(
         'shrink-0 w-40 rounded-lg overflow-hidden transition-all outline-none',
         isSelected ? 'ring-2 ring-primary' : 'ring-1 ring-border/30 hover:ring-border/60'
@@ -305,13 +416,19 @@ const SequenceThumbnail = forwardRef<
               fontFamily: lyricData.metadata.font || undefined,
             }}
           >
-            {slide.lines.map((line) => {
-              const id = crypto.randomUUID();
-              return <div key={id}>{line}</div>;
-            })}
+            {slide.lines.map((line, li) => (
+              <div key={li}>{line}</div>
+            ))}
           </div>
         </div>
       </div>
     </button>
   );
-});
+  }),
+  (a, b) =>
+    a.slide === b.slide &&
+    a.isSelected === b.isSelected &&
+    a.lyricData === b.lyricData &&
+    a.profileBackground === b.profileBackground &&
+    a.onClick === b.onClick
+);
