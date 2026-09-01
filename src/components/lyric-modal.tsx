@@ -129,13 +129,15 @@ function SlidePreview({
       setBgSrc(undefined);
       return;
     }
-    if (effectiveBg.startsWith('http') || effectiveBg.startsWith('#')) {
+    if (effectiveBg.startsWith('#')) {
       setBgSrc(effectiveBg);
       return;
     }
     let cancelled = false;
-    thumbnailService
-      .getThumbnail(effectiveBg, 800)
+    const loader = effectiveBg.startsWith('http')
+      ? thumbnailService.getRemoteThumbnail(effectiveBg)
+      : thumbnailService.getThumbnail(effectiveBg, 800);
+    loader
       .then((url) => {
         if (!cancelled) setBgSrc(url);
       })
@@ -151,6 +153,7 @@ function SlidePreview({
         <img
           src={bgSrc}
           alt=""
+          decoding="async"
           className="absolute inset-0 w-full h-full object-cover"
           aria-hidden
         />
