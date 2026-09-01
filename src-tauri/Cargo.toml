@@ -50,6 +50,7 @@ axum = { version = "0.7", features = ["ws"] }
 openh264 = "0.9"
 screenshots = "0.8.10"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "bmp", "gif", "rayon"] }
+jpeg-decoder = "0.3"
 symphonia = { version = "0.5", default-features = false, features = ["mp3", "aac", "isomp4", "opt-simd"] }
 blake3 = "1"
 quick-xml = "0.36"

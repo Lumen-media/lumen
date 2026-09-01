@@ -1,12 +1,16 @@
 use std::path::Path;
 
 pub fn try_get(src: &Path, dest: &Path, size: u32) -> bool {
-    if let Some(img) = platform::get_thumbnail(src, size) {
+    if let Some(img) = get_thumbnail(src, size) {
         let img = img.thumbnail(size, size);
         img.save_with_format(dest, image::ImageFormat::Jpeg).is_ok()
     } else {
         false
     }
+}
+
+pub fn get_thumbnail(src: &Path, size: u32) -> Option<image::DynamicImage> {
+    platform::get_thumbnail(src, size)
 }
 
 // ── Windows: IShellItemImageFactory → HBITMAP → BGRA pixels ──────────────────
