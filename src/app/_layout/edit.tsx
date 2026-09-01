@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pencil } from 'lucide-react';
 import { forwardRef, memo, useCallback, useEffect, useRef, useState } from 'react';
-import { useEventListener, useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
+import { useEventListener, useIsomorphicLayoutEffect } from 'usehooks-ts';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
@@ -53,7 +53,7 @@ function RouteComponent() {
     count: slideCount,
     getScrollElement: () => rowViewportRef.current,
     estimateSize: () => 72,
-    overscan: 8,
+    overscan: 3,
     measureElement: (el) => el.getBoundingClientRect().height,
   });
 
@@ -62,13 +62,15 @@ function RouteComponent() {
     horizontal: true,
     getScrollElement: () => thumbViewportRef.current,
     estimateSize: () => THUMB_WIDTH + THUMB_GAP,
-    overscan: 8,
+    overscan: 3,
   });
 
   const presentRef = useRef(presentLyric);
   presentRef.current = presentLyric;
   const filePathRef = useRef(filePath);
   filePathRef.current = filePath;
+
+  const lastAutoScrollRef = useRef<number | null>(null);
 
   const handleSelectSlide = useCallback(
     (index: number) => {
@@ -101,7 +103,12 @@ function RouteComponent() {
   }, [filePath, restore]);
 
   useEffect(() => {
-    if (selectedSlideIndex === null) return;
+    if (selectedSlideIndex === null) {
+      lastAutoScrollRef.current = null;
+      return;
+    }
+    if (lastAutoScrollRef.current === selectedSlideIndex) return;
+    lastAutoScrollRef.current = selectedSlideIndex;
     // Keep the selected row within view for keyboard navigation (slice may not be mounted yet)
     const el = slideRowRefs.current.get(selectedSlideIndex);
     if (el) {
@@ -115,6 +122,7 @@ function RouteComponent() {
     } else {
       thumbVirtualizer.scrollToIndex(selectedSlideIndex, { align: 'center' });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSlideIndex, rowVirtualizer, thumbVirtualizer]);
 
   useEventListener('keydown', (e: KeyboardEvent) => {
@@ -209,7 +217,7 @@ function RouteComponent() {
                 <div
                   key={slideIds[index]}
                   data-index={index}
-                  className="absolute top-0"
+                  className="absolute top-0 ml-0.5 mt-0.5"
                   style={{
                     width: THUMB_WIDTH,
                     transform: `translateX(${virtualItem.start}px)`,
@@ -255,28 +263,28 @@ const SlideRow = memo(
         ref={ref}
         variant="ghost"
         onClick={(e) => onClick(index, e)}
-      className={cn(
-        'flex items-start justify-start w-full gap-4 text-left h-auto px-4 py-3 whitespace-normal',
-        isSelected && 'bg-primary/10'
-      )}
-    >
-      <span className="text-xs font-bold uppercase tracking-wider text-primary shrink-0 pt-1 min-w-16">
-        {getSlideLabel(index)}
-      </span>
-      <div
-        className="flex-1"
-        style={{
-          fontFamily: font || undefined,
-        }}
+        className={cn(
+          'flex items-start justify-start w-full gap-4 text-left h-auto px-4 py-3 whitespace-normal',
+          isSelected && 'bg-primary/10'
+        )}
       >
-        {slide.lines.map((line, li) => (
-          <p key={li} className="text-sm font-semibold leading-relaxed">
-            {line}
-          </p>
-        ))}
-      </div>
-    </Button>
-  );
+        <span className="text-xs font-bold uppercase tracking-wider text-primary shrink-0 pt-1 min-w-16">
+          {getSlideLabel(index)}
+        </span>
+        <div
+          className="flex-1"
+          style={{
+            fontFamily: font || undefined,
+          }}
+        >
+          {slide.lines.map((line, li) => (
+            <p key={li} className="text-sm font-semibold leading-relaxed">
+              {line}
+            </p>
+          ))}
+        </div>
+      </Button>
+    );
   }),
   (a, b) =>
     a.slide === b.slide &&
@@ -296,6 +304,8 @@ const THUMB_AVAILABLE_H = THUMB_VIRTUAL_H - THUMB_VIRTUAL_W * 0.1;
 const THUMB_WIDTH = 160;
 const THUMB_GAP = 12;
 const THUMB_HEIGHT_PX = 118;
+
+const THUMB_SCALE = THUMB_WIDTH / THUMB_VIRTUAL_W;
 
 const thumbnailFontSizeCache = new WeakMap<readonly string[], number>();
 
@@ -338,92 +348,97 @@ const SequenceThumbnail = memo(
       onClick: (index: number, e: React.MouseEvent<HTMLButtonElement>) => void;
     }
   >(({ slide, isSelected, lyricData, profileBackground, index, onClick }, ref) => {
-  const containerRef = useRef<HTMLDivElement>(null!);
-  const textRef = useRef<HTMLDivElement>(null);
-  const { width: containerWidth = 0 } = useResizeObserver({ ref: containerRef });
-  const scale = containerWidth / THUMB_VIRTUAL_W;
-  const fontSizeNum = Number.parseFloat(lyricData.metadata.fontSize) || 48;
+    const textRef = useRef<HTMLDivElement>(null);
+    const fontSizeNum = Number.parseFloat(lyricData.metadata.fontSize) || 48;
 
-  const effectiveBg = slide.background || lyricData.metadata.globalBackground || profileBackground;
-  const bgSrc = useBackgroundSrc(effectiveBg);
+    const effectiveBg = slide.background || lyricData.metadata.globalBackground || profileBackground;
+    const bgSrc = useBackgroundSrc(effectiveBg);
 
-  useIsomorphicLayoutEffect(() => {
-    const text = textRef.current;
-    if (!text) return;
+    useIsomorphicLayoutEffect(() => {
+      const text = textRef.current;
+      if (!text) return;
 
-    let size = thumbnailFontSizeCache.get(slide.lines);
-    if (!size) {
-      let lo = 1;
-      let hi = fontSizeNum;
+      const size = thumbnailFontSizeCache.get(slide.lines);
+      if (!size) {
+        const id = requestAnimationFrame(() => {
+          const cached = thumbnailFontSizeCache.get(slide.lines);
+          if (cached) {
+            text.style.fontSize = `${cached}px`;
+            return;
+          }
+          let lo = 1;
+          let hi = fontSizeNum;
 
-      while (hi - lo > 1) {
-        const mid = Math.floor((lo + hi) / 2);
-        text.style.fontSize = `${mid}px`;
-        if (text.scrollHeight <= THUMB_AVAILABLE_H) {
-          lo = mid;
-        } else {
-          hi = mid;
-        }
+          while (hi - lo > 1) {
+            const mid = Math.floor((lo + hi) / 2);
+            text.style.fontSize = `${mid}px`;
+            if (text.scrollHeight <= THUMB_AVAILABLE_H) {
+              lo = mid;
+            } else {
+              hi = mid;
+            }
+          }
+
+          let fitted = lo;
+          if (text.scrollHeight > THUMB_AVAILABLE_H) {
+            fitted = Math.max(lo - 1, 1);
+          }
+          text.style.fontSize = `${fitted}px`;
+          thumbnailFontSizeCache.set(slide.lines, fitted);
+        });
+        return () => cancelAnimationFrame(id);
       }
 
-      size = lo;
-      if (text.scrollHeight > THUMB_AVAILABLE_H) {
-        size = Math.max(lo - 1, 1);
-      }
-    }
+      text.style.fontSize = `${size}px`;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [slide.lines, fontSizeNum]);
 
-    text.style.fontSize = `${size}px`;
-    thumbnailFontSizeCache.set(slide.lines, size);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slide.lines, fontSizeNum]);
+    const textAlign = (lyricData.metadata.alignment || 'center') as React.CSSProperties['textAlign'];
 
-  const textAlign = (lyricData.metadata.alignment || 'center') as React.CSSProperties['textAlign'];
-
-  return (
-    <button
-      ref={ref}
-      type="button"
-      onClick={(e) => onClick(index, e)}
-      className={cn(
-        'shrink-0 w-40 rounded-lg overflow-hidden transition-all outline-none',
-        isSelected ? 'ring-2 ring-primary' : 'ring-1 ring-border/30 hover:ring-border/60'
-      )}
-    >
-      <div ref={containerRef} className="relative aspect-video bg-black">
-        {bgSrc && (
-          <img
-            src={bgSrc}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-            aria-hidden
-          />
+    return (
+      <button
+        ref={ref}
+        type="button"
+        onClick={(e) => onClick(index, e)}
+        className={cn(
+          'shrink-0 w-40 rounded-lg overflow-hidden transition-all outline-none',
+          isSelected ? 'ring-2 ring-primary' : 'ring-1 ring-border/30 hover:ring-border/60'
         )}
-        <div
-          className="absolute top-1/2 left-1/2 flex items-center justify-center overflow-hidden pointer-events-none"
-          style={{
-            width: `${THUMB_VIRTUAL_W}px`,
-            height: `${THUMB_VIRTUAL_H}px`,
-            padding: '5%',
-            transform: `translate(-50%, -50%) scale(${scale})`,
-            opacity: scale > 0 ? 1 : 0,
-          }}
-        >
+      >
+        <div className="relative aspect-video bg-black">
+          {bgSrc && (
+            <img
+              src={bgSrc}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+              aria-hidden
+            />
+          )}
           <div
-            ref={textRef}
-            className="text-white uppercase leading-relaxed w-full font-semibold"
+            className="absolute top-1/2 left-1/2 flex items-center justify-center overflow-hidden pointer-events-none"
             style={{
-              textAlign,
-              fontFamily: lyricData.metadata.font || undefined,
+              width: `${THUMB_VIRTUAL_W}px`,
+              height: `${THUMB_VIRTUAL_H}px`,
+              padding: '5%',
+              transform: `translate(-50%, -50%) scale(${THUMB_SCALE})`,
             }}
           >
-            {slide.lines.map((line, li) => (
-              <div key={li}>{line}</div>
-            ))}
+            <div
+              ref={textRef}
+              className="text-white uppercase leading-relaxed w-full font-semibold"
+              style={{
+                textAlign,
+                fontFamily: lyricData.metadata.font || undefined,
+              }}
+            >
+              {slide.lines.map((line, li) => (
+                <div key={li}>{line}</div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-    </button>
-  );
+      </button>
+    );
   }),
   (a, b) =>
     a.slide === b.slide &&

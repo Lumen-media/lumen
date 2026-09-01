@@ -53,6 +53,8 @@ const VIRTUAL_H = 1080;
 
 const AVAILABLE_H = VIRTUAL_H - VIRTUAL_W * 0.1;
 
+const previewFontSizeCache = new WeakMap<readonly string[], number>();
+
 function SlidePreview({
   slide,
   textAlign,
@@ -82,24 +84,42 @@ function SlidePreview({
     const text = textRef.current;
     if (!text) return;
 
-    let lo = 1;
-    let hi = fontSizeNum;
+    const cached = previewFontSizeCache.get(slide.lines);
+    if (cached) {
+      text.style.fontSize = `${cached}px`;
+      return;
+    }
 
-    while (hi - lo > 1) {
-      const mid = Math.floor((lo + hi) / 2);
-      text.style.fontSize = `${mid}px`;
-      if (text.scrollHeight <= AVAILABLE_H) {
-        lo = mid;
-      } else {
-        hi = mid;
+    const id = requestAnimationFrame(() => {
+      const hit = previewFontSizeCache.get(slide.lines);
+      if (hit) {
+        text.style.fontSize = `${hit}px`;
+        return;
       }
-    }
+      let lo = 1;
+      let hi = fontSizeNum;
 
-    text.style.fontSize = `${lo}px`;
-    if (text.scrollHeight > AVAILABLE_H) {
-      text.style.fontSize = `${Math.max(lo - 1, 1)}px`;
-    }
-  }, [slide.lines, fontSizeNum, containerWidth]);
+      while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2);
+        text.style.fontSize = `${mid}px`;
+        if (text.scrollHeight <= AVAILABLE_H) {
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+
+      text.style.fontSize = `${lo}px`;
+      let fitted = lo;
+      if (text.scrollHeight > AVAILABLE_H) {
+        fitted = Math.max(lo - 1, 1);
+        text.style.fontSize = `${fitted}px`;
+      }
+      previewFontSizeCache.set(slide.lines, fitted);
+    });
+    return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slide.lines, fontSizeNum]);
 
   const effectiveBg = background || globalBackground || profileBackground;
   const [bgSrc, setBgSrc] = useState<string | undefined>();
