@@ -383,6 +383,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tauri::Builder::default()
         .register_uri_scheme_protocol("lumen-module", handle_module_request)
+        .register_uri_scheme_protocol("lumen", thumbnail::protocol::handle_lumen_request)
+        .register_uri_scheme_protocol("lumen-thumb", thumbnail::protocol::handle_lumen_request)
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_sql::Builder::new().build())
