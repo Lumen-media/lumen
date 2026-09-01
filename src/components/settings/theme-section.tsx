@@ -8,6 +8,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { Profile } from '@/services/profile-service';
+import { thumbnailService } from '@/services/thumbnail-service';
 import { useProfileStore } from '@/stores/profile-store';
 import { ACCENT_PRESETS } from '@/stores/theme-store';
 import {
@@ -19,30 +20,53 @@ import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 function BackgroundPreview({ background }: { background: Profile['defaultBackground'] }) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [srcUrl, setSrcUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!background || (background.type === 'image' && background.src.startsWith('http'))) {
-      setBlobUrl(null);
+    if (!background) {
+      setSrcUrl(null);
       return;
     }
-    let url: string | null = null;
-    readFile(background.src).then((bytes) => {
-      const ext = background.src.split('.').pop()?.toLowerCase() ?? '';
-      const mime =
-        ext === 'mp4'
-          ? 'video/mp4'
-          : ext === 'webm'
-            ? 'video/webm'
-            : ext === 'mov'
-              ? 'video/quicktime'
-              : 'image/jpeg';
-      const blob = new Blob([bytes], { type: mime });
-      url = URL.createObjectURL(blob);
-      setBlobUrl(url);
-    });
+
+    let cancelled = false;
+    let createdUrl: string | null = null;
+
+    if (background.type === 'video') {
+      readFile(background.src)
+        .then((bytes) => {
+          if (cancelled) return;
+          const ext = background.src.split('.').pop()?.toLowerCase() ?? '';
+          const mime =
+            ext === 'mp4'
+              ? 'video/mp4'
+              : ext === 'webm'
+                ? 'video/webm'
+                : ext === 'mov'
+                  ? 'video/quicktime'
+                  : 'video/mp4';
+          const blob = new Blob([bytes], { type: mime });
+          createdUrl = URL.createObjectURL(blob);
+          setSrcUrl(createdUrl);
+        })
+        .catch(() => {
+          if (!cancelled) setSrcUrl(null);
+        });
+    } else {
+      const loader = background.src.startsWith('http')
+        ? thumbnailService.getRemoteThumbnail(background.src)
+        : thumbnailService.getThumbnail(background.src, 800);
+      loader
+        .then((url) => {
+          if (!cancelled) setSrcUrl(url);
+        })
+        .catch(() => {
+          if (!cancelled) setSrcUrl(null);
+        });
+    }
+
     return () => {
-      if (url) URL.revokeObjectURL(url);
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
   }, [background]);
 
@@ -52,18 +76,15 @@ function BackgroundPreview({ background }: { background: Profile['defaultBackgro
     );
   }
 
-  const src =
-    background.type === 'image' && background.src.startsWith('http') ? background.src : blobUrl;
-
-  if (!src) {
+  if (!srcUrl) {
     return <div className="size-full bg-muted animate-pulse" />;
   }
 
   if (background.type === 'video') {
-    return <video src={src} className="size-full object-cover" muted />;
+    return <video src={srcUrl} className="size-full object-cover" muted />;
   }
 
-  return <img src={src} alt={background.name} className="size-full object-cover" />;
+  return <img src={srcUrl} alt={background.name} decoding="async" className="size-full object-cover" />;
 }
 
 const LANGUAGES = [

@@ -2,6 +2,7 @@ use std::path::Path;
 
 pub fn try_get(src: &Path, dest: &Path, size: u32) -> bool {
     if let Some(img) = platform::get_thumbnail(src, size) {
+        let img = img.thumbnail(size, size);
         img.save_with_format(dest, image::ImageFormat::Jpeg).is_ok()
     } else {
         false
@@ -28,10 +29,8 @@ mod platform {
         use windows::Win32::UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF};
         use windows::core::PCWSTR;
 
-        // SIIGBF_BIGGERSIZEOK (0x01) — return closest available size, use Shell cache or generate
         const FLAGS: SIIGBF = SIIGBF(0x01);
 
-        // Shell COM objects require STA
         let _ = CoInitializeEx(None, COINIT(0x2)); // COINIT_APARTMENTTHREADED
 
         let wide: Vec<u16> = src
@@ -46,7 +45,6 @@ mod platform {
         let sz = SIZE { cx: size as i32, cy: size as i32 };
         let hbitmap = factory.GetImage(sz, FLAGS).ok()?;
 
-        // Get actual bitmap dimensions
         let mut bm = BITMAP::default();
         GetObjectW(
             HGDIOBJ(hbitmap.0),
@@ -99,7 +97,6 @@ mod platform {
             return None;
         }
 
-        // Windows returns BGRA — convert to RGBA
         for chunk in pixels.chunks_exact_mut(4) {
             chunk.swap(0, 2);
         }

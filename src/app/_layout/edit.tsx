@@ -317,13 +317,15 @@ function useBackgroundSrc(path?: string) {
       setSrc(undefined);
       return;
     }
-    if (path.startsWith('http') || path.startsWith('#')) {
+    if (path.startsWith('#')) {
       setSrc(path);
       return;
     }
     let cancelled = false;
-    thumbnailService
-      .getThumbnail(path)
+    const loader = path.startsWith('http')
+      ? thumbnailService.getRemoteThumbnail(path)
+      : thumbnailService.getThumbnail(path);
+    loader
       .then((url) => {
         if (!cancelled) setSrc(url);
       })
@@ -410,6 +412,7 @@ const SequenceThumbnail = memo(
             <img
               src={bgSrc}
               alt=""
+              decoding="async"
               className="absolute inset-0 w-full h-full object-cover"
               aria-hidden
             />
