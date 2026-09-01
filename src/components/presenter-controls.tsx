@@ -21,7 +21,7 @@ import { PresenterControlsSlot } from '@/modules/components/PresenterControlsSlo
 import { useModuleStore } from '@/modules/store';
 import type { StageBackdropChangeDetail } from '@/modules/types';
 import { type LyricData, type LyricSlide, lyricService } from '@/services/lyric-service';
-import { thumbnailService } from '@/services/thumbnail-service';
+import { lumenUrl } from '@/services/lumen-url';
 import { usePlayerStore } from '@/stores/player-store';
 import { usePresentationStore } from '@/stores/presentation-store';
 import { useProfileStore } from '@/stores/profile-store';
@@ -262,23 +262,7 @@ function useBackgroundSrc(path?: string) {
       setSrc(undefined);
       return;
     }
-
-    if (path.startsWith('http') || path.startsWith('#') || path.startsWith('blob:') || path.startsWith('data:')) {
-      setSrc(path);
-      return;
-    }
-
-    let cancelled = false;
-    thumbnailService
-      .getThumbnail(path)
-      .then((url) => {
-        if (!cancelled) setSrc(url);
-      })
-      .catch(() => setSrc(undefined));
-
-    return () => {
-      cancelled = true;
-    };
+    setSrc(lumenUrl(path, 1280));
   }, [path]);
 
   return src;

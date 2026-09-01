@@ -3,6 +3,7 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type React from 'react';
 import { lyricService } from '@/services/lyric-service';
+import { lumenUrl } from '@/services/lumen-url';
 import { mediaDbService } from '@/services/media-db-service';
 import { useModuleStore } from '../store';
 import { usePlayerStore } from '@/stores/player-store';
@@ -33,14 +34,6 @@ import type { Profile } from '@/services/profile-service';
 
 function stripExt(name: string) {
   return name.replace(/\.[^/.]+$/, '');
-}
-
-function optimizedBgUrl(src: string, opts: { w?: number; h?: number } = {}): string {
-  const query = new URLSearchParams({ src });
-  if (opts.w) query.set('w', String(opts.w));
-  if (opts.h) query.set('h', String(opts.h));
-  const scheme = opts.w || opts.h ? 'lumen-thumb' : 'lumen';
-  return `${scheme}://opt?${query.toString()}`;
 }
 
 function toThemeRef(profile?: Profile): ThemeRef {
@@ -213,8 +206,9 @@ export function createLibraryHostAPI(): LibraryHostAPI {
     async metadata(_path) {
       return {};
     },
-    async thumbnail(_path, _size) {
-      return '';
+    async thumbnail(path, size) {
+      if (!path) return '';
+      return lumenUrl(path, size ?? 200);
     },
     async addUrl(input) {
       const file = await mediaDbService.insertUrlMedia(input.url, { duration: input.duration });
@@ -698,7 +692,7 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
         return { src, type: profileBg.type, name: profileBg.name };
       }
 
-      return { src: optimizedBgUrl(src), type: profileBg.type, name: profileBg.name };
+      return { src: lumenUrl(src), type: profileBg.type, name: profileBg.name };
     },
     onDefaultBackgroundChange(handler) {
       let lastSrc: string | null | undefined ;
@@ -719,8 +713,8 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
 
         handler({
           ...bg,
-          src: optimizedBgUrl(src),
-          thumb: optimizedBgUrl(src, { w: 200, h: 200 }),
+          src: lumenUrl(src),
+          thumb: lumenUrl(src, 200),
         });
       };
 

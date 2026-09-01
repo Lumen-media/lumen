@@ -42,12 +42,10 @@ pub fn handle_lumen_request(
 
     let mut src = String::new();
     let mut req_w: Option<u32> = None;
-    let mut req_h: Option<u32> = None;
     for (k, v) in form_urlencoded::parse(query.as_bytes()) {
         match k.as_ref() {
             "src" => src = v.into_owned(),
             "w" => req_w = v.parse().ok(),
-            "h" => req_h = v.parse().ok(),
             _ => {}
         }
     }
@@ -66,7 +64,7 @@ pub fn handle_lumen_request(
         Err(e) => return response(500, e.to_string()),
     };
 
-    match process(&cache_root, &src, is_thumb, req_w, req_h) {
+    match process(&cache_root, &src, is_thumb, req_w) {
         Ok((bytes, mime)) => tauri::http::Response::builder()
             .status(200)
             .header("Content-Type", mime)
@@ -83,20 +81,13 @@ fn process(
     src: &str,
     is_thumb: bool,
     req_w: Option<u32>,
-    req_h: Option<u32>,
 ) -> Result<(Vec<u8>, &'static str), (u16, String)> {
     let is_remote = src.starts_with("http://") || src.starts_with("https://");
 
-    let has_dims = req_w.is_some() || req_h.is_some();
+    let has_dims = req_w.is_some();
 
-    if has_dims || (is_thumb && req_w.is_none() && req_h.is_none()) {
-        let (w, h) = match (req_w, req_h) {
-            (Some(w), Some(h)) => (w.max(1), h.max(1)),
-            (Some(w), None) => (w.max(1), w.max(1)),
-            (None, Some(h)) => (h.max(1), h.max(1)),
-            (None, None) => (DEFAULT_THUMB, DEFAULT_THUMB),
-        };
-        return sized(&local_cache_dir(cache_root, is_remote), src, is_remote, w, h)
+    if has_dims || is_thumb {
+        return sized(&local_cache_dir(cache_root, is_remote), src, is_remote, req_w)
             .map(|bytes| (bytes, "image/jpeg"));
     }
 
@@ -151,47 +142,82 @@ fn process(
     }
 }
 
-fn sized(dir: &Path, src: &str, is_remote: bool, w: u32, h: u32) -> Result<Vec<u8>, (u16, String)> {
+fn sized(
+    dir: &Path,
+    src: &str,
+    is_remote: bool,
+    req_w: Option<u32>,
+) -> Result<Vec<u8>, (u16, String)> {
     std::fs::create_dir_all(dir).map_err(io_err)?;
 
     let hash = blake3::hash(src.as_bytes()).to_hex();
-    if let Some(dest) = find_cached(dir, &hash, w, h) {
+    let w = req_w.map(|v| v.max(1)).unwrap_or(DEFAULT_THUMB);
+
+    if let Some(dest) = find_cached(dir, &hash, w) {
         return std::fs::read(&dest).map_err(io_err);
     }
 
-    let dest = dir.join(format!("{hash}_{w}x{h}.jpg"));
+    let path = Path::new(src);
+    if !path.exists() {
+        return Err((404, format!("file not found: {src}")));
+    }
 
     if is_remote {
         if is_unsplash(src) {
-            let bytes = fetch(&unsplash_optimized(src, Some(w), Some(h)))?;
+            let bytes = fetch(&unsplash_optimized(src, Some(w), None))?;
+            let (aw, ah) = image_dimensions_bytes(&bytes).map_err(|e| (400, e))?;
+            let dest = dir.join(format!("{hash}_{aw}x{ah}.jpg"));
             std::fs::write(&dest, &bytes).map_err(io_err)?;
-            cache_insert(dir, &hash, w, h, dest.clone());
+            cache_insert(dir, &hash, aw, ah, dest.clone());
             return Ok(bytes);
         }
         let bytes = fetch(src)?;
         let img = image::load_from_memory(&bytes).map_err(|e| (400, format!("image decode: {e}")))?;
+        let (ow, oh) = (img.width(), img.height());
+        let h = derive_h(w, ow, oh);
+        let dest = dir.join(format!("{hash}_{w}x{h}.jpg"));
         write_jpeg(&img.thumbnail(w, h), &dest, JPEG_QUALITY_THUMB).map_err(str_err)?;
-    } else {
-        let path = Path::new(src);
-        if !path.exists() {
-            return Err((404, format!("file not found: {src}")));
-        }
-        let ext = extension_of(src);
-        if is_image_ext(&ext) {
-            let img = image::open(path).map_err(|e| (400, format!("image decode: {e}")))?;
-            write_jpeg(&img.thumbnail(w, h), &dest, JPEG_QUALITY_THUMB).map_err(str_err)?;
-        } else if is_video_ext(&ext) {
-            video_thumb::generate_box(path, &dest, w, h).map_err(str_err)?;
-        } else {
-            return Err((415, format!("unsupported source for lumen-thumb://: {src}")));
-        }
+        cache_insert(dir, &hash, w, h, dest.clone());
+        return std::fs::read(&dest).map_err(io_err);
     }
 
-    cache_insert(dir, &hash, w, h, dest.clone());
-    std::fs::read(&dest).map_err(io_err)
+    let ext = extension_of(src);
+    if is_image_ext(&ext) {
+        let (ow, oh) =
+            image::image_dimensions(path).map_err(|e| (400, format!("image decode: {e}")))?;
+        let h = derive_h(w, ow, oh);
+        let dest = dir.join(format!("{hash}_{w}x{h}.jpg"));
+        let img = image::open(path).map_err(|e| (400, format!("image decode: {e}")))?;
+        write_jpeg(&img.thumbnail(w, h), &dest, JPEG_QUALITY_THUMB).map_err(str_err)?;
+        cache_insert(dir, &hash, w, h, dest.clone());
+        std::fs::read(&dest).map_err(io_err)
+    } else if is_video_ext(&ext) {
+        let dest = dir.join(format!("{hash}_w{w}.jpg"));
+        let (vw, vh) = video_thumb::generate_box_width(path, &dest, w).map_err(str_err)?;
+        let final_dest = dir.join(format!("{hash}_{vw}x{vh}.jpg"));
+        if final_dest != dest {
+            std::fs::rename(&dest, &final_dest).map_err(io_err)?;
+        }
+        cache_insert(dir, &hash, vw, vh, final_dest.clone());
+        std::fs::read(&final_dest).map_err(io_err)
+    } else {
+        Err((415, format!("unsupported source for lumen-thumb://: {src}")))
+    }
 }
 
-fn find_cached(dir: &Path, hash: &str, req_w: u32, req_h: u32) -> Option<PathBuf> {
+fn derive_h(w: u32, ow: u32, oh: u32) -> u32 {
+    if ow == 0 {
+        return w;
+    }
+    ((w as u64 * oh as u64) / ow as u64).max(1) as u32
+}
+
+fn image_dimensions_bytes(bytes: &[u8]) -> Result<(u32, u32), String> {
+    let img = image::load_from_memory(bytes).map_err(|e| format!("image decode: {e}"))?;
+    Ok((img.width(), img.height()))
+}
+
+fn find_cached(dir: &Path, hash: &str, w: u32) -> Option<PathBuf> {
     let index_key = format!("{}::{}", dir.display(), hash);
     let index = INDEX.get_or_init(|| Mutex::new(HashMap::new()));
     let mut lock = index.lock().unwrap();
@@ -200,12 +226,11 @@ fn find_cached(dir: &Path, hash: &str, req_w: u32, req_h: u32) -> Option<PathBuf
     }
     let entries = &lock[&index_key];
 
-    let max_w = (req_w as f64 * TOLERANCE).ceil() as u64;
-    let max_h = (req_h as f64 * TOLERANCE).ceil() as u64;
+    let max_w = (w as f64 * TOLERANCE).ceil() as u64;
 
     let mut best: Option<(u64, PathBuf)> = None;
     for (cw, ch, path) in entries {
-        if *cw >= req_w && *ch >= req_h && (*cw as u64) <= max_w && (*ch as u64) <= max_h {
+        if *cw >= w && (*cw as u64) <= max_w {
             let area = (*cw as u64) * (*ch as u64);
             if best.as_ref().map_or(true, |(a, _)| area < *a) {
                 best = Some((area, path.clone()));
@@ -284,7 +309,10 @@ fn unsplash_optimized(src: &str, w: Option<u32>, h: Option<u32>) -> String {
             pairs.append_pair("h", &h.to_string());
         }
         pairs.append_pair("q", "80");
-        pairs.append_pair("fit", "crop");
+        pairs.append_pair(
+            "fit",
+            if w.is_some() && h.is_some() { "crop" } else { "max" },
+        );
         pairs.append_pair("fm", "jpg");
         pairs.append_pair("auto", "format");
     }

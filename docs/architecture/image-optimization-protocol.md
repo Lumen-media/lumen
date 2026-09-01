@@ -43,12 +43,14 @@ Frontend (React)                     Rust handler (protocol.rs)
 
 ## URL Format
 
-Both schemes accept the source as a percent-encoded query param. The `w`/`h`
-params only apply to `lumen-thumb://`.
+Both schemes accept the source as a percent-encoded query param. The
+`lumen-thumb://` scheme takes a single `w` (width); the height is always
+derived from the source image's aspect ratio, so the result is never
+distorted. Cropping is left to the frontend (e.g. CSS `object-fit`).
 
 ```
 lumen://?src=<url-encoded source>
-lumen-thumb://?src=<url-encoded source>&w=<width>&h=<height>
+lumen-thumb://?src=<url-encoded source>&w=<width>
 ```
 
 - `<source>` is an absolute local path (`C:\Users\...\wallpaper.jpg`) or an
@@ -58,7 +60,7 @@ lumen-thumb://?src=<url-encoded source>&w=<width>&h=<height>
 
 ```
 http://lumen.localhost/?src=...
-http://lumen-thumb.localhost/?src=...&w=...&h=...
+http://lumen-thumb.localhost/?src=...&w=...
 ```
 
 Both are registered in `src-tauri/src/main.rs`:
@@ -77,8 +79,8 @@ The handler detects which scheme was hit by checking the URI string for
 // Full optimized local image
 `lumen://?src=${encodeURIComponent('C:\\Users\\me\\Pictures\\bg.jpg')}`
 
-// Thumbnail 200×200 of the same file
-`lumen-thumb://?src=${encodeURIComponent('C:\\Users\\me\\Pictures\\bg.jpg')}&w=200&h=200`
+// Thumbnail of the same file, max width 200 (height proportional to source)
+`lumen-thumb://?src=${encodeURIComponent('C:\\Users\\me\\Pictures\\bg.jpg')}&w=200`
 
 // Full remote Unsplash image
 `lumen://?src=${encodeURIComponent('https://images.unsplash.com/photo-xxx')}`
@@ -112,15 +114,16 @@ full:   {blake3(src)}_full.jpg
 ### Size Tolerance
 
 A cached entry can serve a request up to **50% larger** than requested without
-regenerating. A `200x100` request accepts any cached entry with
-`200 <= w <= 300` and `100 <= h <= 150`; the smallest-area matching entry wins.
+regenerating. A `w=200` request accepts any cached entry with
+`200 <= w <= 300`; the smallest-area matching entry wins.
 
 ```rust
 const TOLERANCE: f64 = 1.5; // 50%
 ```
 
 This avoids generating near-duplicate sizes while still returning an image at
-least as large as requested.
+least as large as requested. Height is not matched directly — it follows the
+source aspect ratio, so it is implied by the width.
 
 ### In-Memory Index
 
@@ -145,8 +148,8 @@ generation.
 
 | Extension | Behavior |
 |-----------|----------|
-| Image | Decode + `thumbnail(w, h)` + JPEG quality 82 |
-| Video | First decodable frame via `video_thumb::generate_box` |
+| Image | Read source dims, `h = w × oh / ow`, `thumbnail(w, h)` + JPEG quality 82 |
+| Video | First decodable frame via `video_thumb::generate_box_width` (height derived from frame aspect) |
 | Other | `415 Unsupported Media Type` |
 
 ### Remote URL — full (`lumen://`)
@@ -160,9 +163,11 @@ generation.
 
 ### Remote URL — sized (`lumen-thumb://`)
 
-- **Unsplash:** builds an imgix URL with the exact `w`/`h`, fetches and caches
-  it under the normal `{hash}_{w}x{h}.jpg` key (usable offline).
-- **Other:** fetch + decode + `thumbnail(w, h)` + JPEG quality 82.
+- **Unsplash:** builds an imgix URL with the requested `w` (imgix preserves the
+  aspect ratio when only `w` is given), fetches and caches it under the
+  `{hash}_{w}x{h}.jpg` key with the actual returned dims (usable offline).
+- **Other:** fetch + decode + derive `h` from source aspect + `thumbnail(w, h)`
+  + JPEG quality 82.
 
 ---
 
@@ -170,15 +175,17 @@ generation.
 
 Unsplash image URLs are served by an imgix CDN that can resize on the fly via
 query params. Instead of downloading the full image and re-encoding it locally,
-the handler appends imgix params and lets Unsplash return the exact size:
+the handler appends imgix params and lets Unsplash return the image directly:
 
 ```rust
-unsplash_optimized(src, Some(w), Some(h))  // w, h, q=80, fit=crop, fm=jpg, auto=format
+unsplash_optimized(src, Some(w), None)  // w, q=80, fit=max, fm=jpg, auto=format
 ```
 
-Existing params on the source URL (e.g. `ixid`, `ixlib`) are preserved. The
-bytes returned by Unsplash are written straight to the cache (no decode/encode
-round-trip), so once fetched they remain available offline.
+`fit=max` (only `w` given) keeps the aspect ratio; `fit=crop` is only used when
+both `w` and `h` are supplied. Existing params on the source URL (e.g. `ixid`,
+`ixlib`) are preserved. The bytes returned by Unsplash are written straight to
+the cache (no decode/encode round-trip), so once fetched they remain available
+offline.
 
 ---
 
@@ -204,18 +211,17 @@ In the themes SDK (`src/modules/apis/domain.ts`) a small helper produces the
 URLs when a background is a local file:
 
 ```ts
-function optimizedBgUrl(src: string, opts: { w?: number; h?: number } = {}): string {
+function optimizedBgUrl(src: string, w?: number): string {
   const query = new URLSearchParams({ src });
-  if (opts.w) query.set('w', String(opts.w));
-  if (opts.h) query.set('h', String(opts.h));
-  const scheme = opts.w || opts.h ? 'lumen-thumb' : 'lumen';
+  if (w) query.set('w', String(w));
+  const scheme = w ? 'lumen-thumb' : 'lumen';
   return `${scheme}://opt?${query.toString()}`;
 }
 ```
 
 `defaultBackground()` returns `lumen://…` (full), and
 `onDefaultBackgroundChange()` returns `lumen://…` for `src` plus
-`lumen-thumb://…?w=200&h=200` for `thumb`. Modules (e.g. bible) that render
+`lumen-thumb://…?w=200` for `thumb`. Modules (e.g. bible) that render
 `bg.src` / `bg.thumb` in `<img>` tags automatically use the optimized pipeline
 with zero module changes.
 

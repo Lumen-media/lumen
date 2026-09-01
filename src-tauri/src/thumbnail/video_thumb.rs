@@ -14,6 +14,21 @@ pub fn generate(src: &Path, dest: &Path, size: u32) -> Result<(), String> {
 }
 
 pub fn generate_box(src: &Path, dest: &Path, w: u32, h: u32) -> Result<(), String> {
+    generate_impl(src, dest, Some(w), Some(h)).map(|_| ())
+}
+
+/// Generate a thumbnail with a fixed width; height is derived from the frame's
+/// aspect ratio. Returns the actual thumbnail dimensions used.
+pub fn generate_box_width(src: &Path, dest: &Path, w: u32) -> Result<(u32, u32), String> {
+    generate_impl(src, dest, Some(w), None)
+}
+
+fn generate_impl(
+    src: &Path,
+    dest: &Path,
+    w: Option<u32>,
+    h: Option<u32>,
+) -> Result<(u32, u32), String> {
     let file = std::fs::File::open(src).map_err(|e| format!("file open: {e}"))?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
@@ -78,19 +93,32 @@ pub fn generate_box(src: &Path, dest: &Path, w: u32, h: u32) -> Result<(), Strin
 
         match decoder.decode(&annexb) {
             Ok(Some(yuv)) => {
-                let (w_src, h_src) = yuv.dimensions();
-                let mut rgb = vec![0u8; w_src * h_src * 3];
+                let (ws, hs) = yuv.dimensions();
+                let mut rgb = vec![0u8; ws * hs * 3];
                 yuv.write_rgb8(&mut rgb);
 
-                let img = image::RgbImage::from_raw(w_src as u32, h_src as u32, rgb)
+                let img = image::RgbImage::from_raw(ws as u32, hs as u32, rgb)
                     .ok_or("failed to build image buffer")?;
 
-                let thumb = image::DynamicImage::ImageRgb8(img).thumbnail(w, h);
+                let (tw, th) = match (w, h) {
+                    (Some(w), Some(h)) => (w.max(1), h.max(1)),
+                    (Some(w), None) => {
+                        let h = if ws == 0 { w } else { ((w as u64 * hs as u64) / ws as u64).max(1) as u32 };
+                        (w.max(1), h)
+                    }
+                    (None, Some(h)) => {
+                        let w = if hs == 0 { h } else { ((h as u64 * ws as u64) / hs as u64).max(1) as u32 };
+                        (w, h.max(1))
+                    }
+                    (None, None) => return Err("thumbnail width required".into()),
+                };
+
+                let thumb = image::DynamicImage::ImageRgb8(img).thumbnail(tw, th);
                 thumb
                     .save_with_format(dest, image::ImageFormat::Jpeg)
                     .map_err(|e| format!("save thumbnail: {e}"))?;
 
-                return Ok(());
+                return Ok((tw, th));
             }
             Ok(None) => continue,
             Err(_) => continue,

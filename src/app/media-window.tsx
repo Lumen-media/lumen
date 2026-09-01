@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
-import { readFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
 import { LyricPresentation } from '@/components/lyric-presentation';
@@ -9,6 +8,7 @@ import { PptxPresentation } from '@/components/reveal-presentation';
 import { Videoplayer } from '@/components/ui/videoplayer';
 import { useProfiles } from '@/hooks/use-profiles';
 import { cn } from '@/lib/utils';
+import { lumenUrl } from '@/services/lumen-url';
 import { PresenterSlot } from '@/modules/components/PresenterSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
@@ -131,23 +131,7 @@ function useMediaImageSrc(path?: string | null) {
       setSrc(undefined);
       return;
     }
-
-    if (path.startsWith('http') || path.startsWith('#') || path.startsWith('blob:')) {
-      setSrc(path);
-      return;
-    }
-
-    let url: string;
-    readFile(path)
-      .then((bytes) => {
-        url = URL.createObjectURL(new Blob([bytes]));
-        setSrc(url);
-      })
-      .catch(() => setSrc(undefined));
-
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
+    setSrc(lumenUrl(path, 1280));
   }, [path]);
 
   return src;
@@ -184,16 +168,7 @@ function MediaWindowComponent() {
       setImageSrc(undefined);
       return;
     }
-    let url: string;
-    readFile(imagePath)
-      .then((bytes) => {
-        url = URL.createObjectURL(new Blob([bytes]));
-        setImageSrc(url);
-      })
-      .catch(() => setImageSrc(undefined));
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
+    setImageSrc(lumenUrl(imagePath));
   }, [imagePath]);
 
   const resetPresenterDisplayModes = useCallback(() => {

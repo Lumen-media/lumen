@@ -1,14 +1,13 @@
 'use client';
 
-import { readFile } from '@tauri-apps/plugin-fs';
 import { ImagePlus, X } from 'lucide-react';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { useBoolean, useOnClickOutside } from 'usehooks-ts';
 import { useTheme } from '@/hooks/use-theme';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { lumenUrl } from '@/services/lumen-url';
 import type { Profile } from '@/services/profile-service';
-import { thumbnailService } from '@/services/thumbnail-service';
 import { useProfileStore } from '@/stores/profile-store';
 import { ACCENT_PRESETS } from '@/stores/theme-store';
 import {
@@ -20,55 +19,7 @@ import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 function BackgroundPreview({ background }: { background: Profile['defaultBackground'] }) {
-  const [srcUrl, setSrcUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!background) {
-      setSrcUrl(null);
-      return;
-    }
-
-    let cancelled = false;
-    let createdUrl: string | null = null;
-
-    if (background.type === 'video') {
-      readFile(background.src)
-        .then((bytes) => {
-          if (cancelled) return;
-          const ext = background.src.split('.').pop()?.toLowerCase() ?? '';
-          const mime =
-            ext === 'mp4'
-              ? 'video/mp4'
-              : ext === 'webm'
-                ? 'video/webm'
-                : ext === 'mov'
-                  ? 'video/quicktime'
-                  : 'video/mp4';
-          const blob = new Blob([bytes], { type: mime });
-          createdUrl = URL.createObjectURL(blob);
-          setSrcUrl(createdUrl);
-        })
-        .catch(() => {
-          if (!cancelled) setSrcUrl(null);
-        });
-    } else {
-      const loader = background.src.startsWith('http')
-        ? thumbnailService.getRemoteThumbnail(background.src)
-        : thumbnailService.getThumbnail(background.src, 800);
-      loader
-        .then((url) => {
-          if (!cancelled) setSrcUrl(url);
-        })
-        .catch(() => {
-          if (!cancelled) setSrcUrl(null);
-        });
-    }
-
-    return () => {
-      cancelled = true;
-      if (createdUrl) URL.revokeObjectURL(createdUrl);
-    };
-  }, [background]);
+  const srcUrl = background ? lumenUrl(background.src, background.type === 'video' ? undefined : 1280) : null;
 
   if (!background) {
     return (

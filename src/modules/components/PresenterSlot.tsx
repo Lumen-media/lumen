@@ -1,5 +1,5 @@
-import { readFile } from '@tauri-apps/plugin-fs';
 import { useEffect, useState } from 'react';
+import { lumenUrl } from '@/services/lumen-url';
 import { useProfileStore } from '@/stores/profile-store';
 import { useModuleStore } from '../store';
 import type { PanelSpec } from '../types';
@@ -13,7 +13,7 @@ interface BackgroundMedia {
 
 type PresenterProps = Record<string, unknown>;
 
-function useBackgroundBlobSrc(path?: string): string | undefined {
+function useBackgroundSrc(path?: string, thumb = false): string | undefined {
   const [src, setSrc] = useState<string | undefined>();
 
   useEffect(() => {
@@ -21,35 +21,14 @@ function useBackgroundBlobSrc(path?: string): string | undefined {
       setSrc(undefined);
       return;
     }
-    if (
-      path.startsWith('http') ||
-      path.startsWith('blob:') ||
-      path.startsWith('data:') ||
-      path.startsWith('#')
-    ) {
-      setSrc(path);
-      return;
-    }
-
-    let url: string;
-    readFile(path)
-      .then((bytes) => {
-        url = URL.createObjectURL(new Blob([bytes]));
-        setSrc(url);
-      })
-      .catch(() => setSrc(undefined));
-
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [path]);
+    setSrc(lumenUrl(path, thumb ? 200 : undefined));
+  }, [path, thumb]);
 
   return src;
 }
 
 function PresenterBackground({ media }: { media: BackgroundMedia }) {
-  const blobSrc = useBackgroundBlobSrc(media.type !== 'image' ? media.src : undefined);
-  const src = media.type === 'image' ? media.src : blobSrc;
+  const src = useBackgroundSrc(media.src, media.type === 'image');
 
   if (!src) return null;
 
@@ -64,7 +43,7 @@ function PresenterBackground({ media }: { media: BackgroundMedia }) {
 function PresenterDefaultBackground() {
   const { profiles, activeProfileId } = useProfileStore();
   const profileBg = profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.src;
-  const src = useBackgroundBlobSrc(profileBg);
+  const src = useBackgroundSrc(profileBg);
 
   if (!src) return null;
   return <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />;
