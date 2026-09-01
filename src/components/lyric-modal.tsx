@@ -122,7 +122,7 @@ function SlidePreview({
   }, [slide.lines, fontSizeNum]);
 
   const effectiveBg = background || globalBackground || profileBackground;
-  const bgSrc = effectiveBg?.startsWith('#') ? effectiveBg : effectiveBg ? lumenUrl(effectiveBg, 1280) : undefined;
+  const bgSrc = effectiveBg?.startsWith('#') ? effectiveBg : effectiveBg ? lumenUrl(effectiveBg, { w: 550 }) : undefined;
 
   return (
     <div className="relative aspect-video bg-black rounded-lg border border-border/20 overflow-hidden">

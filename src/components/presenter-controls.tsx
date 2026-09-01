@@ -262,7 +262,7 @@ function useBackgroundSrc(path?: string) {
       setSrc(undefined);
       return;
     }
-    setSrc(lumenUrl(path, 1280));
+    setSrc(lumenUrl(path, { w: 1280 }));
   }, [path]);
 
   return src;
