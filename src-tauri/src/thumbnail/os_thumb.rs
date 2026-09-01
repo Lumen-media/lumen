@@ -9,7 +9,7 @@ pub fn try_get(src: &Path, dest: &Path, size: u32) -> bool {
     }
 }
 
-// ── Windows ──────────────────────────────────────────────────────────────────
+// ── Windows: IShellItemImageFactory → HBITMAP → BGRA pixels ──────────────────
 
 #[cfg(target_os = "windows")]
 mod platform {
@@ -106,15 +106,14 @@ mod platform {
     }
 }
 
-// ── Linux (Freedesktop thumbnail spec) ───────────────────────────────────────
+// ── Linux: Freedesktop thumbnail spec (md5 of file:// URI) ───────────────────
 
 #[cfg(target_os = "linux")]
 mod platform {
     use std::path::Path;
 
     pub fn get_thumbnail(src: &Path, size: u32) -> Option<image::DynamicImage> {
-        // Freedesktop spec: filename = md5(file://path).png
-        // normal/ = 128px max, large/ = 256px max
+        // filename = md5(file://path).png; normal/ = 128px max, large/ = 256px max
         let uri = format!("file://{}", src.to_string_lossy());
         let hash = format!("{:x}", md5::compute(uri.as_bytes()));
 
@@ -134,7 +133,7 @@ mod platform {
     }
 }
 
-// ── macOS — not supported (QuickLook cache is proprietary) ───────────────────
+// ── macOS: not supported (QuickLook cache is proprietary) ────────────────────
 
 #[cfg(target_os = "macos")]
 mod platform {
@@ -145,7 +144,7 @@ mod platform {
     }
 }
 
-// ── Other platforms ───────────────────────────────────────────────────────────
+// ── Other platforms: no OS thumbnail source ──────────────────────────────────
 
 #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
 mod platform {

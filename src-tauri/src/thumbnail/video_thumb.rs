@@ -10,6 +10,10 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
 pub fn generate(src: &Path, dest: &Path, size: u32) -> Result<(), String> {
+    generate_box(src, dest, size, size)
+}
+
+pub fn generate_box(src: &Path, dest: &Path, w: u32, h: u32) -> Result<(), String> {
     let file = std::fs::File::open(src).map_err(|e| format!("file open: {e}"))?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
@@ -29,7 +33,6 @@ pub fn generate(src: &Path, dest: &Path, size: u32) -> Result<(), String> {
 
     let mut format = probed.format;
 
-    // Audio tracks have sample_rate; video tracks don't — use that to distinguish
     let track = format
         .tracks()
         .iter()
@@ -75,14 +78,14 @@ pub fn generate(src: &Path, dest: &Path, size: u32) -> Result<(), String> {
 
         match decoder.decode(&annexb) {
             Ok(Some(yuv)) => {
-                let (w, h) = yuv.dimensions();
-                let mut rgb = vec![0u8; w * h * 3];
+                let (w_src, h_src) = yuv.dimensions();
+                let mut rgb = vec![0u8; w_src * h_src * 3];
                 yuv.write_rgb8(&mut rgb);
 
-                let img = image::RgbImage::from_raw(w as u32, h as u32, rgb)
+                let img = image::RgbImage::from_raw(w_src as u32, h_src as u32, rgb)
                     .ok_or("failed to build image buffer")?;
 
-                let thumb = image::DynamicImage::ImageRgb8(img).thumbnail(size, size);
+                let thumb = image::DynamicImage::ImageRgb8(img).thumbnail(w, h);
                 thumb
                     .save_with_format(dest, image::ImageFormat::Jpeg)
                     .map_err(|e| format!("save thumbnail: {e}"))?;
