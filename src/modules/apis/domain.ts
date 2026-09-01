@@ -1,11 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
-import { readFile } from '@tauri-apps/plugin-fs';
 import { emit, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type React from 'react';
 import { lyricService } from '@/services/lyric-service';
 import { mediaDbService } from '@/services/media-db-service';
-import { thumbnailService } from '@/services/thumbnail-service';
 import { useModuleStore } from '../store';
 import { usePlayerStore } from '@/stores/player-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
@@ -35,6 +33,14 @@ import type { Profile } from '@/services/profile-service';
 
 function stripExt(name: string) {
   return name.replace(/\.[^/.]+$/, '');
+}
+
+function optimizedBgUrl(src: string, opts: { w?: number; h?: number } = {}): string {
+  const query = new URLSearchParams({ src });
+  if (opts.w) query.set('w', String(opts.w));
+  if (opts.h) query.set('h', String(opts.h));
+  const scheme = opts.w || opts.h ? 'lumen-thumb' : 'lumen';
+  return `${scheme}://opt?${query.toString()}`;
 }
 
 function toThemeRef(profile?: Profile): ThemeRef {
@@ -692,13 +698,7 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
         return { src, type: profileBg.type, name: profileBg.name };
       }
 
-      try {
-        const bytes = await readFile(src);
-        const blobUrl = URL.createObjectURL(new Blob([bytes]));
-        return { src: blobUrl, type: profileBg.type, name: profileBg.name };
-      } catch {
-        return { src, type: profileBg.type, name: profileBg.name };
-      }
+      return { src: optimizedBgUrl(src), type: profileBg.type, name: profileBg.name };
     },
     onDefaultBackgroundChange(handler) {
       let lastSrc: string | null | undefined ;
@@ -712,19 +712,16 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
           return;
         }
 
-        Promise.all([
-          readFile(src).then((bytes) => URL.createObjectURL(new Blob([bytes]))),
-          thumbnailService.getThumbnail(src, 200).catch(() => null),
-        ])
-          .then(([blobUrl, thumb]) => {
-            if (!bg) {
-              handler(null);
-              return;
-            }
+        if (!bg) {
+          handler(null);
+          return;
+        }
 
-            handler({ ...bg, src: blobUrl, ...(thumb ? { thumb } : {}) });
-          })
-          .catch(() => handler(bg));
+        handler({
+          ...bg,
+          src: optimizedBgUrl(src),
+          thumb: optimizedBgUrl(src, { w: 200, h: 200 }),
+        });
       };
 
       const unsub = useProfileStore.subscribe((state) => {
