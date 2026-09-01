@@ -131,7 +131,7 @@ function useMediaImageSrc(path?: string | null) {
       setSrc(undefined);
       return;
     }
-    setSrc(lumenUrl(path, 1280));
+    setSrc(lumenUrl(path, { w: 1280 }));
   }, [path]);
 
   return src;

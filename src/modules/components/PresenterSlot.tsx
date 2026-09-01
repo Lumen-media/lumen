@@ -21,7 +21,7 @@ function useBackgroundSrc(path?: string, thumb = false): string | undefined {
       setSrc(undefined);
       return;
     }
-    setSrc(lumenUrl(path, thumb ? 200 : undefined));
+    setSrc(lumenUrl(path, thumb ? { w: 200 } : {}));
   }, [path, thumb]);
 
   return src;

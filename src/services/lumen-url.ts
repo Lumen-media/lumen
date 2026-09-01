@@ -7,7 +7,8 @@
  * - Already-remote/pass-through sources (http, blob, data, #, existing lumen
  *   URLs) are returned unchanged.
  */
-export function lumenUrl(src: string, w?: number): string {
+export function lumenUrl(src: string, opts: { w?: number; q?: number } = {}): string {
+  const { w, q } = opts;
   if (
     !src ||
     src.startsWith('http') ||
@@ -22,6 +23,7 @@ export function lumenUrl(src: string, w?: number): string {
   }
   const query = new URLSearchParams({ src });
   if (w) query.set('w', String(w));
-  const base = w ? 'http://lumen-thumb.localhost' : 'http://lumen.localhost';
+  if (q) query.set('q', String(q));
+  const base = w || q ? 'http://lumen-thumb.localhost' : 'http://lumen.localhost';
   return `${base}?${query.toString()}`;
 }

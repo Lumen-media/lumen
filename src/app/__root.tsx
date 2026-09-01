@@ -2,9 +2,11 @@ import { createRootRoute, Outlet } from '@tanstack/react-router';
 import * as React from 'react';
 import { GlobalAlert } from '@/components/global-alert';
 import { LyricModal } from '@/components/lyric-modal';
+import { OptimizingIndicator } from '@/components/optimizing-indicator';
 import { QuickShortcutsModal } from '@/components/quick-shortcuts-modal';
 import { Toaster } from '@/components/ui/sonner';
 import { useModules } from '@/hooks/use-modules';
+import { useOptimizingEvents } from '@/hooks/use-optimizing-events';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useSingleInstance } from '@/hooks/use-single-instance';
 import { useTheme } from '@/hooks/use-theme';
@@ -26,6 +28,7 @@ function RootComponent() {
   useTheme();
   useProfiles();
   useModules(!isAuxiliaryWindow);
+  useOptimizingEvents();
 
   return (
     <React.Fragment>
@@ -38,6 +41,7 @@ function RootComponent() {
           <LyricModal />
           <DialogSlot />
           <BackgroundPickerSlot />
+          <OptimizingIndicator />
         </React.Fragment>
       )}
       {isSurfaceWindow && <BackgroundPickerSlot />}

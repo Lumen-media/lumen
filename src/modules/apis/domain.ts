@@ -208,7 +208,7 @@ export function createLibraryHostAPI(): LibraryHostAPI {
     },
     async thumbnail(path, size) {
       if (!path) return '';
-      return lumenUrl(path, size ?? 200);
+      return lumenUrl(path, { w: size ?? 200 });
     },
     async addUrl(input) {
       const file = await mediaDbService.insertUrlMedia(input.url, { duration: input.duration });
@@ -714,7 +714,7 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
         handler({
           ...bg,
           src: lumenUrl(src),
-          thumb: lumenUrl(src, 200),
+          thumb: lumenUrl(src, { w: 200 }),
         });
       };
 

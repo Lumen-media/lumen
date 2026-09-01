@@ -24,6 +24,7 @@ import { useDebounceValue } from 'usehooks-ts';
 import { t, useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { getThemesPath } from '@/services/app-paths';
+import { lumenUrl } from '@/services/lumen-url';
 import { mediaDbService } from '@/services/media-db-service';
 import { thumbnailService } from '@/services/thumbnail-service';
 import type { FileInfo } from '@/services/types';
@@ -360,6 +361,10 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
     searchUnsplash(debouncedQuery, 1);
   }, [debouncedQuery]);
 
+  const prewarmThemeCache = (filePath: string) => {
+    fetch(lumenUrl(filePath, { w: 400, q: 70 })).catch(() => {});
+  };
+
   const handleDownload = async (photo: UnsplashPhoto) => {
     if (downloading.has(photo.id)) return;
     setDownloading((prev) => new Set(prev).add(photo.id));
@@ -385,6 +390,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
         extension: '.jpg',
       });
       setThemes(await mediaDbService.listThemes());
+      prewarmThemeCache(filePath);
       toast.success(t('Image saved to themes folder.'));
       setActiveTab('themes');
     } catch (err) {

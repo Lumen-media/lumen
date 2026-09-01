@@ -19,7 +19,7 @@ import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 function BackgroundPreview({ background }: { background: Profile['defaultBackground'] }) {
-  const srcUrl = background ? lumenUrl(background.src, background.type === 'video' ? undefined : 1280) : null;
+  const srcUrl = background ? lumenUrl(background.src, background.type === 'video' ? {} : { w: 550 }) : null;
 
   if (!background) {
     return (
