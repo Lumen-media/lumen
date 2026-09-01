@@ -1,10 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
-import { readFile, readTextFile } from '@tauri-apps/plugin-fs';
+import { readTextFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEventListener, useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
 import { useProfiles } from '@/hooks/use-profiles';
 import { type LyricData, parseLyricFile } from '@/services/lyric-service';
+import { lumenUrl } from '@/services/lumen-url';
 import { useProfileStore } from '@/stores/profile-store';
 
 function useBackgroundSrc(path?: string) {
@@ -15,20 +16,7 @@ function useBackgroundSrc(path?: string) {
       setSrc(undefined);
       return;
     }
-    if (path.startsWith('http') || path.startsWith('#')) {
-      setSrc(path);
-      return;
-    }
-    let url: string;
-    readFile(path)
-      .then((bytes) => {
-        url = URL.createObjectURL(new Blob([bytes]));
-        setSrc(url);
-      })
-      .catch(() => setSrc(undefined));
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
+    setSrc(lumenUrl(path));
   }, [path]);
 
   return src;
@@ -36,47 +24,18 @@ function useBackgroundSrc(path?: string) {
 
 function useSlideBgSrc(path?: string) {
   const [displayedSrc, setDisplayedSrc] = useState<string | undefined>();
-  const blobUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
     if (!path) {
       setDisplayedSrc(undefined);
       return;
     }
-    if (path.startsWith('http') || path.startsWith('#')) {
-      const img = new Image();
-      img.onload = () => setDisplayedSrc(path);
-      img.src = path;
-      return;
-    }
-
-    let revoked = false;
-    readFile(path)
-      .then((bytes) => {
-        if (revoked) return;
-        const url = URL.createObjectURL(new Blob([bytes]));
-        blobUrlsRef.current.push(url);
-        setDisplayedSrc(url);
-
-        while (blobUrlsRef.current.length > 1) {
-          URL.revokeObjectURL(blobUrlsRef.current.shift()!);
-        }
-      })
-      .catch(() => setDisplayedSrc(undefined));
-
-    return () => {
-      revoked = true;
-    };
+    const url = lumenUrl(path);
+    const img = new Image();
+    img.onload = () => setDisplayedSrc(url);
+    img.onerror = () => setDisplayedSrc(undefined);
+    img.src = url;
   }, [path]);
-
-  useEffect(() => {
-    return () => {
-      for (const url of blobUrlsRef.current) {
-        URL.revokeObjectURL(url);
-      }
-      blobUrlsRef.current = [];
-    };
-  }, []);
 
   return displayedSrc;
 }

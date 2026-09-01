@@ -7,7 +7,7 @@ import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
 import { useTranslation } from '@/lib/i18n';
 import { type LyricData, lyricService } from '@/services/lyric-service';
-import { thumbnailService } from '@/services/thumbnail-service';
+import { lumenUrl } from '@/services/lumen-url';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { LyricBackgroundModal, type LyricBackgroundModalRef } from './lyric-background-modal';
@@ -122,30 +122,7 @@ function SlidePreview({
   }, [slide.lines, fontSizeNum]);
 
   const effectiveBg = background || globalBackground || profileBackground;
-  const [bgSrc, setBgSrc] = useState<string | undefined>();
-
-  useEffect(() => {
-    if (!effectiveBg) {
-      setBgSrc(undefined);
-      return;
-    }
-    if (effectiveBg.startsWith('#')) {
-      setBgSrc(effectiveBg);
-      return;
-    }
-    let cancelled = false;
-    const loader = effectiveBg.startsWith('http')
-      ? thumbnailService.getRemoteThumbnail(effectiveBg)
-      : thumbnailService.getThumbnail(effectiveBg, 800);
-    loader
-      .then((url) => {
-        if (!cancelled) setBgSrc(url);
-      })
-      .catch(() => setBgSrc(undefined));
-    return () => {
-      cancelled = true;
-    };
-  }, [effectiveBg]);
+  const bgSrc = effectiveBg?.startsWith('#') ? effectiveBg : effectiveBg ? lumenUrl(effectiveBg, 1280) : undefined;
 
   return (
     <div className="relative aspect-video bg-black rounded-lg border border-border/20 overflow-hidden">
