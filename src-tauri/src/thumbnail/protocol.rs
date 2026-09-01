@@ -4,22 +4,23 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use tauri::{Manager, UriSchemeContext};
+use tauri::{Emitter, Manager, UriSchemeContext, UriSchemeResponder};
 use url::{form_urlencoded, Url};
 
-use super::{image_thumb, video_thumb};
+use super::{os_thumb, video_thumb};
 
 const TOLERANCE: f64 = 1.5;
 const DEFAULT_THUMB: u32 = 480;
 const JPEG_QUALITY_THUMB: u8 = 82;
 const JPEG_QUALITY_FULL: u8 = 88;
 
-static INDEX: OnceLock<Mutex<HashMap<String, Vec<(u32, u32, PathBuf)>>>> = OnceLock::new();
+static INDEX: OnceLock<Mutex<HashMap<String, Vec<(u32, u32, u8, PathBuf)>>>> = OnceLock::new();
 
 pub fn handle_lumen_request(
     ctx: UriSchemeContext<'_, tauri::Wry>,
     request: tauri::http::Request<Vec<u8>>,
-) -> tauri::http::Response<Vec<u8>> {
+    responder: UriSchemeResponder,
+) {
     let uri = request.uri().to_string();
     let is_thumb = uri.contains("lumen-thumb");
 
@@ -42,16 +43,19 @@ pub fn handle_lumen_request(
 
     let mut src = String::new();
     let mut req_w: Option<u32> = None;
+    let mut req_q: Option<u8> = None;
     for (k, v) in form_urlencoded::parse(query.as_bytes()) {
         match k.as_ref() {
             "src" => src = v.into_owned(),
             "w" => req_w = v.parse().ok(),
+            "q" => req_q = v.parse().ok(),
             _ => {}
         }
     }
 
     if src.is_empty() {
-        return response(400, "Bad Request: missing src parameter");
+        responder.respond(response(400, "Bad Request: missing src parameter"));
+        return;
     }
 
     let cache_root = match ctx
@@ -61,19 +65,29 @@ pub fn handle_lumen_request(
         .map(|d| d.join("lumen").join("cache"))
     {
         Ok(d) => d,
-        Err(e) => return response(500, e.to_string()),
+        Err(e) => {
+            responder.respond(response(500, e.to_string()));
+            return;
+        }
     };
 
-    match process(&cache_root, &src, is_thumb, req_w) {
-        Ok((bytes, mime)) => tauri::http::Response::builder()
-            .status(200)
-            .header("Content-Type", mime)
-            .header("Access-Control-Allow-Origin", "*")
-            .header("Cache-Control", "public, max-age=31536000, immutable")
-            .body(bytes)
-            .unwrap(),
-        Err((status, msg)) => response(status, msg),
-    }
+    let app = ctx.app_handle().clone();
+    let emit_src = src.clone();
+
+    std::thread::spawn(move || {
+        let _ = app.emit("lumen:optimizing", &emit_src);
+        let res = process(&cache_root, &src, is_thumb, req_w, req_q).map(|(bytes, mime)| {
+            tauri::http::Response::builder()
+                .status(200)
+                .header("Content-Type", mime)
+                .header("Access-Control-Allow-Origin", "*")
+                .header("Cache-Control", "public, max-age=31536000, immutable")
+                .body(bytes)
+                .unwrap()
+        });
+        let _ = app.emit("lumen:optimized", &emit_src);
+        responder.respond(res.unwrap_or_else(|(status, msg)| response(status, msg)));
+    });
 }
 
 fn process(
@@ -81,13 +95,14 @@ fn process(
     src: &str,
     is_thumb: bool,
     req_w: Option<u32>,
+    req_q: Option<u8>,
 ) -> Result<(Vec<u8>, &'static str), (u16, String)> {
     let is_remote = src.starts_with("http://") || src.starts_with("https://");
 
     let has_dims = req_w.is_some();
 
     if has_dims || is_thumb {
-        return sized(&local_cache_dir(cache_root, is_remote), src, is_remote, req_w)
+        return sized(&local_cache_dir(cache_root, is_remote), src, is_remote, req_w, req_q)
             .map(|bytes| (bytes, "image/jpeg"));
     }
 
@@ -100,7 +115,7 @@ fn process(
             if let Ok(cached) = std::fs::read(&dest) {
                 return Ok((cached, "image/jpeg"));
             }
-            let bytes = fetch(&unsplash_optimized(src, None, None))?;
+            let bytes = fetch(&unsplash_optimized(src, None, None, JPEG_QUALITY_FULL))?;
             let _ = std::fs::write(&dest, &bytes);
             return Ok((bytes, "image/jpeg"));
         }
@@ -111,6 +126,9 @@ fn process(
                 std::fs::create_dir_all(&dir).map_err(io_err)?;
                 let hash = blake3::hash(src.as_bytes()).to_hex();
                 let dest = dir.join(format!("{hash}_full.jpg"));
+                if let Ok(cached) = std::fs::read(&dest) {
+                    return Ok((cached, "image/jpeg"));
+                }
                 write_jpeg(&img, &dest, JPEG_QUALITY_FULL).map_err(str_err)?;
                 std::fs::read(&dest)
                     .map(|b| (b, "image/jpeg"))
@@ -129,6 +147,9 @@ fn process(
             std::fs::create_dir_all(&dir).map_err(io_err)?;
             let hash = blake3::hash(src.as_bytes()).to_hex();
             let dest = dir.join(format!("{hash}_full.jpg"));
+            if let Ok(cached) = std::fs::read(&dest) {
+                return Ok((cached, "image/jpeg"));
+            }
             let img = image::open(path).map_err(|e| (400, format!("image decode: {e}")))?;
             write_jpeg(&img, &dest, JPEG_QUALITY_FULL).map_err(str_err)?;
             std::fs::read(&dest)
@@ -147,13 +168,15 @@ fn sized(
     src: &str,
     is_remote: bool,
     req_w: Option<u32>,
+    req_q: Option<u8>,
 ) -> Result<Vec<u8>, (u16, String)> {
     std::fs::create_dir_all(dir).map_err(io_err)?;
 
     let hash = blake3::hash(src.as_bytes()).to_hex();
     let w = req_w.map(|v| v.max(1)).unwrap_or(DEFAULT_THUMB);
+    let q = req_q.unwrap_or(JPEG_QUALITY_THUMB).clamp(1, 100);
 
-    if let Some(dest) = find_cached(dir, &hash, w) {
+    if let Some(dest) = find_cached(dir, &hash, w, q) {
         return std::fs::read(&dest).map_err(io_err);
     }
 
@@ -162,43 +185,46 @@ fn sized(
         return Err((404, format!("file not found: {src}")));
     }
 
+    let cache_name = |w: u32, h: u32| format!("{hash}_q{q}_{w}x{h}.jpg");
+
     if is_remote {
         if is_unsplash(src) {
-            let bytes = fetch(&unsplash_optimized(src, Some(w), None))?;
+            let bytes = fetch(&unsplash_optimized(src, Some(w), None, q))?;
             let (aw, ah) = image_dimensions_bytes(&bytes).map_err(|e| (400, e))?;
-            let dest = dir.join(format!("{hash}_{aw}x{ah}.jpg"));
+            let dest = dir.join(cache_name(aw, ah));
             std::fs::write(&dest, &bytes).map_err(io_err)?;
-            cache_insert(dir, &hash, aw, ah, dest.clone());
+            cache_insert(dir, &hash, aw, ah, q, dest.clone());
             return Ok(bytes);
         }
         let bytes = fetch(src)?;
         let img = image::load_from_memory(&bytes).map_err(|e| (400, format!("image decode: {e}")))?;
         let (ow, oh) = (img.width(), img.height());
         let h = derive_h(w, ow, oh);
-        let dest = dir.join(format!("{hash}_{w}x{h}.jpg"));
-        write_jpeg(&img.thumbnail(w, h), &dest, JPEG_QUALITY_THUMB).map_err(str_err)?;
-        cache_insert(dir, &hash, w, h, dest.clone());
+        let dest = dir.join(cache_name(w, h));
+        write_jpeg(&img.thumbnail(w, h), &dest, q).map_err(str_err)?;
+        cache_insert(dir, &hash, w, h, q, dest.clone());
         return std::fs::read(&dest).map_err(io_err);
     }
 
     let ext = extension_of(src);
     if is_image_ext(&ext) {
-        let (ow, oh) =
-            image::image_dimensions(path).map_err(|e| (400, format!("image decode: {e}")))?;
+        let img = decode_local(path, w).ok_or_else(|| {
+            (400, format!("image decode: {src}"))
+        })?;
+        let (ow, oh) = (img.width(), img.height());
         let h = derive_h(w, ow, oh);
-        let dest = dir.join(format!("{hash}_{w}x{h}.jpg"));
-        let img = image::open(path).map_err(|e| (400, format!("image decode: {e}")))?;
-        write_jpeg(&img.thumbnail(w, h), &dest, JPEG_QUALITY_THUMB).map_err(str_err)?;
-        cache_insert(dir, &hash, w, h, dest.clone());
+        let dest = dir.join(cache_name(w, h));
+        write_jpeg(&img.thumbnail(w, h), &dest, q).map_err(str_err)?;
+        cache_insert(dir, &hash, w, h, q, dest.clone());
         std::fs::read(&dest).map_err(io_err)
     } else if is_video_ext(&ext) {
-        let dest = dir.join(format!("{hash}_w{w}.jpg"));
-        let (vw, vh) = video_thumb::generate_box_width(path, &dest, w).map_err(str_err)?;
-        let final_dest = dir.join(format!("{hash}_{vw}x{vh}.jpg"));
+        let dest = dir.join(format!("{hash}_q{q}_w{w}.jpg"));
+        let (vw, vh) = video_thumb::generate_box_width(path, &dest, w, q).map_err(str_err)?;
+        let final_dest = dir.join(cache_name(vw, vh));
         if final_dest != dest {
             std::fs::rename(&dest, &final_dest).map_err(io_err)?;
         }
-        cache_insert(dir, &hash, vw, vh, final_dest.clone());
+        cache_insert(dir, &hash, vw, vh, q, final_dest.clone());
         std::fs::read(&final_dest).map_err(io_err)
     } else {
         Err((415, format!("unsupported source for lumen-thumb://: {src}")))
@@ -212,12 +238,43 @@ fn derive_h(w: u32, ow: u32, oh: u32) -> u32 {
     ((w as u64 * oh as u64) / ow as u64).max(1) as u32
 }
 
+/// Fast path for local images: try the OS thumbnail first (Shell cache), then a
+/// scaled JPEG decode that only decodes the DCT blocks needed for the target
+/// width, falling back to a full `image` decode.
+fn decode_local(path: &Path, w: u32) -> Option<image::DynamicImage> {
+    if let Some(img) = os_thumb::get_thumbnail(path, w) {
+        return Some(img);
+    }
+    if let Some(img) = decode_scaled_jpeg(path, w) {
+        return Some(img);
+    }
+    image::open(path).ok()
+}
+
+/// Decode a JPEG at a reduced scale so we never materialize the full image.
+fn decode_scaled_jpeg(path: &Path, w: u32) -> Option<image::DynamicImage> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut decoder = jpeg_decoder::Decoder::new(std::io::BufReader::new(file));
+    decoder.read_info().ok()?;
+    let info = decoder.info()?;
+    let ow = info.width as u32;
+    let oh = info.height as u32;
+    if ow == 0 || oh == 0 {
+        return None;
+    }
+    let h = derive_h(w, ow, oh);
+    let (sw, sh) = decoder.scale(w.min(u16::MAX as u32) as u16, h.min(u16::MAX as u32) as u16).ok()?;
+    let pixels = decoder.decode().ok()?;
+    let img = image::RgbImage::from_raw(sw as u32, sh as u32, pixels)?;
+    Some(image::DynamicImage::ImageRgb8(img))
+}
+
 fn image_dimensions_bytes(bytes: &[u8]) -> Result<(u32, u32), String> {
     let img = image::load_from_memory(bytes).map_err(|e| format!("image decode: {e}"))?;
     Ok((img.width(), img.height()))
 }
 
-fn find_cached(dir: &Path, hash: &str, w: u32) -> Option<PathBuf> {
+fn find_cached(dir: &Path, hash: &str, w: u32, q: u8) -> Option<PathBuf> {
     let index_key = format!("{}::{}", dir.display(), hash);
     let index = INDEX.get_or_init(|| Mutex::new(HashMap::new()));
     let mut lock = index.lock().unwrap();
@@ -229,8 +286,8 @@ fn find_cached(dir: &Path, hash: &str, w: u32) -> Option<PathBuf> {
     let max_w = (w as f64 * TOLERANCE).ceil() as u64;
 
     let mut best: Option<(u64, PathBuf)> = None;
-    for (cw, ch, path) in entries {
-        if *cw >= w && (*cw as u64) <= max_w {
+    for (cw, ch, cq, path) in entries {
+        if *cq == q && *cw >= w && (*cw as u64) <= max_w {
             let area = (*cw as u64) * (*ch as u64);
             if best.as_ref().map_or(true, |(a, _)| area < *a) {
                 best = Some((area, path.clone()));
@@ -240,15 +297,15 @@ fn find_cached(dir: &Path, hash: &str, w: u32) -> Option<PathBuf> {
     best.map(|(_, p)| p)
 }
 
-fn scan_cache(dir: &Path, hash: &str) -> Vec<(u32, u32, PathBuf)> {
+fn scan_cache(dir: &Path, hash: &str) -> Vec<(u32, u32, u8, PathBuf)> {
     let prefix = format!("{hash}_");
     let mut out = Vec::new();
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
             if let Some(rest) = name.strip_prefix(&prefix) {
-                if let Some((w, h)) = parse_dims(rest) {
-                    out.push((w, h, entry.path()));
+                if let Some((w, h, q)) = parse_dims(rest) {
+                    out.push((w, h, q, entry.path()));
                 }
             }
         }
@@ -256,17 +313,19 @@ fn scan_cache(dir: &Path, hash: &str) -> Vec<(u32, u32, PathBuf)> {
     out
 }
 
-fn parse_dims(rest: &str) -> Option<(u32, u32)> {
+fn parse_dims(rest: &str) -> Option<(u32, u32, u8)> {
     let rest = rest.strip_suffix(".jpg")?;
-    let (w, h) = rest.split_once('x')?;
-    Some((w.parse().ok()?, h.parse().ok()?))
+    let (qpart, dims) = rest.split_once('_')?;
+    let q = qpart.strip_prefix('q')?.parse().ok()?;
+    let (w, h) = dims.split_once('x')?;
+    Some((w.parse().ok()?, h.parse().ok()?, q))
 }
 
-fn cache_insert(dir: &Path, hash: &str, w: u32, h: u32, path: PathBuf) {
+fn cache_insert(dir: &Path, hash: &str, w: u32, h: u32, q: u8, path: PathBuf) {
     let index_key = format!("{}::{}", dir.display(), hash);
     let index = INDEX.get_or_init(|| Mutex::new(HashMap::new()));
     let mut lock = index.lock().unwrap();
-    lock.entry(index_key).or_default().push((w, h, path));
+    lock.entry(index_key).or_default().push((w, h, q, path));
 }
 
 fn write_jpeg(img: &image::DynamicImage, dest: &Path, quality: u8) -> Result<(), String> {
@@ -295,7 +354,7 @@ fn is_unsplash(src: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn unsplash_optimized(src: &str, w: Option<u32>, h: Option<u32>) -> String {
+fn unsplash_optimized(src: &str, w: Option<u32>, h: Option<u32>, q: u8) -> String {
     let mut url = match Url::parse(src) {
         Ok(u) => u,
         Err(_) => return src.to_string(),
@@ -308,7 +367,7 @@ fn unsplash_optimized(src: &str, w: Option<u32>, h: Option<u32>) -> String {
         if let Some(h) = h {
             pairs.append_pair("h", &h.to_string());
         }
-        pairs.append_pair("q", "80");
+        pairs.append_pair("q", &q.to_string());
         pairs.append_pair(
             "fit",
             if w.is_some() && h.is_some() { "crop" } else { "max" },

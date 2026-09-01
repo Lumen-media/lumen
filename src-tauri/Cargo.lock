@@ -3588,6 +3588,7 @@ dependencies = [
  "font-loader",
  "futures-util",
  "image 0.25.10",
+ "jpeg-decoder",
  "local-ip-address",
  "log",
  "md5",

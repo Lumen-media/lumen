@@ -14,13 +14,13 @@ pub fn generate(src: &Path, dest: &Path, size: u32) -> Result<(), String> {
 }
 
 pub fn generate_box(src: &Path, dest: &Path, w: u32, h: u32) -> Result<(), String> {
-    generate_impl(src, dest, Some(w), Some(h)).map(|_| ())
+    generate_impl(src, dest, Some(w), Some(h), 82).map(|_| ())
 }
 
 /// Generate a thumbnail with a fixed width; height is derived from the frame's
 /// aspect ratio. Returns the actual thumbnail dimensions used.
-pub fn generate_box_width(src: &Path, dest: &Path, w: u32) -> Result<(u32, u32), String> {
-    generate_impl(src, dest, Some(w), None)
+pub fn generate_box_width(src: &Path, dest: &Path, w: u32, q: u8) -> Result<(u32, u32), String> {
+    generate_impl(src, dest, Some(w), None, q)
 }
 
 fn generate_impl(
@@ -28,6 +28,7 @@ fn generate_impl(
     dest: &Path,
     w: Option<u32>,
     h: Option<u32>,
+    q: u8,
 ) -> Result<(u32, u32), String> {
     let file = std::fs::File::open(src).map_err(|e| format!("file open: {e}"))?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -114,9 +115,13 @@ fn generate_impl(
                 };
 
                 let thumb = image::DynamicImage::ImageRgb8(img).thumbnail(tw, th);
-                thumb
-                    .save_with_format(dest, image::ImageFormat::Jpeg)
-                    .map_err(|e| format!("save thumbnail: {e}"))?;
+                let file =
+                    std::fs::File::create(dest).map_err(|e| format!("create cache file: {e}"))?;
+                let mut encoder =
+                    image::codecs::jpeg::JpegEncoder::new_with_quality(file, q);
+                encoder
+                    .encode_image(&thumb.to_rgb8())
+                    .map_err(|e| format!("encode jpeg: {e}"))?;
 
                 return Ok((tw, th));
             }
