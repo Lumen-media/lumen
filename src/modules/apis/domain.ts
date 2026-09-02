@@ -640,6 +640,8 @@ async function ensureMediaWindow() {
 }
 
 export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
+  const pendingBackgrounds = new Map<string, Promise<ThemeAddResult>>();
+
   return {
     current() {
       const { profiles, activeProfileId } = useProfileStore.getState();
@@ -680,7 +682,15 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
       };
     },
     addBackground(input: ThemeAddInput): Promise<ThemeAddResult> {
-      return invoke('module_theme_add', { moduleId, input });
+      const key = JSON.stringify(input);
+      const pending = pendingBackgrounds.get(key);
+      if (pending) return pending;
+
+      const promise = invoke<ThemeAddResult>('module_theme_add', { moduleId, input }).finally(() => {
+        pendingBackgrounds.delete(key);
+      });
+      pendingBackgrounds.set(key, promise);
+      return promise;
     },
     async defaultBackground() {
       const { profiles, activeProfileId } = useProfileStore.getState();

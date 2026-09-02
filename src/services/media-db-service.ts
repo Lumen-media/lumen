@@ -116,10 +116,15 @@ class MediaDbService {
         size        INTEGER NOT NULL DEFAULT 0,
         modified_at INTEGER NOT NULL DEFAULT 0,
         extension   TEXT    NOT NULL DEFAULT '',
+        content_hash TEXT,
         created_at  INTEGER NOT NULL DEFAULT (unixepoch())
       )
     `);
+    await this.ensureColumns(db, 'theme_files', [
+      { name: 'content_hash', sql: 'ALTER TABLE theme_files ADD COLUMN content_hash TEXT' },
+    ]);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_tf_name ON theme_files (name COLLATE NOCASE)`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_tf_content_hash ON theme_files (content_hash)`);
 
     return db;
   }
@@ -490,17 +495,18 @@ class MediaDbService {
     }));
   }
 
-  async insertTheme(file: FileInfo): Promise<void> {
+  async insertTheme(file: FileInfo, contentHash?: string): Promise<void> {
     const db = await this.ready();
     await db.execute(
-      `INSERT OR IGNORE INTO theme_files (name, path, size, modified_at, extension)
-       VALUES ($1, $2, $3, $4, $5)`,
+      `INSERT OR IGNORE INTO theme_files (name, path, size, modified_at, extension, content_hash)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         file.name,
         file.path,
         file.size,
         file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
         file.extension,
+        contentHash ?? null,
       ]
     );
   }

@@ -107,6 +107,32 @@ pub async fn module_theme_add(
         return Err(format!("unsupported image type: {ext}"));
     }
 
+    let db_path = app_base_dir()?.join("lumen.db");
+    let connection = Connection::open(&db_path).map_err(|e| e.to_string())?;
+
+    let content_hash = blake3::hash(&bytes).to_hex().to_string();
+
+    // Dedup by content: if this exact image already exists, return it instead
+    // of writing a new file + row. Prevents duplicates from rapid double calls.
+    let existing = connection
+        .query_row(
+            "SELECT id, name, path, extension FROM theme_files WHERE content_hash = ?1",
+            params![content_hash],
+            |row| {
+                Ok(ModuleThemeAddResult {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    path: row.get(2)?,
+                    extension: row.get(3)?,
+                })
+            },
+        )
+        .ok();
+
+    if let Some(result) = existing {
+        return Ok(result);
+    }
+
     let base = app_base_dir()?;
     let themes_dir = base.join("files").join("media").join("themes");
     std::fs::create_dir_all(&themes_dir).map_err(|e| e.to_string())?;
@@ -128,13 +154,11 @@ pub async fn module_theme_add(
         .map_err(|e| e.to_string())?
         .as_millis() as i64;
 
-    let db_path = base.join("lumen.db");
-    let connection = Connection::open(&db_path).map_err(|e| e.to_string())?;
     connection
         .execute(
-            "INSERT OR IGNORE INTO theme_files (name, path, size, modified_at, extension)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![file_name, path_str, size, modified_at, ext],
+            "INSERT OR IGNORE INTO theme_files (name, path, size, modified_at, extension, content_hash)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![file_name, path_str, size, modified_at, ext, content_hash],
         )
         .map_err(|e| e.to_string())?;
 
