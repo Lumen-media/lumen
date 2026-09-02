@@ -1,0 +1,24 @@
+name: Restrict Feature Issues
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  close-feature-request:
+    runs-on: ubuntu-latest
+    if: |
+      contains(github.event.issue.labels.*.name, 'feature') &&
+      github.event.issue.user.login != github.repository_owner &&
+      github.event.issue.user.login != 'gabrielSantos1101'
+    steps:
+      - name: Close non-maintainer feature request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
+          AUTHOR: ${{ github.event.issue.user.login }}
+        run: |
+          gh issue close "$ISSUE" --comment "Thanks for the suggestion, @$AUTHOR! Feature requests are currently tracked by the maintainer directly. If this is important to you, please open a **Request** issue instead describing the change and we'll consider it."

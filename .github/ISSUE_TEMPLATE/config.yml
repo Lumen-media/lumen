@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "Request"
+    url: https://github.com/Lumen-media/lumen/issues/new?template=request.md
+    about: "Suggest a small change or improvement"
+  - name: "Bug Report"
+    url: https://github.com/Lumen-media/lumen/issues/new?template=bug_report.md
+    about: "Report a bug or unexpected behavior"
+  - name: "Feature Request"
+    url: https://github.com/Lumen-media/lumen/issues/new?template=feature_request.md
+    about: "Propose a new feature (maintainers only)"
