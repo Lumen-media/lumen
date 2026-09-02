@@ -365,6 +365,14 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
     fetch(lumenUrl(filePath, { w: 400, q: 70 })).catch(() => {});
   };
 
+  const sha256Hex = async (bytes: Uint8Array): Promise<string> => {
+    const copy = new Uint8Array(bytes);
+    const digest = await crypto.subtle.digest('SHA-256', copy.buffer);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  };
+
   const handleDownload = async (photo: UnsplashPhoto) => {
     if (downloading.has(photo.id)) return;
     setDownloading((prev) => new Set(prev).add(photo.id));
@@ -382,13 +390,17 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
       const filePath = await join(themesPath, fileName);
       await writeFile(filePath, new Uint8Array(buffer));
       const meta = await stat(filePath);
-      await mediaDbService.insertTheme({
-        name: fileName,
-        path: filePath,
-        size: meta.size,
-        modifiedAt: meta.mtime ?? new Date(),
-        extension: '.jpg',
-      });
+      const contentHash = await sha256Hex(new Uint8Array(buffer));
+      await mediaDbService.insertTheme(
+        {
+          name: fileName,
+          path: filePath,
+          size: meta.size,
+          modifiedAt: meta.mtime ?? new Date(),
+          extension: '.jpg',
+        },
+        contentHash
+      );
       setThemes(await mediaDbService.listThemes());
       prewarmThemeCache(filePath);
       toast.success(t('Image saved to themes folder.'));
