@@ -1,17 +1,35 @@
 'use client';
 
 import { useTranslation } from '@/lib/i18n';
-import { CheckCircle2, Cookie, DownloadCloud, Video, XCircle } from 'lucide-react';
+import { CheckCircle2, Cookie, DownloadCloud, Loader2, ShieldAlert, ShieldCheck, Video, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useDownloadStore } from '@/stores/download-store';
+import type { CookieValidation } from '@/services/types';
 import { CardContent } from '../ui/card';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 
+const COOKIE_STATUS_META: Record<CookieValidation['status'], { label: string; tone: 'ok' | 'warn' | 'bad' | 'neutral' }> = {
+  valid: { label: 'Cookies válidos', tone: 'ok' },
+  rotated: { label: 'Cookies rotacionados — re-exporte', tone: 'bad' },
+  blocked: { label: 'Exigindo confirmação de conta (PO token)', tone: 'bad' },
+  no_account: { label: 'Nenhuma conta logada detectada', tone: 'warn' },
+  missing: { label: 'Nenhum arquivo instalado', tone: 'neutral' },
+  error: { label: 'Falha na validação', tone: 'bad' },
+};
+
 export function DownloadsSection() {
   const { t } = useTranslation();
-  const { dependencyStatus, isInstallingDeps, checkDeps, installDeps } = useDownloadStore();
+  const {
+    dependencyStatus,
+    isInstallingDeps,
+    checkDeps,
+    installDeps,
+    cookieValidation,
+    cookieValidationLoading,
+    refreshCookieValidation,
+  } = useDownloadStore();
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -37,6 +55,14 @@ export function DownloadsSection() {
       await checkDeps();
     } catch (e) {
       console.error('[downloads-section] install deps failed:', e);
+    }
+  };
+
+  const handleValidateCookies = async () => {
+    try {
+      await refreshCookieValidation();
+    } catch (e) {
+      console.error('[downloads-section] validate cookies failed:', e);
     }
   };
 
@@ -75,6 +101,7 @@ export function DownloadsSection() {
   const ytStatus = dependencyStatus?.ytdlpInstalled;
   const ffmpegStatus = dependencyStatus?.ffmpegInstalled;
   const ytOutdated = dependencyStatus?.ytdlpOutdated;
+  const nodeStatus = dependencyStatus?.nodeInstalled;
 
   return (
     <div className="space-y-6">
@@ -109,6 +136,11 @@ export function DownloadsSection() {
               </p>
             </div>
           </div>
+          {(!ytStatus || ytOutdated) && (
+            <Button size="sm" onClick={handleInstall} disabled={isInstallingDeps}>
+              {isInstallingDeps ? t('Instalando...') : ytOutdated ? t('Atualizar') : t('Instalar')}
+            </Button>
+          )}
         </CardContent>
 
         <Separator />
@@ -127,6 +159,34 @@ export function DownloadsSection() {
               </p>
             </div>
           </div>
+          {!ffmpegStatus && (
+            <Button size="sm" onClick={handleInstall} disabled={isInstallingDeps}>
+              {isInstallingDeps ? t('Instalando...') : t('Instalar')}
+            </Button>
+          )}
+        </CardContent>
+
+        <Separator />
+
+        <CardContent className="flex items-center justify-between rounded-lg p-4">
+          <div className="flex items-center gap-2.5">
+            {nodeStatus ? (
+              <CheckCircle2 className="size-4 text-emerald-500" />
+            ) : (
+              <XCircle className="size-4 text-destructive" />
+            )}
+            <div>
+              <p className="text-sm font-medium">Node.js</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {nodeStatus ? t('Instalado') : t('Não instalado')}
+              </p>
+            </div>
+          </div>
+          {!nodeStatus && (
+            <Button size="sm" onClick={handleInstall} disabled={isInstallingDeps}>
+              {isInstallingDeps ? t('Instalando...') : t('Instalar')}
+            </Button>
+          )}
         </CardContent>
 
         <Separator />
@@ -183,6 +243,63 @@ export function DownloadsSection() {
               </div>
             </div>
           ))}
+
+          <Separator />
+
+          <div className="flex items-center justify-between rounded-lg p-1">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">{t('Validar cookies')}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t(
+                  'Testa os cookies atuais sem baixar nada, para saber se ainda estão válidos.'
+                )}
+              </p>
+              {cookieValidation && (
+                <div className="mt-2 flex items-start gap-2">
+                  {cookieValidation.status === 'valid' ? (
+                    <ShieldCheck className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                  ) : cookieValidation.status === 'no_account' ? (
+                    <ShieldAlert className="size-4 text-amber-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <ShieldAlert className="size-4 text-destructive shrink-0 mt-0.5" />
+                  )}
+                  <div className="min-w-0">
+                    <p
+                      className={cn(
+                        'text-sm font-medium',
+                        cookieValidation.status === 'valid' && 'text-emerald-500',
+                        cookieValidation.status === 'no_account' && 'text-amber-500',
+                        cookieValidation.status !== 'valid' &&
+                          cookieValidation.status !== 'no_account' &&
+                          'text-destructive'
+                      )}
+                    >
+                      {COOKIE_STATUS_META[cookieValidation.status].label}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5 break-words">
+                      {cookieValidation.detail}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleValidateCookies}
+              disabled={cookieValidationLoading}
+              className="shrink-0"
+            >
+              {cookieValidationLoading ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  {t('Validando...')}
+                </>
+              ) : (
+                t('Validar')
+              )}
+            </Button>
+          </div>
         </CardContent>
       </CardContent>
 

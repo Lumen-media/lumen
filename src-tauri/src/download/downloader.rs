@@ -559,6 +559,129 @@ pub async fn cancel_download(
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct CookieValidation {
+    pub status: String,
+    pub detail: String,
+}
+
+pub async fn validate_cookies(tools_dir: &Path) -> Result<CookieValidation, String> {
+    let cookies_path = tools_dir.join("cookies.txt");
+    if !cookies_path.exists() {
+        return Ok(CookieValidation {
+            status: "missing".to_string(),
+            detail: "Nenhum arquivo de cookies instalado ainda.".to_string(),
+        });
+    }
+
+    let ytdlp = ytdlp_path(tools_dir);
+    if !ytdlp.exists() {
+        return Err("yt-dlp not installed. Run download_dependencies first.".to_string());
+    }
+
+    let node_dir = tools_dir.join("node");
+    let node_exe = node_dir.join("node.exe");
+    let has_node = if cfg!(target_os = "windows") {
+        node_exe.exists()
+    } else {
+        node_dir.join("node").exists()
+    };
+
+    let mut args = vec![
+        "--cookies".to_string(),
+        cookies_path.to_string_lossy().to_string(),
+        "--skip-download".to_string(),
+        "--no-playlist".to_string(),
+        "--print".to_string(),
+        "%(account)s".to_string(),
+    ];
+    if has_node {
+        args.push("--js-runtimes".to_string());
+        args.push(format!("node:{}", node_dir.to_string_lossy()));
+    }
+    args.push("https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_string());
+
+    let mut child = Command::new(&ytdlp)
+        .args(&args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn yt-dlp for cookie validation: {}", e))?;
+
+    let mut stdout = child.stdout.take();
+    let mut stderr = child.stderr.take();
+
+    let stdout_task = tokio::spawn(async move {
+        use tokio::io::AsyncReadExt;
+        let mut bytes = Vec::new();
+        if let Some(stdout) = stdout.as_mut() {
+            let _ = stdout.read_to_end(&mut bytes).await;
+        }
+        String::from_utf8_lossy(&bytes).into_owned()
+    });
+
+    let stderr_task = tokio::spawn(async move {
+        use tokio::io::AsyncReadExt;
+        let mut bytes = Vec::new();
+        if let Some(stderr) = stderr.as_mut() {
+            let _ = stderr.read_to_end(&mut bytes).await;
+        }
+        String::from_utf8_lossy(&bytes).into_owned()
+    });
+
+    let wait = tokio::time::timeout(std::time::Duration::from_secs(90), child.wait()).await;
+    match wait {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            let _ = child.kill().await;
+            return Err(format!("Failed to wait for yt-dlp validation: {}", e));
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            return Ok(CookieValidation {
+                status: "error".to_string(),
+                detail: "Validação de cookies excedeu o tempo limite.".to_string(),
+            });
+        }
+    }
+
+    let stdout = stdout_task.await.unwrap_or_default();
+    let stderr = stderr_task.await.unwrap_or_default();
+    let combined_lower = format!("{}\n{}", stdout, stderr).to_lowercase();
+
+    if combined_lower.contains("cookies are no longer valid")
+        || combined_lower.contains("have been rotated")
+    {
+        return Ok(CookieValidation {
+            status: "rotated".to_string(),
+            detail: "Os cookies foram rotacionados/revogados pelo Google. Re-exporte do navegador logado.".to_string(),
+        });
+    }
+
+    if combined_lower.contains("sign in to confirm")
+        || combined_lower.contains("not a bot")
+    {
+        return Ok(CookieValidation {
+            status: "blocked".to_string(),
+            detail: "YouTube está exigindo confirmação de conta (PO token). Re-exporte cookies de uma sessão logada.".to_string(),
+        });
+    }
+
+    let account = stdout.trim();
+    if account.is_empty() || account.eq_ignore_ascii_case("NA") {
+        return Ok(CookieValidation {
+            status: "no_account".to_string(),
+            detail: "Nenhuma conta logada detectada. Os cookies parecem de sessão deslogada ou expirados.".to_string(),
+        });
+    }
+
+    Ok(CookieValidation {
+        status: "valid".to_string(),
+        detail: format!("Cookies válidos (conta: {}).", account),
+    })
+}
+
 fn work_cookies_copy(cookies_path: &std::path::Path) -> PathBuf {
     let name = format!(
         "cookies_work_{}.txt",
