@@ -2,6 +2,7 @@
 
 import {
   ChevronDown,
+  Download,
   Info,
   Monitor,
   Package,
@@ -22,6 +23,7 @@ import { type SettingsSection, useSettingsStore } from '@/stores/settings-store'
 import { AboutSection } from './settings/about-section';
 import { AdvancedSection } from './settings/advanced-section';
 import { DevicePermissionsSection } from './settings/device-permissions-section';
+import { DownloadsSection } from './settings/downloads-section';
 import { GeneralAccessSection } from './settings/general-access-section';
 import { ModulesSection } from './settings/modules-section';
 import { ThemeSection } from './settings/theme-section';
@@ -39,6 +41,7 @@ const SECTION_TITLES: Record<
   remote_general: { label: 'Remote Access', title: 'General Access' },
   remote_permissions: { label: 'Remote Access', title: 'Device Permissions' },
   advanced: { label: 'Application settings', title: 'Advanced Settings' },
+  downloads: { label: 'Application settings', title: 'Downloads' },
   about: {
     label: 'Application settings',
     title: 'About',
@@ -179,6 +182,18 @@ export const SettingsDialog = () => {
 
             <Button
               variant="ghost"
+              onClick={() => handleNavClick('downloads')}
+              className={cn(
+                'w-full justify-start gap-2.5',
+                activeSection === 'downloads' && 'bg-primary/10 text-primary font-medium'
+              )}
+            >
+              <Download className="size-4" />
+              {t('Downloads')}
+            </Button>
+
+            <Button
+              variant="ghost"
               onClick={() => handleNavClick('modules')}
               className={cn(
                 'w-full justify-start gap-2.5',
@@ -256,6 +271,7 @@ export const SettingsDialog = () => {
                 {activeSection === 'remote_general' && <GeneralAccessSection />}
                 {activeSection === 'remote_permissions' && <DevicePermissionsSection />}
                 {activeSection === 'advanced' && <AdvancedSection />}
+                {activeSection === 'downloads' && <DownloadsSection />}
                 {activeSection === 'modules' && <ModulesSection />}
                 {activeSection === 'about' && <AboutSection />}
               </div>
