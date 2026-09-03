@@ -141,3 +141,10 @@ pub async fn install_cookies_file(
 
     Ok(dest.to_string_lossy().to_string())
 }
+
+#[tauri::command]
+pub async fn validate_cookies(
+    state: State<'_, DownloadState>,
+) -> Result<downloader::CookieValidation, String> {
+    downloader::validate_cookies(&state.tools_dir).await
+}

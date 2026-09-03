@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { downloadService, type DownloadCallbacks } from '@/services/download-service';
 import { mediaDbService } from '@/services/media-db-service';
 import type {
+  CookieValidation,
   DependencyStatus,
   DownloadProgress,
   DownloadProvider,
@@ -50,6 +51,8 @@ interface DownloadStore {
   activeDownloads: Map<string, ActiveDownload>;
   isInstallingDeps: boolean;
   cookiesDialogOpen: boolean;
+  cookieValidation: CookieValidation | null;
+  cookieValidationLoading: boolean;
 
   checkDeps: () => Promise<DependencyStatus>;
   installDeps: () => Promise<void>;
@@ -65,13 +68,20 @@ interface DownloadStore {
   openCookiesDialog: () => void;
   closeCookiesDialog: () => void;
   installCookies: (sourcePath: string) => Promise<string>;
+  validateCookies: () => Promise<CookieValidation>;
+  setCookieValidation: (validation: CookieValidation | null) => void;
+  refreshCookieValidation: () => Promise<void>;
 }
+
+export const COOKIE_VALIDATION_CACHE_KEY = 'lumen:cookie-validation-cache';
 
 export const useDownloadStore = create<DownloadStore>((set, get) => ({
   dependencyStatus: null,
   activeDownloads: new Map(),
   isInstallingDeps: false,
   cookiesDialogOpen: false,
+  cookieValidation: null,
+  cookieValidationLoading: false,
 
   checkDeps: async () => {
     const status = await downloadService.checkDependencies();
@@ -87,6 +97,45 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     const status = await downloadService.checkDependencies();
     set({ dependencyStatus: status });
     return installedPath;
+  },
+
+  validateCookies: async () => {
+    return await downloadService.validateCookies();
+  },
+
+  setCookieValidation: (validation) => set({ cookieValidation: validation }),
+
+  refreshCookieValidation: async () => {
+    try {
+      const files = await mediaDbService.listFiles('video');
+      const hasYoutubeMedia = files.some(
+        (f) => f.extension === 'url' || Boolean(f.originalUrl)
+      );
+      if (!hasYoutubeMedia) {
+        set({ cookieValidation: null, cookieValidationLoading: false });
+        try {
+          localStorage.removeItem(COOKIE_VALIDATION_CACHE_KEY);
+        } catch {
+          /* ignore storage errors */
+        }
+        return;
+      }
+
+      set({ cookieValidationLoading: true });
+      const result = await downloadService.validateCookies();
+      set({ cookieValidation: result, cookieValidationLoading: false });
+      try {
+        localStorage.setItem(
+          COOKIE_VALIDATION_CACHE_KEY,
+          JSON.stringify({ result, at: Date.now() })
+        );
+      } catch {
+        /* ignore storage errors */
+      }
+    } catch (error) {
+      console.error('[download-store] refreshCookieValidation failed:', error);
+      set({ cookieValidationLoading: false });
+    }
   },
 
   installDeps: async () => {
