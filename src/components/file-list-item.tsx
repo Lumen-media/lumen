@@ -186,7 +186,8 @@ export function FileListItem({
   isFocused,
 }: FileListItemProps) {
   const { openDeleteDialog } = useDeleteFileStore();
-  const { startDownload, checkDeps, installDeps, dependencyStatus } = useDownloadStore();
+  const { startDownload, checkDeps, installDeps, dependencyStatus, openCookiesDialog } =
+    useDownloadStore();
   const urlMedia = isUrlMedia(file);
   const statusLabel = downloadStatusLabel(file);
   const fileSizeLabel = urlMedia ? 'URL' : formatFileSize(file.size);
@@ -210,7 +211,7 @@ export function FileListItem({
 
   const handleOpenFolder = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (urlMedia) return;
+    if (urlMedia && file.downloadStatus !== 'downloaded') return;
     try {
       const folderPath = file.path.substring(0, file.path.lastIndexOf('\\'));
       await invoke('open_folder', { path: folderPath });
@@ -234,10 +235,18 @@ export function FileListItem({
         deps = await checkDeps();
       }
 
-      if (!deps.ytdlpInstalled || !deps.ffmpegInstalled) {
+      if (urlMedia && !deps.cookiesInstalled) {
+        openCookiesDialog();
+        toast.warning(
+          'YouTube agora exige cookies logados para baixar. Adicione seu arquivo de cookies antes de continuar.'
+        );
+        return;
+      }
+
+      if (!deps.ytdlpInstalled || !deps.ffmpegInstalled || deps.ytdlpOutdated || !deps.nodeInstalled) {
         await toast.promise(installDeps(), {
-          loading: 'Installing download tools...',
-          success: 'Download tools installed',
+          loading: 'Installing/updating download tools (includes Node.js)...',
+          success: 'Download tools ready',
           error: 'Failed to install download tools',
         });
       }
@@ -251,7 +260,11 @@ export function FileListItem({
         },
         onError: (error) => {
           toast.dismiss(downloadToast);
-          toast.error(`Download failed: ${error.message}`);
+          if (error.code === 'auth_required') {
+            openCookiesDialog();
+          } else {
+            toast.error(`Download failed: ${error.message}`);
+          }
         },
       });
 

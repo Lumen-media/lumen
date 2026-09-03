@@ -4,6 +4,7 @@ import { Presentation } from 'lucide-react';
 import * as React from 'react';
 import { AppHeader } from '@/components/app-header';
 import { AsidePanel } from '@/components/aside-panel';
+import { DownloadsCookiesDialog } from '@/components/downloads-cookies-dialog';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { MediaPanel } from '@/components/media-panel';
 import { MiniPlayer } from '@/components/miniplayer';
@@ -163,6 +164,8 @@ function LayoutComponent() {
           </div>
         )}
       </DragOverlay>
+
+      <DownloadsCookiesDialog />
     </DndContext>
   );
 }
