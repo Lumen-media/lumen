@@ -66,6 +66,7 @@ pub async fn download_video(
     url: String,
     provider: String,
     quality: DownloadQuality,
+    max_height: Option<u32>,
 ) -> Result<DownloadResult, String> {
     downloader::start_download(
         app,
@@ -74,6 +75,7 @@ pub async fn download_video(
         url,
         provider,
         quality,
+        max_height,
     )
     .await
 }

@@ -113,6 +113,7 @@ pub async fn start_download(
     url: String,
     provider: String,
     quality: DownloadQuality,
+    max_height: Option<u32>,
 ) -> Result<DownloadResult, String> {
     if provider != "youtube" {
         return Err(format!("Unsupported provider: {}", provider));
@@ -148,19 +149,24 @@ pub async fn start_download(
 
     let output_template = dl_dir.join("%(title)s.%(ext)s").to_string_lossy().to_string();
 
+    let format_selector = match max_height {
+        Some(h) if !quality.is_audio_only() => {
+            format!("bestvideo[height<={}]+bestaudio/best[height<={}]/best", h, h)
+        }
+        _ => quality.yt_dlp_format().to_string(),
+    };
+
     let mut args = vec![
         "--no-playlist".to_string(),
         "--no-check-certificates".to_string(),
         "--no-warnings".to_string(),
         "-f".to_string(),
-        quality.yt_dlp_format().to_string(),
+        format_selector,
         "--merge-output-format".to_string(),
         "mp4".to_string(),
         "--newline".to_string(),
         "--progress".to_string(),
         "--restrict-filenames".to_string(),
-        "--extractor-args".to_string(),
-        "youtube:player_client=web_safari".to_string(),
         "-o".to_string(),
         output_template,
     ];
@@ -203,8 +209,6 @@ pub async fn start_download(
             "--newline".to_string(),
             "--progress".to_string(),
             "--restrict-filenames".to_string(),
-            "--extractor-args".to_string(),
-            "youtube:player_client=web_safari".to_string(),
             "-o".to_string(),
             dl_dir.join("%(title)s.%(ext)s").to_string_lossy().to_string(),
         ];

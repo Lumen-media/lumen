@@ -74,7 +74,8 @@ class DownloadService {
   async downloadVideo(
     url: string,
     provider: DownloadProvider,
-    quality: DownloadQuality
+    quality: DownloadQuality,
+    maxHeight?: number
   ): Promise<DownloadResult> {
     const result = await invoke<{
       download_id: string;
@@ -86,6 +87,7 @@ class DownloadService {
       url,
       provider,
       quality,
+      maxHeight: maxHeight ?? null,
     });
 
     return {
