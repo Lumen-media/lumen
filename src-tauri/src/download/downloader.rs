@@ -21,16 +21,10 @@ pub enum DownloadQuality {
 impl DownloadQuality {
     fn yt_dlp_format(&self) -> &str {
         match self {
-            DownloadQuality::Best => "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-            DownloadQuality::High => {
-                "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best"
-            }
-            DownloadQuality::Medium => {
-                "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best"
-            }
-            DownloadQuality::Low => {
-                "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best"
-            }
+            DownloadQuality::Best => "bestvideo+bestaudio/best",
+            DownloadQuality::High => "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+            DownloadQuality::Medium => "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+            DownloadQuality::Low => "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
             DownloadQuality::AudioOnly => "bestaudio",
         }
     }
@@ -129,6 +123,14 @@ pub async fn start_download(
         return Err("yt-dlp not installed. Run download_dependencies first.".to_string());
     }
 
+    let node_dir = tools_dir.join("node");
+    let node_exe = node_dir.join("node.exe");
+    let has_node = if cfg!(target_os = "windows") {
+        node_exe.exists()
+    } else {
+        node_dir.join("node").exists()
+    };
+
     let ffmpeg_location = if cfg!(target_os = "macos") {
         if std::process::Command::new("ffmpeg").arg("-version").output().is_ok() {
             String::new() // Let yt-dlp find it in PATH
@@ -157,15 +159,29 @@ pub async fn start_download(
         "--newline".to_string(),
         "--progress".to_string(),
         "--restrict-filenames".to_string(),
+        "--extractor-args".to_string(),
+        "youtube:player_client=web_safari".to_string(),
         "-o".to_string(),
         output_template,
     ];
 
+    if has_node {
+        args.push("--js-runtimes".to_string());
+        args.push(format!("node:{}", node_dir.to_string_lossy()));
+    }
+
     let cookies_path = tools_dir.join("cookies.txt");
+    let work_cookies_path = cookies_path.exists().then(|| work_cookies_copy(&cookies_path));
     if cookies_path.exists() {
         println!("[download] Using cookies file: {}", cookies_path.display());
         args.push("--cookies".to_string());
-        args.push(cookies_path.to_string_lossy().to_string());
+        args.push(
+            work_cookies_path
+                .as_deref()
+                .unwrap_or(&cookies_path)
+                .to_string_lossy()
+                .to_string(),
+        );
     }
 
     if !ffmpeg_location.is_empty() {
@@ -187,12 +203,24 @@ pub async fn start_download(
             "--newline".to_string(),
             "--progress".to_string(),
             "--restrict-filenames".to_string(),
+            "--extractor-args".to_string(),
+            "youtube:player_client=web_safari".to_string(),
             "-o".to_string(),
             dl_dir.join("%(title)s.%(ext)s").to_string_lossy().to_string(),
         ];
+        if has_node {
+            args.push("--js-runtimes".to_string());
+            args.push(format!("node:{}", node_dir.to_string_lossy()));
+        }
         if cookies_path.exists() {
             args.push("--cookies".to_string());
-            args.push(cookies_path.to_string_lossy().to_string());
+            args.push(
+                work_cookies_path
+                    .as_deref()
+                    .unwrap_or(&cookies_path)
+                    .to_string_lossy()
+                    .to_string(),
+            );
         }
         if !ffmpeg_location.is_empty() {
             args.push("--ffmpeg-location".to_string());
@@ -237,6 +265,7 @@ pub async fn start_download(
     let active_clone = active_downloads.clone();
     let quality_clone = quality.clone();
     let dl_dir_clone = dl_dir.clone();
+    let cookies_path_clone = cookies_path.clone();
 
     println!("[download] Starting download {} for URL: {}", download_id, url);
 
@@ -264,19 +293,19 @@ pub async fn start_download(
             }
         };
 
-        let stderr_handle = if let Some(stderr) = stderr {
-            let reader = BufReader::new(stderr);
-            let mut lines = reader.lines();
-            let mut error_lines = Vec::new();
-
+        let stderr_handle = if let Some(mut stderr) = stderr {
+            println!("[download] stderr take result is_some=true for {}", dl_id_clone);
             tokio::spawn(async move {
-                while let Ok(Some(line)) = lines.next_line().await {
-                    error_lines.push(line);
+                use tokio::io::AsyncReadExt;
+                let mut bytes = Vec::new();
+                match stderr.read_to_end(&mut bytes).await {
+                    Ok(_) => String::from_utf8_lossy(&bytes).into_owned(),
+                    Err(e) => format!("(stderr read failed: {})", e),
                 }
-                error_lines
             })
         } else {
-            tokio::spawn(async { Vec::new() })
+            println!("[download] stderr take result is_some=false for {}", dl_id_clone);
+            tokio::spawn(async { String::new() })
         };
 
         if let Some(stdout) = stdout {
@@ -339,7 +368,12 @@ pub async fn start_download(
 
                         match dest_dir {
                             Ok(dest_dir) => {
-                                let _ = std::fs::create_dir_all(&dest_dir);
+                                let dest_dir_exists = std::fs::create_dir_all(&dest_dir).is_ok();
+                                println!(
+                                    "[download] media dest dir: {} (exists={})",
+                                    dest_dir.display(),
+                                    dest_dir_exists
+                                );
 
                                 let file_name = downloaded_file
                                     .file_name()
@@ -348,7 +382,27 @@ pub async fn start_download(
 
                                 let dest_path = dest_dir.join(&file_name);
 
-                                if std::fs::rename(&downloaded_file, &dest_path).is_ok() {
+                                if let Err(e) = std::fs::rename(&downloaded_file, &dest_path) {
+                                    println!(
+                                        "[download] FAILED to move file to {:?}: {}",
+                                        dest_path, e
+                                    );
+                                    app_clone
+                                        .emit(
+                                            "video-download-error",
+                                            DownloadError {
+                                                download_id: dl_id_clone.clone(),
+                                                message: format!(
+                                                    "Download finished but failed to move file to media dir: {}",
+                                                    e
+                                                ),
+                                                code: "download_failed".to_string(),
+                                            },
+                                        )
+                                        .ok();
+                                    return;
+                                }
+                                {
                                     let file_size = std::fs::metadata(&dest_path)
                                         .map(|m| m.len())
                                         .unwrap_or(0);
@@ -368,6 +422,11 @@ pub async fn start_download(
                                         file_extension: file_ext,
                                     };
 
+                                    println!(
+                                        "[download] Emitting video-download-complete for {} -> {}",
+                                        dl_id_clone,
+                                        result.file_path
+                                    );
                                     app_clone.emit("video-download-complete", &result).ok();
                                 }
                             }
@@ -402,21 +461,45 @@ pub async fn start_download(
             Ok(status) => {
                 println!("[download] Download {} failed with status: {}", dl_id_clone, status);
                 let stderr_output = stderr_handle.await.unwrap_or_default();
-                let error_detail = stderr_output.join("\n");
+                let error_detail = stderr_output.clone();
+                println!("[download] stderr read result bytes: {}", stderr_output.len());
                 println!("[download] stderr output: {}", error_detail);
 
-                let error_message = if error_detail.contains("ERROR:") {
+                let cookies_hint = if cookies_path_clone.exists() {
+                    "".to_string()
+                } else {
+                    format!(
+                        "\n\nPara desbloquear a qualidade, exporte os cookies logado no YouTube (extensão 'Get cookies.txt LOCALLY') e salve como:\n{}",
+                        cookies_path_clone.display()
+                    )
+                };
+
+                let error_message = if error_detail.contains("Sign in")
+                    || error_detail.contains("not a bot")
+                    || error_detail.contains("page needs to be reloaded")
+                {
+                    format!(
+                        "YouTube está bloqueando a extração sem autenticação (provável exigência de PO token/cookies).{}",
+                        cookies_hint
+                    )
+                } else if error_detail.contains("Video unavailable") {
+                    "Video is unavailable or private".to_string()
+                } else if error_detail.contains("ERROR:") {
                     error_detail
                         .lines()
                         .find(|l| l.contains("ERROR:"))
                         .unwrap_or("Unknown error")
                         .to_string()
-                } else if error_detail.contains("Sign in") || error_detail.contains("not a bot") {
-                    "YouTube requires authentication. Place a cookies.txt file in the app tools folder (export it with a browser extension like 'Get cookies.txt LOCALLY' while logged into YouTube).".to_string()
-                } else if error_detail.contains("Video unavailable") {
-                    "Video is unavailable or private".to_string()
                 } else {
                     format!("yt-dlp exited with status: {}", status)
+                };
+
+                let error_code = if error_detail.contains("Sign in")
+                    || error_detail.contains("not a bot")
+                {
+                    "auth_required".to_string()
+                } else {
+                    "download_failed".to_string()
                 };
 
                 app_clone
@@ -425,7 +508,7 @@ pub async fn start_download(
                         DownloadError {
                             download_id: dl_id_clone.clone(),
                             message: error_message,
-                            code: "download_failed".to_string(),
+                            code: error_code,
                         },
                     )
                     .ok();
@@ -474,6 +557,28 @@ pub async fn cancel_download(
         }
     }
     Ok(())
+}
+
+fn work_cookies_copy(cookies_path: &std::path::Path) -> PathBuf {
+    let name = format!(
+        "cookies_work_{}.txt",
+        cookies_path
+            .extension()
+            .and_then(|_| cookies_path.file_stem())
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "cookies".to_string())
+            .chars()
+            .map(|c| c as u32)
+            .enumerate()
+            .map(|(i, c)| c.wrapping_mul(31).wrapping_add(i as u32) % 1000000)
+            .fold(0u64, |acc, x| acc.wrapping_add(x as u64))
+    );
+
+    let dest = std::env::temp_dir().join(format!("lumen_{}", name));
+    match std::fs::copy(cookies_path, &dest) {
+        Ok(_) => dest,
+        Err(_) => cookies_path.to_path_buf(),
+    }
 }
 
 fn parse_progress(line: &str) -> Option<(f64, String, String)> {

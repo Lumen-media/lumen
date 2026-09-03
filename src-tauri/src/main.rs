@@ -611,6 +611,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             download::download_video,
             download::cancel_download,
             download::get_download_status,
+            download::install_cookies_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
