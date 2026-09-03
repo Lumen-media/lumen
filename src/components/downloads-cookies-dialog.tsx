@@ -1,9 +1,10 @@
 'use client';
 
+import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from '@/lib/i18n';
 import { CheckCircle2, Cookie, ExternalLink, FileUp, Loader2, LogIn, StepForward, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDownloadStore } from '@/stores/download-store';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -20,12 +21,22 @@ const EXTENSION_URL =
 
 export function DownloadsCookiesDialog() {
   const { t } = useTranslation();
-  const { cookiesDialogOpen, closeCookiesDialog, dependencyStatus, installCookies } =
+  const { cookiesDialogOpen, closeCookiesDialog, dependencyStatus, installCookies, openCookiesDialog } =
     useDownloadStore();
 
   const [busy, setBusy] = useState(false);
   const [installed, setInstalled] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen('open-cookies-dialog', () => openCookiesDialog())
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => {});
+    return () => unlisten?.();
+  }, [openCookiesDialog]);
 
   const toolsDir = dependencyStatus?.toolsDir ?? '';
   const cookiesPath = toolsDir ? `${toolsDir}\\cookies.txt` : '...\\tools\\cookies.txt';
