@@ -65,8 +65,12 @@ export interface DownloadError {
 export interface DependencyStatus {
   ytdlpInstalled: boolean;
   ytdlpVersion: string | null;
+  ytdlpOutdated: boolean;
   ffmpegInstalled: boolean;
   ffmpegVersion: string | null;
+  cookiesInstalled: boolean;
+  nodeInstalled: boolean;
+  nodeDir: string | null;
   toolsDir: string;
 }
 
