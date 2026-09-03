@@ -74,6 +74,19 @@ export interface DependencyStatus {
   toolsDir: string;
 }
 
+export type CookieValidationStatus =
+  | 'valid'
+  | 'rotated'
+  | 'blocked'
+  | 'no_account'
+  | 'missing'
+  | 'error';
+
+export interface CookieValidation {
+  status: CookieValidationStatus;
+  detail: string;
+}
+
 export interface DependencyInfo {
   name: string;
   installed: boolean;

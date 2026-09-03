@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type {
+  CookieValidation,
   DependencyInfo,
   DependencyStatus,
   DownloadError,
@@ -117,6 +118,10 @@ class DownloadService {
       sourcePath,
     });
     return result;
+  }
+
+  async validateCookies(): Promise<CookieValidation> {
+    return await invoke<CookieValidation>('validate_cookies');
   }
 
   onDependencyProgress(

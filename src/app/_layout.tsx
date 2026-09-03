@@ -15,6 +15,11 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import type { FileInfo } from '@/services';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 import { useQueueStore } from '@/stores/queue-store';
+import {
+  COOKIE_VALIDATION_CACHE_KEY,
+  useDownloadStore,
+} from '@/stores/download-store';
+import { toast } from 'sonner';
 
 export const Route = createFileRoute('/_layout')({
   component: LayoutComponent,
@@ -59,6 +64,38 @@ function LayoutComponent() {
     }
     return items.length;
   }
+
+  React.useEffect(() => {
+    try {
+      const cached = localStorage.getItem(COOKIE_VALIDATION_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as {
+          result: { status: string; detail: string };
+        };
+        if (parsed?.result) {
+          useDownloadStore
+            .getState()
+            .setCookieValidation(parsed.result as never);
+        }
+      }
+    } catch {
+      /* ignore corrupt cache */
+    }
+
+    useDownloadStore
+      .getState()
+      .refreshCookieValidation()
+      .then(() => {
+        const status = useDownloadStore.getState().cookieValidation?.status;
+        if (status === 'rotated' || status === 'blocked') {
+          toast.warning(
+            'Seus cookies do YouTube foram revogados. Re-exporte os cookies logado para continuar baixando vídeos.',
+            { duration: 8000 }
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <DndContext
