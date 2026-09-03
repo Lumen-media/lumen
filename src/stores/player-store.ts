@@ -2,11 +2,13 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { useModuleStore } from '@/modules/store';
 import { getSetting, saveSetting } from '@/services/db';
 import { mediaDbService } from '@/services/media-db-service';
 import { remoteSyncService } from '@/services/remote-sync-service';
 import { urlMediaService } from '@/services/url-media-service';
+import { useDownloadStore } from '@/stores/download-store';
 import { usePresentationStore } from '@/stores/presentation-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 import { useQueueStore } from '@/stores/queue-store';
@@ -161,6 +163,19 @@ async function waitForWsOpen(get: () => PlayerStore, timeoutMs = 3000): Promise<
 
 function normalizeMediaSource(source: string): string {
   return urlMediaService.parseYouTubeUrl(source)?.canonicalUrl ?? source;
+}
+
+async function needsCookiesForPlayback(): Promise<boolean> {
+  const store = useDownloadStore.getState();
+  let deps = store.dependencyStatus;
+  if (!deps) {
+    try {
+      deps = await store.checkDeps();
+    } catch {
+      return false;
+    }
+  }
+  return !deps.cookiesInstalled;
 }
 
 function getMediaTypeFromPath(filePath: string | null | undefined): PlayerStore['localMediaType'] {
@@ -577,6 +592,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       } catch {
       }
+    }
+
+    if (urlMediaService.parseYouTubeUrl(source) && (await needsCookiesForPlayback())) {
+      useDownloadStore.getState().openCookiesDialog();
+      emit('open-cookies-dialog').catch(() => {});
+      toast.warning(
+        'Adicione os cookies do YouTube para reproduzir este vídeo. Sem eles, a reprodução pode falhar.'
+      );
+      return;
     }
 
     const ext = source.split('.').pop()?.toLowerCase() ?? '';
