@@ -83,13 +83,70 @@ fn match_ffmpeg_asset(assets: &[GitHubAsset]) -> Option<&GitHubAsset> {
 }
 
 pub async fn fetch_latest_ytdlp() -> Result<ToolRelease, String> {
-    let url = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest";
+    let url = "https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest";
     fetch_release(url, match_ytdlp_asset, "yt-dlp").await
 }
 
 pub async fn fetch_latest_ffmpeg() -> Result<ToolRelease, String> {
     let url = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest";
     fetch_release(url, match_ffmpeg_asset, "ffmpeg").await
+}
+
+#[derive(Debug, Deserialize)]
+struct NodeRelease {
+    version: String,
+    lts: Option<serde_json::Value>,
+}
+
+pub async fn fetch_latest_node() -> Result<ToolRelease, String> {
+    let url = "https://nodejs.org/dist/index.json";
+    let client = reqwest::Client::new();
+    let response = client
+        .get(url)
+        .header("User-Agent", "lumen-app")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch Node release: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "Node.js dist API returned status {}",
+            response.status()
+        ));
+    }
+
+    let releases: Vec<NodeRelease> = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Node releases JSON: {}", e))?;
+
+    let release = releases
+        .iter()
+        .find(|r| r.lts.is_some() && matches!(r.lts, Some(serde_json::Value::String(_)) | Some(serde_json::Value::Bool(true))))
+        .or_else(|| releases.first())
+        .ok_or_else(|| "No Node.js releases found".to_string())?;
+
+    let version_trimmed = release.version.trim_start_matches('v').to_string();
+    let file_name = format!("node-v{}-win-x64.zip", version_trimmed);
+    let download_url = format!("https://nodejs.org/dist/{}/{}", release.version, file_name);
+
+    let size = fetch_content_length(&download_url, &client).await.unwrap_or(0);
+
+    Ok(ToolRelease {
+        version: release.version.clone(),
+        download_url,
+        file_name,
+        size,
+    })
+}
+
+async fn fetch_content_length(url: &str, client: &reqwest::Client) -> Option<u64> {
+    client
+        .head(url)
+        .send()
+        .await
+        .ok()?
+        .content_length()
 }
 
 async fn fetch_release(

@@ -46,7 +46,7 @@ pub async fn check_dependencies(
     _state: State<'_, DownloadState>,
     app: AppHandle,
 ) -> Result<DependencyStatus, String> {
-    dependencies::check_dependencies(&app)
+    dependencies::check_dependencies(&app).await
 }
 
 #[tauri::command]
@@ -100,4 +100,44 @@ pub async fn get_download_status(
     } else {
         Ok(None)
     }
+}
+
+#[tauri::command]
+pub async fn install_cookies_file(
+    state: State<'_, DownloadState>,
+    source_path: String,
+) -> Result<String, String> {
+    let source = std::path::Path::new(&source_path);
+    if !source.exists() {
+        return Err("Arquivo de cookies não encontrado".to_string());
+    }
+
+    let content = std::fs::read(source)
+        .map_err(|e| format!("Falha ao ler o arquivo de cookies: {}", e))?;
+
+    // Netscape cookie files always start with this header line.
+    let header = b"# Netscape HTTP Cookie File";
+    if !content.starts_with(header) {
+        return Err(
+            "O arquivo não parece ser um cookies.txt do YouTube (formato Netscape inválido). Verifique se você exportou com a extensão \"Get cookies.txt LOCALLY\".".to_string()
+        );
+    }
+
+    // Ensure at least one non-comment, tab-separated cookie line exists.
+    let text = String::from_utf8_lossy(&content);
+    let has_cookie_line = text.lines().any(|line| {
+        let line = line.trim();
+        !line.is_empty() && !line.starts_with('#') && line.contains('\t')
+    });
+    if !has_cookie_line {
+        return Err(
+            "O arquivo de cookies está vazio ou não contém cookies válidos. Faça login no YouTube e exporte novamente.".to_string()
+        );
+    }
+
+    let dest = state.tools_dir.join("cookies.txt");
+    std::fs::write(&dest, &content)
+        .map_err(|e| format!("Falha ao salvar cookies: {}", e))?;
+
+    Ok(dest.to_string_lossy().to_string())
 }

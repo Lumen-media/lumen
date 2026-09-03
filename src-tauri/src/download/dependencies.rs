@@ -12,18 +12,24 @@ pub struct ToolInfo {
     pub downloaded_at: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ToolVersions {
     pub ytdlp: Option<ToolInfo>,
     pub ffmpeg: Option<ToolInfo>,
+    pub node: Option<ToolInfo>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DependencyStatus {
     pub ytdlp_installed: bool,
     pub ytdlp_version: Option<String>,
+    pub ytdlp_outdated: bool,
     pub ffmpeg_installed: bool,
     pub ffmpeg_version: Option<String>,
+    pub cookies_installed: bool,
+    pub node_installed: bool,
+    pub node_dir: Option<String>,
     pub tools_dir: String,
 }
 
@@ -78,12 +84,14 @@ pub fn load_versions(tools_dir: &Path) -> ToolVersions {
         return ToolVersions {
             ytdlp: None,
             ffmpeg: None,
+            node: None,
         };
     }
     let data = std::fs::read_to_string(&path).unwrap_or_default();
     serde_json::from_str(&data).unwrap_or(ToolVersions {
         ytdlp: None,
         ffmpeg: None,
+        node: None,
     })
 }
 
@@ -93,7 +101,7 @@ pub fn save_versions(tools_dir: &Path, versions: &ToolVersions) -> Result<(), St
     std::fs::write(&path, data).map_err(|e| format!("Failed to save versions.json: {}", e))
 }
 
-pub fn check_dependencies(app: &AppHandle) -> Result<DependencyStatus, String> {
+pub async fn check_dependencies(app: &AppHandle) -> Result<DependencyStatus, String> {
     let dir = tools_dir(app)?;
     let versions = load_versions(&dir);
 
@@ -101,7 +109,18 @@ pub fn check_dependencies(app: &AppHandle) -> Result<DependencyStatus, String> {
     let ffmpeg_path = dir.join(ffmpeg_binary_name());
 
     let ytdlp_installed = ytdlp_path.exists();
-    let ffmpeg_installed = ffmpeg_path.exists();
+    let cookies_installed = dir.join("cookies.txt").exists();
+    let node_dir = dir.join("node");
+    let node_path = node_dir.join("node.exe");
+    let node_installed = node_path.exists();
+
+    let mut ytdlp_outdated = false;
+    if ytdlp_installed {
+        if let Ok(latest) = github::fetch_latest_ytdlp().await {
+            let installed_version = versions.ytdlp.as_ref().map(|v| v.version.as_str());
+            ytdlp_outdated = installed_version != Some(latest.version.as_str());
+        }
+    }
 
     Ok(DependencyStatus {
         ytdlp_installed,
@@ -110,9 +129,17 @@ pub fn check_dependencies(app: &AppHandle) -> Result<DependencyStatus, String> {
         } else {
             None
         },
-        ffmpeg_installed,
-        ffmpeg_version: if ffmpeg_installed {
+        ytdlp_outdated,
+        ffmpeg_installed: ffmpeg_path.exists(),
+        ffmpeg_version: if ffmpeg_path.exists() {
             versions.ffmpeg.as_ref().map(|v| v.version.clone())
+        } else {
+            None
+        },
+        cookies_installed,
+        node_installed,
+        node_dir: if node_installed {
+            Some(node_dir.to_string_lossy().to_string())
         } else {
             None
         },
@@ -164,17 +191,13 @@ pub async fn download_dependencies(app: AppHandle) -> Result<(), String> {
         .map_err(|e| format!("Failed to create downloads directory: {}", e))?;
 
     let mut versions = load_versions(&dir);
+    let ytdlp_path = dir.join(ytdlp_binary_name());
 
-    if !dir.join(ytdlp_binary_name()).exists() {
-        app.emit("dependency-download-progress", serde_json::json!({
-            "tool": "ytdlp",
-            "progress": 0.0,
-            "status": "fetching_release"
-        }))
-        .ok();
+    let latest_ytdlp = github::fetch_latest_ytdlp().await?;
+    let should_update_ytdlp = !ytdlp_path.exists()
+        || versions.ytdlp.as_ref().map(|v| v.version.as_str()) != Some(latest_ytdlp.version.as_str());
 
-        let release = github::fetch_latest_ytdlp().await?;
-
+    if should_update_ytdlp {
         app.emit("dependency-download-progress", serde_json::json!({
             "tool": "ytdlp",
             "progress": 0.1,
@@ -182,8 +205,8 @@ pub async fn download_dependencies(app: AppHandle) -> Result<(), String> {
         }))
         .ok();
 
-        let dest_path = downloads_dir.join(&release.file_name);
-        download_file(&release.download_url, &dest_path, &app, "ytdlp").await?;
+        let dest_path = downloads_dir.join(&latest_ytdlp.file_name);
+        download_file(&latest_ytdlp.download_url, &dest_path, &app, "ytdlp").await?;
 
         let final_path = dir.join(ytdlp_binary_name());
         std::fs::rename(&dest_path, &final_path)
@@ -196,7 +219,7 @@ pub async fn download_dependencies(app: AppHandle) -> Result<(), String> {
         }
 
         versions.ytdlp = Some(ToolInfo {
-            version: release.version,
+            version: latest_ytdlp.version,
             path: final_path.to_string_lossy().to_string(),
             downloaded_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -263,6 +286,57 @@ pub async fn download_dependencies(app: AppHandle) -> Result<(), String> {
             }))
             .ok();
         }
+    }
+
+    if !dir.join("node").join("node.exe").exists() {
+        app.emit("dependency-download-progress", serde_json::json!({
+            "tool": "node",
+            "progress": 0.0,
+            "status": "fetching_release"
+        }))
+        .ok();
+
+        let release = github::fetch_latest_node().await?;
+
+        app.emit("dependency-download-progress", serde_json::json!({
+            "tool": "node",
+            "progress": 0.1,
+            "status": "downloading"
+        }))
+        .ok();
+
+        let dest_path = downloads_dir.join(&release.file_name);
+        download_file(&release.download_url, &dest_path, &app, "node").await?;
+
+        app.emit("dependency-download-progress", serde_json::json!({
+            "tool": "node",
+            "progress": 0.9,
+            "status": "extracting"
+        }))
+        .ok();
+
+        let node_dir = dir.join("node");
+        std::fs::create_dir_all(&node_dir)
+            .map_err(|e| format!("Failed to create node directory: {}", e))?;
+        extract_node_zip(&dest_path, &node_dir)?;
+
+        let _ = std::fs::remove_file(&dest_path);
+
+        versions.node = Some(ToolInfo {
+            version: release.version,
+            path: node_dir.join("node.exe").to_string_lossy().to_string(),
+            downloaded_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        });
+        save_versions(&dir, &versions)?;
+
+        app.emit("dependency-download-complete", serde_json::json!({
+            "tool": "node",
+            "version": versions.node.as_ref().unwrap().version
+        }))
+        .ok();
     }
 
     let _ = std::fs::remove_dir_all(&downloads_dir);
@@ -379,6 +453,42 @@ fn extract_ffmpeg_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
     }
     let ffmpeg_size = std::fs::metadata(&ffmpeg_path).map(|m| m.len()).unwrap_or(0);
     println!("[ffmpeg] Verification: {:?} exists, size: {} bytes", ffmpeg_path, ffmpeg_size);
+
+    Ok(())
+}
+
+fn extract_node_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
+    let zip_file =
+        std::fs::File::open(zip_path).map_err(|e| format!("Failed to open node zip: {}", e))?;
+    let mut archive =
+        zip::ZipArchive::new(zip_file).map_err(|e| format!("Failed to read node zip: {}", e))?;
+
+    println!("[node] Extracting zip to {:?}", dest_dir);
+
+    for i in 0..archive.len() {
+        let mut file = archive
+            .by_index(i)
+            .map_err(|e| format!("Failed to read zip entry: {}", e))?;
+
+        let name = file.name().to_string();
+        let path = Path::new(name.as_str());
+
+        if path.ends_with("node.exe") {
+            let out_path = dest_dir.join("node.exe");
+            let mut out_file = std::fs::File::create(&out_path)
+                .map_err(|e| format!("Failed to create node.exe: {}", e))?;
+            std::io::copy(&mut file, &mut out_file)
+                .map_err(|e| format!("Failed to extract node.exe: {}", e))?;
+            println!("[node] Extracted node.exe");
+        }
+    }
+
+    let node_path = dest_dir.join("node.exe");
+    if !node_path.exists() {
+        return Err("Failed to extract node.exe from zip".to_string());
+    }
+    let node_size = std::fs::metadata(&node_path).map(|m| m.len()).unwrap_or(0);
+    println!("[node] Verification: {:?} exists, size: {} bytes", node_path, node_size);
 
     Ok(())
 }
