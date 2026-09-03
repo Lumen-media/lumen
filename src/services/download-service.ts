@@ -23,16 +23,24 @@ class DownloadService {
     const result = await invoke<{
       ytdlp_installed: boolean;
       ytdlp_version: string | null;
+      ytdlp_outdated: boolean;
       ffmpeg_installed: boolean;
       ffmpeg_version: string | null;
+      cookies_installed: boolean;
+      node_installed: boolean;
+      node_dir: string | null;
       tools_dir: string;
     }>('check_dependencies');
 
     return {
       ytdlpInstalled: result.ytdlp_installed,
       ytdlpVersion: result.ytdlp_version,
+      ytdlpOutdated: result.ytdlp_outdated,
       ffmpegInstalled: result.ffmpeg_installed,
       ffmpegVersion: result.ffmpeg_version,
+      cookiesInstalled: result.cookies_installed,
+      nodeInstalled: result.node_installed,
+      nodeDir: result.node_dir,
       toolsDir: result.tools_dir,
     };
   }
@@ -101,6 +109,13 @@ class DownloadService {
         downloadId,
       }
     );
+    return result;
+  }
+
+  async installCookiesFile(sourcePath: string): Promise<string> {
+    const result = await invoke<string>('install_cookies_file', {
+      sourcePath,
+    });
     return result;
   }
 

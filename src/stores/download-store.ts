@@ -49,6 +49,7 @@ interface DownloadStore {
   dependencyStatus: DependencyStatus | null;
   activeDownloads: Map<string, ActiveDownload>;
   isInstallingDeps: boolean;
+  cookiesDialogOpen: boolean;
 
   checkDeps: () => Promise<DependencyStatus>;
   installDeps: () => Promise<void>;
@@ -61,17 +62,31 @@ interface DownloadStore {
   getActiveDownload: (downloadId: string) => ActiveDownload | undefined;
   updateDownloadProgress: (downloadId: string, progress: DownloadProgress) => void;
   removeDownload: (downloadId: string) => void;
+  openCookiesDialog: () => void;
+  closeCookiesDialog: () => void;
+  installCookies: (sourcePath: string) => Promise<string>;
 }
 
 export const useDownloadStore = create<DownloadStore>((set, get) => ({
   dependencyStatus: null,
   activeDownloads: new Map(),
   isInstallingDeps: false,
+  cookiesDialogOpen: false,
 
   checkDeps: async () => {
     const status = await downloadService.checkDependencies();
     set({ dependencyStatus: status });
     return status;
+  },
+
+  openCookiesDialog: () => set({ cookiesDialogOpen: true }),
+  closeCookiesDialog: () => set({ cookiesDialogOpen: false }),
+
+  installCookies: async (sourcePath) => {
+    const installedPath = await downloadService.installCookiesFile(sourcePath);
+    const status = await downloadService.checkDependencies();
+    set({ dependencyStatus: status });
+    return installedPath;
   },
 
   installDeps: async () => {
