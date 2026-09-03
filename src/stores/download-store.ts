@@ -34,6 +34,14 @@ interface RawDownloadError {
   code: string;
 }
 
+const STANDARD_HEIGHTS = [1080, 1440, 2160];
+
+function autoMaxHeight(): number {
+  const screenHeight = typeof window !== 'undefined' ? window.screen.height : 1080;
+  const nextStandard = STANDARD_HEIGHTS.find((h) => h >= screenHeight) ?? 2160;
+  return Math.max(1080, nextStandard);
+}
+
 interface ActiveDownload {
   downloadId: string;
   fileId?: number;
@@ -260,7 +268,12 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
       console.error('[download-store] Failed to set downloading status:', e);
     }
 
-    const result = await downloadService.downloadVideo(url, provider, quality);
+    const result = await downloadService.downloadVideo(
+      url,
+      provider,
+      quality,
+      autoMaxHeight()
+    );
 
     targetDownloadId = result.downloadId;
 
