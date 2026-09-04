@@ -70,6 +70,8 @@ pub struct ActiveDownload {
 
 pub type ActiveDownloads = Arc<Mutex<HashMap<String, ActiveDownload>>>;
 
+const BROWSER_ORDER: &[&str] = &["chrome", "edge", "firefox", "brave", "chromium"];
+
 pub fn create_active_downloads() -> ActiveDownloads {
     Arc::new(Mutex::new(HashMap::new()))
 }
@@ -106,6 +108,103 @@ fn audio_media_dir(_app: &AppHandle) -> Result<PathBuf, String> {
         .ok_or_else(|| "Could not resolve executable directory".to_string())?;
     Ok(parent.join("lumen").join("files").join("media").join("audio"))
 }
+
+fn browser_cache_file(tools_dir: &Path) -> PathBuf {
+    tools_dir.join("browser.txt")
+}
+
+fn has_node_at(tools_dir: &Path) -> PathBuf {
+    let node_dir = tools_dir.join("node");
+    if cfg!(target_os = "windows") {
+        node_dir.join("node.exe")
+    } else {
+        node_dir.join("node")
+    }
+}
+
+async fn probe_browser(ytdlp: &Path, node_path: Option<&Path>, browser: &str) -> bool {
+    let mut args = vec![
+        "--cookies-from-browser".to_string(),
+        browser.to_string(),
+        "--skip-download".to_string(),
+        "--no-playlist".to_string(),
+        "--no-warnings".to_string(),
+        "--print".to_string(),
+        "%(id)s".to_string(),
+    ];
+    if let Some(node) = node_path {
+        if let Some(dir) = node.parent() {
+            args.push("--js-runtimes".to_string());
+            args.push(format!("node:{}", dir.to_string_lossy()));
+        }
+    }
+    args.push("https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_string());
+
+    let child = Command::new(ytdlp)
+        .args(&args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+
+    let mut child = match child {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    match tokio::time::timeout(std::time::Duration::from_secs(60), child.wait()).await {
+        Ok(Ok(status)) => status.success(),
+        _ => {
+            let _ = child.kill().await;
+            false
+        }
+    }
+}
+
+fn cached_browser(tools_dir: &Path) -> Option<String> {
+    let cached = std::fs::read_to_string(browser_cache_file(tools_dir)).ok()?;
+    let name = cached.trim();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
+    }
+}
+
+pub async fn detect_youtube_browser(tools_dir: &Path) -> Option<String> {
+    if let Some(cached) = cached_browser(tools_dir) {
+        return Some(cached);
+    }
+
+    let ytdlp = ytdlp_path(tools_dir);
+    if !ytdlp.exists() {
+        return None;
+    }
+
+    let node_path = has_node_at(tools_dir);
+    let node = node_path.exists().then_some(node_path.as_path());
+
+    for browser in BROWSER_ORDER {
+        if probe_browser(&ytdlp, node, browser).await {
+            let _ = std::fs::write(browser_cache_file(tools_dir), browser);
+            return Some(browser.to_string());
+        }
+    }
+    None
+}
+
+fn auth_args(work_cookies: Option<&Path>, browser: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    if let Some(work) = work_cookies {
+        args.push("--cookies".to_string());
+        args.push(work.to_string_lossy().to_string());
+    } else if !browser.is_empty() {
+        args.push("--cookies-from-browser".to_string());
+        args.push(browser.to_string());
+    }
+    args
+}
+
 pub async fn start_download(
     app: AppHandle,
     tools_dir: PathBuf,
@@ -178,16 +277,18 @@ pub async fn start_download(
 
     let cookies_path = tools_dir.join("cookies.txt");
     let work_cookies_path = cookies_path.exists().then(|| work_cookies_copy(&cookies_path));
-    if cookies_path.exists() {
+    let mut browser = String::new();
+    if !cookies_path.exists() {
+        browser = detect_youtube_browser(&tools_dir).await.unwrap_or_default();
+        if !browser.is_empty() {
+            println!("[download] Using browser cookies from: {}", browser);
+        }
+    } else {
         println!("[download] Using cookies file: {}", cookies_path.display());
-        args.push("--cookies".to_string());
-        args.push(
-            work_cookies_path
-                .as_deref()
-                .unwrap_or(&cookies_path)
-                .to_string_lossy()
-                .to_string(),
-        );
+    }
+    let auth = auth_args(work_cookies_path.as_deref(), &browser);
+    for arg in &auth {
+        args.push(arg.clone());
     }
 
     if !ffmpeg_location.is_empty() {
@@ -216,15 +317,8 @@ pub async fn start_download(
             args.push("--js-runtimes".to_string());
             args.push(format!("node:{}", node_dir.to_string_lossy()));
         }
-        if cookies_path.exists() {
-            args.push("--cookies".to_string());
-            args.push(
-                work_cookies_path
-                    .as_deref()
-                    .unwrap_or(&cookies_path)
-                    .to_string_lossy()
-                    .to_string(),
-            );
+        for arg in &auth {
+            args.push(arg.clone());
         }
         if !ffmpeg_location.is_empty() {
             args.push("--ffmpeg-location".to_string());
@@ -572,9 +666,16 @@ pub struct CookieValidation {
 pub async fn validate_cookies(tools_dir: &Path) -> Result<CookieValidation, String> {
     let cookies_path = tools_dir.join("cookies.txt");
     if !cookies_path.exists() {
+        let browser = detect_youtube_browser(tools_dir).await.unwrap_or_default();
+        if !browser.is_empty() {
+            return Ok(CookieValidation {
+                status: "valid".to_string(),
+                detail: format!("Usando cookies do navegador logado ({}).", browser),
+            });
+        }
         return Ok(CookieValidation {
             status: "missing".to_string(),
-            detail: "Nenhum arquivo de cookies instalado ainda.".to_string(),
+            detail: "Nenhum arquivo de cookies e nenhum navegador logado detectado. Instale cookies ou faça login no navegador.".to_string(),
         });
     }
 
