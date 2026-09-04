@@ -57,7 +57,7 @@ function downloadStatusLabel(file: FileInfo): string | null {
   if (!isUrlMedia(file)) return null;
   switch (file.downloadStatus) {
     case 'downloaded':
-      return 'Downloaded';
+      return '';
     case 'downloading':
       return 'Downloading';
     case 'missing':
@@ -190,7 +190,7 @@ export function FileListItem({
     useDownloadStore();
   const urlMedia = isUrlMedia(file);
   const statusLabel = downloadStatusLabel(file);
-  const fileSizeLabel = urlMedia ? 'URL' : formatFileSize(file.size);
+  const fileSizeLabel = formatFileSize(file.size);
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `media-file:${file.path}`,
