@@ -268,12 +268,23 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
       console.error('[download-store] Failed to set downloading status:', e);
     }
 
-    const result = await downloadService.downloadVideo(
-      url,
-      provider,
-      quality,
-      autoMaxHeight()
-    );
+    let result: DownloadResult;
+    try {
+      result = await downloadService.downloadVideo(
+        url,
+        provider,
+        quality,
+        autoMaxHeight()
+      );
+    } catch (e) {
+      console.error('[download-store] Failed to start download:', e);
+      progressUnlisten();
+      completeUnlisten();
+      errorUnlisten();
+      await mediaDbService.updateDownloadStatus(url, 'not_downloaded').catch(() => {});
+      window.dispatchEvent(new CustomEvent('lumen:media-files-changed'));
+      throw e;
+    }
 
     targetDownloadId = result.downloadId;
 
