@@ -235,14 +235,6 @@ export function FileListItem({
         deps = await checkDeps();
       }
 
-      if (urlMedia && !deps.cookiesInstalled) {
-        openCookiesDialog();
-        toast.warning(
-          'YouTube agora exige cookies logados para baixar. Adicione seu arquivo de cookies antes de continuar.'
-        );
-        return;
-      }
-
       if (!deps.ytdlpInstalled || !deps.ffmpegInstalled || deps.ytdlpOutdated || !deps.nodeInstalled) {
         await toast.promise(installDeps(), {
           loading: 'Installing/updating download tools (includes Node.js)...',
