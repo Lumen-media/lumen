@@ -1,6 +1,6 @@
 'use client';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { LucidePause, LucidePlay, LucideVolume2, LucideVolumeOff } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
@@ -272,6 +272,11 @@ export const Videoplayer = ({
         onPlay={() => setPlaying(true)}
         onPause={() => {
           if (!switchingUrlRef.current) setPlaying(false);
+        }}
+        onError={() => {
+          if (currentFilePath.current && urlMediaService.parseYouTubeUrl(currentFilePath.current)) {
+            emit('video-playback-error').catch(() => {});
+          }
         }}
         loop={isLooping}
         controls={false}

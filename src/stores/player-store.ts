@@ -165,19 +165,6 @@ function normalizeMediaSource(source: string): string {
   return urlMediaService.parseYouTubeUrl(source)?.canonicalUrl ?? source;
 }
 
-async function needsCookiesForPlayback(): Promise<boolean> {
-  const store = useDownloadStore.getState();
-  let deps = store.dependencyStatus;
-  if (!deps) {
-    try {
-      deps = await store.checkDeps();
-    } catch {
-      return false;
-    }
-  }
-  return !deps.cookiesInstalled;
-}
-
 function getMediaTypeFromPath(filePath: string | null | undefined): PlayerStore['localMediaType'] {
   if (!filePath) return undefined;
   if (urlMediaService.parseYouTubeUrl(filePath)) return 'video';
@@ -353,6 +340,17 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       });
     });
 
+    const unlistenPlaybackError = listen('video-playback-error', () => {
+      const filePath = get().currentFilePath;
+      if (!filePath || !urlMediaService.parseYouTubeUrl(filePath)) return;
+      if (get().localMediaType !== 'video') return;
+      useDownloadStore.getState().openCookiesDialog();
+      emit('open-cookies-dialog').catch(() => {});
+      toast.warning(
+        'Não foi possível reproduzir este vídeo do YouTube. Adicione os cookies da sua conta para desbloquear a reprodução.'
+      );
+    });
+
     const unlistenLoadLyric = listen<{ url: string }>('load-lyric', (event) => {
       set({
         currentLyricPath: event.payload.url,
@@ -385,6 +383,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       unlistenSeek.then((f) => f());
       unlistenLoop.then((f) => f());
       unlistenLoadUrl.then((f) => f());
+      unlistenPlaybackError.then((f) => f());
       unlistenLoadLyric.then((f) => f());
       unlistenLyricSlideChanged.then((f) => f());
     };
@@ -592,15 +591,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         }
       } catch {
       }
-    }
-
-    if (urlMediaService.parseYouTubeUrl(source) && (await needsCookiesForPlayback())) {
-      useDownloadStore.getState().openCookiesDialog();
-      emit('open-cookies-dialog').catch(() => {});
-      toast.warning(
-        'Adicione os cookies do YouTube para reproduzir este vídeo. Sem eles, a reprodução pode falhar.'
-      );
-      return;
     }
 
     const ext = source.split('.').pop()?.toLowerCase() ?? '';
