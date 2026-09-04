@@ -32,6 +32,8 @@ export function DeleteFileAlert({ onDelete }: DeleteFileAlertProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const { t } = useTranslation();
   const isUrlMedia = file?.extension === 'url' || Boolean(file?.originalUrl);
+  const isLocalDownload =
+    file?.downloadStatus === 'downloaded' && Boolean(file?.path) && !file.path.startsWith('http');
   const displayName = shortenName(file?.name);
 
   const handleConfirmDelete = async () => {
@@ -39,11 +41,15 @@ export function DeleteFileAlert({ onDelete }: DeleteFileAlertProps) {
 
     setIsDeleting(true);
     try {
-      if (file.extension === 'url' || file.originalUrl) {
-        await mediaDbService.deleteFile(file.path);
-      } else {
-        await remove(file.path);
+      const isLocalDownload = file.downloadStatus === 'downloaded' && !file.path.startsWith('http');
+      if (isLocalDownload) {
+        try {
+          await remove(file.path);
+        } catch (e) {
+          console.error('Failed to remove file on disk:', e);
+        }
       }
+      await mediaDbService.deleteFile(file.path);
       closeDeleteDialog();
       toast.success(t('{{name}} removed', { name: displayName }));
 
@@ -61,16 +67,22 @@ export function DeleteFileAlert({ onDelete }: DeleteFileAlertProps) {
   return (
     <AlertDialog open={isOpen} onOpenChange={closeDeleteDialog}>
       <AlertDialogContent>
-        <AlertDialogTitle>{isUrlMedia ? t('Remove media?') : t('Delete file?')}</AlertDialogTitle>
+        <AlertDialogTitle>
+          {isLocalDownload || !isUrlMedia ? t('Delete file?') : t('Remove media?')}
+        </AlertDialogTitle>
         <AlertDialogDescription className="break-words [overflow-wrap:anywhere]">
-          {isUrlMedia
-            ? t(
-                'Remove "{{name}}" from the library? The YouTube video itself will not be deleted.',
-                { name: displayName }
-              )
-            : t('Are you sure you want to delete "{{name}}"? This action cannot be undone.', {
+          {isLocalDownload
+            ? t('Are you sure you want to delete the downloaded file for "{{name}}"? This action cannot be undone.', {
                 name: displayName,
-              })}
+              })
+            : isUrlMedia
+              ? t(
+                  'Remove "{{name}}" from the library? The YouTube video itself will not be deleted.',
+                  { name: displayName }
+                )
+              : t('Are you sure you want to delete "{{name}}"? This action cannot be undone.', {
+                  name: displayName,
+                })}
         </AlertDialogDescription>
         <div className="flex gap-3 justify-end">
           <AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
@@ -79,7 +91,11 @@ export function DeleteFileAlert({ onDelete }: DeleteFileAlertProps) {
             disabled={isDeleting}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {isDeleting ? t('Deleting...') : isUrlMedia ? t('Remove') : t('Delete')}
+            {isDeleting
+              ? t('Deleting...')
+              : isLocalDownload || !isUrlMedia
+                ? t('Delete')
+                : t('Remove')}
           </AlertDialogAction>
         </div>
       </AlertDialogContent>
