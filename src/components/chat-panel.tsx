@@ -12,7 +12,6 @@ import {
   Paperclip,
   Presentation,
   Reply,
-  Send,
   Trash2,
   X,
 } from 'lucide-react';
@@ -1222,10 +1221,9 @@ function ChatTab() {
 
           <div
             className={cn(
-              'max-h-40 overflow-auto scrollbar-none rounded-2xl border text-sm',
+              'relative rounded-2xl border text-sm bg-background/50',
               isOverLimit ? 'border-destructive' : 'border-border',
-              replyTo ? 'rounded-t-none' : '',
-              'bg-background/50'
+              replyTo ? 'rounded-t-none' : ''
             )}
           >
             <TextEditor
@@ -1233,11 +1231,10 @@ function ChatTab() {
               placeholder={t('Type a message…')}
               editable={config.enabled && !sending}
               debounce={100}
+              className="max-h-40 [&_.tiptap]:max-h-40 [&_.tiptap]:overflow-auto pr-3.5"
             />
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1">
+            <div className="absolute right-1.5 bottom-1.5">
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -1247,25 +1244,7 @@ function ChatTab() {
               >
                 <Paperclip />
               </Button>
-              {charCount > 0 && (
-                <span
-                  className={cn(
-                    'text-[10px] tabular-nums',
-                    isOverLimit ? 'text-destructive font-medium' : 'text-muted-foreground'
-                  )}
-                >
-                  {charCount}/{MAX_MESSAGE_LENGTH}
-                </span>
-              )}
             </div>
-            <Button
-              size="sm"
-              onClick={handleSend}
-              disabled={!config.enabled || sending || isOverLimit}
-              className="rounded-xl"
-            >
-              {t('Send')} <Send />
-            </Button>
           </div>
         </div>
       </div>
