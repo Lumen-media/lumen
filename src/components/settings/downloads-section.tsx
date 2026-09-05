@@ -10,13 +10,36 @@ import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 
-const COOKIE_STATUS_META: Record<CookieValidation['status'], { label: string; tone: 'ok' | 'warn' | 'bad' | 'neutral' }> = {
+const COOKIE_STATUS_META: Record<
+  CookieValidation['status'],
+  { label: string; help?: string; tone: 'ok' | 'warn' | 'bad' | 'neutral' }
+> = {
   valid: { label: 'Cookies válidos', tone: 'ok' },
-  rotated: { label: 'Cookies rotacionados — re-exporte', tone: 'bad' },
-  blocked: { label: 'Exigindo confirmação de conta (PO token)', tone: 'bad' },
-  no_account: { label: 'Nenhuma conta logada detectada', tone: 'warn' },
-  missing: { label: 'Nenhum arquivo instalado', tone: 'neutral' },
-  error: { label: 'Falha na validação', tone: 'bad' },
+  rotated: {
+    label: 'Cookies rotacionados — re-exporte',
+    help: 'Os cookies foram revogados pelo Google. Reexporte-os pela instalação manual abaixo e valide novamente.',
+    tone: 'bad',
+  },
+  blocked: {
+    label: 'Exigindo confirmação de conta (PO token)',
+    help: 'O YouTube está pedindo confirmação da conta. Reexporte os cookies de uma sessão logada pela instalação manual abaixo.',
+    tone: 'bad',
+  },
+  no_account: {
+    label: 'Nenhuma conta logada detectada',
+    help: 'O app não encontrou uma sessão logada na leitura automática do navegador. Faça login no YouTube no seu navegador e valide de novo, ou use a instalação manual abaixo.',
+    tone: 'warn',
+  },
+  missing: {
+    label: 'Nenhuma conta detectada (auto e manual)',
+    help: 'Nem a leitura automática do navegador nem um arquivo cookies.txt foram encontrados. Instale os cookies manualmente com os passos abaixo.',
+    tone: 'neutral',
+  },
+  error: {
+    label: 'Falha na validação',
+    help: 'Não foi possível validar os cookies. Tente instalar os cookies manualmente com os passos abaixo e valide novamente.',
+    tone: 'bad',
+  },
 };
 
 export function DownloadsSection() {
@@ -68,15 +91,15 @@ export function DownloadsSection() {
 
   const steps = [
     {
-      title: t('1. Login no YouTube'),
+      title: t('1. Faça login no YouTube'),
       text: t(
-        'Abra o YouTube no seu navegador (Chrome, Edge ou Firefox) e faça login na sua conta como faria normalmente.'
+        'Abra o YouTube no seu navegador (Chrome, Edge ou Firefox) e faça login na sua conta como faria normalmente. É a sessão logada que será usada.'
       ),
     },
     {
       title: t('2. Instale a extensão'),
       text: t(
-        'Instale a extensão "Get cookies.txt LOCALLY" na loja de extensões do seu navegador.'
+        'Instale a extensão "Get cookies.txt LOCALLY" na loja de extensões do seu navegador. Ela apenas exporta os cookies da sessão logada.'
       ),
     },
     {
@@ -93,7 +116,7 @@ export function DownloadsSection() {
     {
       title: t('5. Pronto!'),
       text: t(
-        'O app detecta o arquivo automaticamente e usa-o para autenticar os downloads. Nenhuma palavra-passe é enviada: apenas os cookies da sessão.'
+        'O app detecta o arquivo automaticamente e o usa para autenticar os downloads, dispensando a leitura automática do navegador. Nenhuma palavra-passe é enviada: apenas os cookies de sessão.'
       ),
     },
   ];
@@ -109,7 +132,7 @@ export function DownloadsSection() {
         <h3 className="text-base font-semibold">{t('Downloads & Ferramentas')}</h3>
         <p className="text-sm text-muted-foreground mt-0.5">
           {t(
-            'O YouTube recentemente passou a exigir autenticação para baixar vídeos em qualidade alta. Para resolver, adicione os seus cookies abaixo.'
+            'Para baixar vídeos em qualidade alta, o YouTube exige uma conta logada. O app usa o yt-dlp, que lê os cookies automaticamente do navegador em que você está logado (Chrome, Edge ou Firefox) — na maioria dos casos, nenhuma configuração é necessária.'
           )}
         </p>
       </div>
@@ -219,10 +242,29 @@ export function DownloadsSection() {
       <CardContent variant="muted" className="gap-3 p-4 rounded-xl">
         <div className="flex items-center gap-2.5 pl-3">
           <Cookie className="size-4 text-primary" />
-          <span className="text-sm font-medium">{t('Como adicionar cookies (YouTube)')}</span>
+          <span className="text-sm font-medium">{t('Login do YouTube (cookies)')}</span>
         </div>
 
         <CardContent className="rounded-lg p-4 space-y-3">
+          <div className="rounded-lg bg-muted/50 p-3 space-y-1.5">
+            <p className="text-sm font-medium">{t('Como funciona (leitura automática)')}</p>
+            <ul className="space-y-1.5 text-xs text-muted-foreground list-disc pl-4">
+              <li>{t('O app usa o yt-dlp para baixar os vídeos do YouTube.')}</li>
+              <li>
+                {t(
+                  'O yt-dlp lê os cookies da sua sessão logada diretamente do seu navegador (Chrome, Edge, Firefox, Brave ou Chromium). Se você já está logado no YouTube em um deles, os downloads em alta qualidade funcionam sem nenhuma configuração.'
+                )}
+              </li>
+              <li>
+                {t(
+                  'As etapas abaixo são apenas para quando essa leitura automática falha: navegador bloqueado ou fechado, conta não detectada ou cookies revogados pelo Google.'
+                )}
+              </li>
+            </ul>
+          </div>
+
+          <p className="text-sm font-medium pt-1">{t('Instalação manual (só se a automática falhar)')}</p>
+
           {steps.map((step, i) => (
             <div key={i} className="flex gap-3">
               <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary">
@@ -251,7 +293,7 @@ export function DownloadsSection() {
               <p className="text-sm font-medium">{t('Validar cookies')}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {t(
-                  'Testa os cookies atuais sem baixar nada, para saber se ainda estão válidos.'
+                  'Testa os cookies atuais (arquivo instalado ou leitura automática do navegador) sem baixar nada, para saber se ainda estão válidos.'
                 )}
               </p>
               {cookieValidation && (
@@ -263,7 +305,7 @@ export function DownloadsSection() {
                   ) : (
                     <ShieldAlert className="size-4 text-destructive shrink-0 mt-0.5" />
                   )}
-                  <div className="min-w-0">
+                  <div className="min-w-0 space-y-1">
                     <p
                       className={cn(
                         'text-sm font-medium',
@@ -276,9 +318,14 @@ export function DownloadsSection() {
                     >
                       {COOKIE_STATUS_META[cookieValidation.status].label}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-0.5 break-words">
+                    <p className="text-xs text-muted-foreground break-words">
                       {cookieValidation.detail}
                     </p>
+                    {COOKIE_STATUS_META[cookieValidation.status].help && (
+                      <p className="text-xs text-destructive/90 break-words">
+                        {COOKIE_STATUS_META[cookieValidation.status].help}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -311,7 +358,7 @@ export function DownloadsSection() {
         <CardContent className="rounded-lg p-4">
           <p className="text-xs text-muted-foreground">
             {t(
-              'Sem cookies, o YouTube limita muitos vídeos à qualidade 360p ou bloqueia o download. Com os cookies de uma conta logada, a qualidade alta e a maioria dos vídeos são desbloqueados automaticamente.'
+              'Sem uma sessão logada, o YouTube limita muitos vídeos à qualidade 360p ou bloqueia o download. Com os cookies de uma conta logada — lidos do navegador ou instalados manualmente — a qualidade alta e a maioria dos vídeos são desbloqueados automaticamente.'
             )}
           </p>
         </CardContent>
