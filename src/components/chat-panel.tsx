@@ -1215,7 +1215,7 @@ function ChatTab() {
         )}
       </ScrollArea>
 
-      <div className="shrink-0 px-2 pb-2">
+      <div className="shrink-0 pb-2">
         <div className="flex flex-col gap-1">
           {replyTo && <ReplyPreview message={replyTo} onClear={() => setReplyTo(null)} />}
 
