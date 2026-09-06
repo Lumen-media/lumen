@@ -4,6 +4,23 @@ import { createRoot } from "react-dom/client";
 import "./App.css";
 
 import { router } from "./lib/router";
+import { prewarmWebRtc } from "./lib/prewarm-webrtc";
+
+const schedulePrewarmWebRtc = () => {
+  const run = () => prewarmWebRtc();
+
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(run, { timeout: 4000 });
+  } else {
+    window.setTimeout(run, 2500);
+  }
+};
+
+if (document.readyState === 'complete') {
+  schedulePrewarmWebRtc();
+} else {
+  window.addEventListener('load', schedulePrewarmWebRtc, { once: true });
+}
 
 const GlobalErrorBoundary = ({ children }: { children: React.ReactNode }) => {
   return (
