@@ -5,7 +5,6 @@ import {
   CircleDot,
   Monitor,
   Settings2,
-  SlidersHorizontal,
   Smartphone,
   Square,
   Volume2,
@@ -23,8 +22,20 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { Slider } from '@/components/ui/slider';
+import { useDeviceAudioMixer } from '@/hooks/use-device-audio-mixer';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/settings-store';
 import { useStreamingStore } from '@/stores/streaming-store';
 
 export const Route = createFileRoute('/_layout/live')({
@@ -42,28 +53,38 @@ const normalizeVideoOrientation = (value: unknown): VideoOrientation | null => {
 };
 
 function RouteComponent() {
-  const { init, config, mobileStreams, updateConfig, setContentProtection, pushBlank } =
-    useStreamingStore();
+  const {
+    init,
+    config,
+    mobileStreams,
+    updateConfig,
+    masterVolume,
+    deviceVolumes,
+    setMasterVolume,
+    setDeviceVolume,
+  } = useStreamingStore();
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [videoTrackActive, setVideoTrackActive] = useState(false);
-  const [audioTrackActive, setAudioTrackActive] = useState(false);
   const [previewConnected, setPreviewConnected] = useState(false);
   const [videoOrientation, setVideoOrientation] = useState<VideoOrientation | null>(null);
   const [streamOverlayActive, setStreamOverlayActive] = useState(false);
+  const [masterDrag, setMasterDrag] = useState<number | null>(null);
+  const [deviceDrag, setDeviceDrag] = useState<Record<string, number>>({});
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const previewVideoStreamRef = useRef<MediaStream | null>(null);
-  const previewAudioStreamRef = useRef<MediaStream | null>(null);
   const videoOrientationRef = useRef<VideoOrientation | null>(null);
   const signalingModeRef = useRef<'mobile_preview' | 'mobile'>('mobile_preview');
   const previewSubscriptionRef = useRef(false);
 
   useEffect(() => {
-    init().catch(() => {});
+    init().catch(() => { });
   }, [init]);
 
   const devices = useMemo(() => Object.values(mobileStreams), [mobileStreams]);
+  const hasDevices = devices.length > 0;
+
+  useDeviceAudioMixer(devices, masterVolume, deviceVolumes);
 
   useEffect(() => {
     if (devices.length === 0) {
@@ -77,15 +98,13 @@ function RouteComponent() {
   }, [devices, mobileStreams, selectedDeviceId]);
 
   useEffect(() => {
-    invoke('set_mobile_preview_device', { deviceId: selectedDeviceId ?? null }).catch(() => {});
+    invoke('set_mobile_preview_device', { deviceId: selectedDeviceId ?? null }).catch(() => { });
   }, [selectedDeviceId]);
 
   useEffect(() => {
     if (!streamOverlayActive) return;
     if (videoRef.current) videoRef.current.srcObject = null;
-    if (audioRef.current) audioRef.current.srcObject = null;
     setVideoTrackActive(false);
-    setAudioTrackActive(false);
     setPreviewConnected(false);
   }, [streamOverlayActive]);
 
@@ -125,6 +144,7 @@ function RouteComponent() {
 
   useEffect(() => {
     if (streamOverlayActive) return;
+    if (!hasDevices) return;
 
     const pc = new RTCPeerConnection();
     const ws = new WebSocket('ws://localhost:8080');
@@ -138,18 +158,7 @@ function RouteComponent() {
         return;
       }
       if (video.srcObject !== stream) video.srcObject = stream;
-      video.play().catch(() => {});
-    };
-
-    const attachAudioElement = (stream: MediaStream, retries = 10) => {
-      if (closed) return;
-      const audio = audioRef.current;
-      if (!audio) {
-        if (retries > 0) window.setTimeout(() => attachAudioElement(stream, retries - 1), 30);
-        return;
-      }
-      if (audio.srcObject !== stream) audio.srcObject = stream;
-      audio.play().catch(() => {});
+      video.play().catch(() => { });
     };
 
     const send = (payload: Record<string, unknown>) => {
@@ -159,43 +168,25 @@ function RouteComponent() {
     };
 
     pc.ontrack = (event) => {
-      if (event.track.kind === 'video') {
-        if (!previewVideoStreamRef.current) previewVideoStreamRef.current = new MediaStream();
-        const previewVideoStream = previewVideoStreamRef.current;
-        previewVideoStream
-          .getVideoTracks()
-          .forEach((track) => { previewVideoStream.removeTrack(track); });
-        previewVideoStream.addTrack(event.track);
-
-        const attachVideoTrack = () => {
-          setVideoTrackActive(true);
-          attachVideoElement(previewVideoStream);
-        };
-
-        attachVideoTrack();
-        if (event.track.muted) event.track.onunmute = attachVideoTrack;
-        event.track.onmute = () => setVideoTrackActive(false);
-        event.track.onended = () => setVideoTrackActive(false);
+      if (event.track.kind !== 'video') {
+        return;
       }
+      if (!previewVideoStreamRef.current) previewVideoStreamRef.current = new MediaStream();
+      const previewVideoStream = previewVideoStreamRef.current;
+      previewVideoStream
+        .getVideoTracks()
+        .forEach((track) => { previewVideoStream.removeTrack(track); });
+      previewVideoStream.addTrack(event.track);
 
-      if (event.track.kind === 'audio') {
-        if (!previewAudioStreamRef.current) previewAudioStreamRef.current = new MediaStream();
-        const previewAudioStream = previewAudioStreamRef.current;
-        previewAudioStream
-          .getAudioTracks()
-          .forEach((track) => { previewAudioStream.removeTrack(track); });
-        previewAudioStream.addTrack(event.track);
+      const attachVideoTrack = () => {
+        setVideoTrackActive(true);
+        attachVideoElement(previewVideoStream);
+      };
 
-        const attachAudioTrack = () => {
-          setAudioTrackActive(true);
-          attachAudioElement(previewAudioStream);
-        };
-
-        attachAudioTrack();
-        if (event.track.muted) event.track.onunmute = attachAudioTrack;
-        event.track.onmute = () => setAudioTrackActive(false);
-        event.track.onended = () => setAudioTrackActive(false);
-      }
+      attachVideoTrack();
+      if (event.track.muted) event.track.onunmute = attachVideoTrack;
+      event.track.onmute = () => setVideoTrackActive(false);
+      event.track.onended = () => setVideoTrackActive(false);
     };
 
     pc.onicecandidate = (event) => {
@@ -282,15 +273,12 @@ function RouteComponent() {
       ws.close();
       pc.close();
       if (videoRef.current) videoRef.current.srcObject = null;
-      if (audioRef.current) audioRef.current.srcObject = null;
       previewVideoStreamRef.current = null;
-      previewAudioStreamRef.current = null;
       signalingModeRef.current = 'mobile_preview';
       setVideoTrackActive(false);
-      setAudioTrackActive(false);
       setVideoOrientation(null);
     };
-  }, [streamOverlayActive]);
+  }, [streamOverlayActive, hasDevices]);
 
   const previewLabel = selectedDevice
     ? selectedDevice.device_name
@@ -304,7 +292,7 @@ function RouteComponent() {
     let win = await WebviewWindow.getByLabel('media-window');
     if (!win) {
       await invoke('create_window', { label: 'media-window', title: 'Media Player' }).catch(
-        () => {}
+        () => { }
       );
       await new Promise((r) => setTimeout(r, 1500));
       win = await WebviewWindow.getByLabel('media-window');
@@ -312,10 +300,10 @@ function RouteComponent() {
 
     if (win) {
       const visible = await win.isVisible().catch(() => false);
-      if (!visible) await win.show().catch(() => {});
+      if (!visible) await win.show().catch(() => { });
     }
 
-    await invoke('set_stream_overlay', { active: next }).catch(() => {});
+    await invoke('set_stream_overlay', { active: next }).catch(() => { });
     setStreamOverlayActive(next);
   };
 
@@ -323,51 +311,124 @@ function RouteComponent() {
     await updateConfig({ preview_enabled: !config.preview_enabled });
   };
 
-  const toggleProtection = async () => {
-    const next = !config.content_protection;
-    await Promise.all([updateConfig({ content_protection: next }), setContentProtection(next)]);
+  const shownMasterVolume = masterDrag ?? masterVolume;
+
+  const commitMasterVolume = (value: number) => {
+    setMasterDrag(null);
+    void setMasterVolume(value);
+  };
+
+  const shownDeviceVolume = (deviceId: string) =>
+    deviceDrag[deviceId] ?? deviceVolumes[deviceId] ?? 100;
+
+  const commitDeviceVolume = (deviceId: string, value: number) => {
+    setDeviceDrag((current) => {
+      const next = { ...current };
+      delete next[deviceId];
+      return next;
+    });
+    void setDeviceVolume(deviceId, value);
+  };
+
+  const handleDeviceVolumeChange = (deviceId: string, value: number) => {
+    setDeviceDrag((current) => ({ ...current, [deviceId]: value }));
   };
 
   return (
-    <CardContent className="flex-1 flex flex-col gap-3.5 px-0 h-full min-h-0">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-foreground">Live</h1>
+    <CardContent className="flex-1 flex flex-col gap-3 px-0 h-full min-h-0">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-foreground">Live</h2>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-1.5">
           <Button
             variant={streamOverlayActive ? 'default' : 'secondary'}
-            className="h-auto rounded-xl px-4 py-3"
+            size="sm"
             onClick={() => {
               void toggleStreamOverlay();
             }}
           >
-            <Monitor className="size-5" />
+            <Monitor className="size-3.5" />
             Display
           </Button>
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button variant="secondary" size="sm">
+                  <Volume2 className="size-3.5" />
+                  Audio
+                </Button>
+              }
+            />
+            <PopoverContent align="end" className="w-72">
+              <PopoverHeader>
+                <PopoverTitle>Audio mixer</PopoverTitle>
+                <PopoverDescription>Master and per-device volume</PopoverDescription>
+              </PopoverHeader>
+
+              <div className="flex items-center gap-2">
+                <Volume2 className="size-4 shrink-0 text-muted-foreground" />
+                <Slider
+                  value={[shownMasterVolume]}
+                  onValueChange={([value]) => setMasterDrag(value)}
+                  onValueCommit={([value]) => commitMasterVolume(value)}
+                />
+                <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  {shownMasterVolume}
+                </span>
+              </div>
+
+              <Separator />
+
+              {devices.length === 0 ? (
+                <p className="px-1 text-xs text-muted-foreground">No device connected</p>
+              ) : (
+                <ScrollArea className="max-h-44">
+                  <div className="flex flex-col gap-3 pr-2">
+                    {devices.map((device) => (
+                      <div key={device.device_id} className="flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium text-foreground">
+                            {device.device_name}
+                          </p>
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {device.has_video ? 'Video source' : 'Audio monitor'}
+                          </p>
+                        </div>
+                        <Slider
+                          className="w-24 shrink-0"
+                          value={[shownDeviceVolume(device.device_id)]}
+                          onValueChange={([value]) =>
+                            handleDeviceVolumeChange(device.device_id, value)
+                          }
+                          onValueCommit={([value]) =>
+                            commitDeviceVolume(device.device_id, value)
+                          }
+                        />
+                        <span className="w-7 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                          {shownDeviceVolume(device.device_id)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </PopoverContent>
+          </Popover>
           <Button
-            variant="secondary"
-            className="h-auto rounded-xl px-4 py-3"
+            variant="outline"
+            size="sm"
             onClick={() => {
-              void toggleProtection();
+              useSettingsStore.getState().open('advanced');
             }}
           >
-            <SlidersHorizontal className="size-5" />
-            Audio
-          </Button>
-          <Button
-            className="h-auto rounded-xl px-4 py-3"
-            onClick={() => {
-              void pushBlank();
-            }}
-          >
-            <Settings2 className="size-5" />
+            <Settings2 className="size-3.5" />
             Settings
           </Button>
         </div>
       </div>
 
       <div className="flex flex-1 gap-3">
-        <Card className="flex-1/4">
+        <Card className="flex-1/4 bg-background/40">
           <CardHeader className="p-0 flex-row items-start justify-between gap-4">
             <div>
               <CardTitle>Connected devices</CardTitle>
@@ -375,13 +436,13 @@ function RouteComponent() {
                 Select a source to preview its live transmission
               </CardDescription>
             </div>
-            <Badge className="rounded-full bg-primary/80">{devices.length} online</Badge>
+            <Badge>{devices.length} online</Badge>
           </CardHeader>
 
           <ScrollArea className="mt-6 flex-1">
             <div className="space-y-4 pr-4">
               {devices.length === 0 ? (
-                <Empty className="rounded-[1.5rem] border border-white/10 bg-white/5">
+                <Empty className="rounded-3xl border border-white/10 bg-white/5">
                   <EmptyDescription>No active mobile device</EmptyDescription>
                 </Empty>
               ) : (
@@ -401,34 +462,29 @@ function RouteComponent() {
                         : 'On';
 
                   return (
-                    <button
+                    <Button
                       key={device.device_id}
-                      type="button"
+                      variant="ghost"
                       onClick={() => setSelectedDeviceId(device.device_id)}
                       className={cn(
-                        'w-full rounded-[1.5rem] border px-4 py-5 text-left transition-colors',
-                        active
-                          ? 'border-primary bg-primary/10 ring-1 ring-primary/20'
-                          : 'border-white/8 bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.05]'
+                        'justify-start h-auto w-full rounded-md p-3',
+                        active && 'bg-primary/10 ring-1 ring-primary/20'
                       )}
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="flex size-18 shrink-0 items-center justify-center rounded-[1.25rem] bg-white/6">
-                          {device.has_audio && !device.has_video ? (
-                            <Volume2 className="size-7 text-foreground/85" />
-                          ) : (
-                            <Smartphone className="size-7 text-foreground/85" />
-                          )}
-                        </div>
+                      <div className="flex items-center gap-3 min-w-0">
+                        {device.has_audio && !device.has_video ? (
+                          <Volume2 className="size-4 text-muted-foreground shrink-0" />
+                        ) : (
+                          <Smartphone className="size-4 text-muted-foreground shrink-0" />
+                        )}
 
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-3">
-                            <p className="truncate text-xl font-semibold text-foreground">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-semibold text-foreground">
                               {device.device_name}
                             </p>
                             <Badge
                               className={cn(
-                                'rounded-full px-3 py-1 text-sm',
                                 badgeLabel === 'Live'
                                   ? 'bg-primary/15 text-primary'
                                   : badgeLabel === 'Audio'
@@ -439,18 +495,18 @@ function RouteComponent() {
                               {badgeLabel}
                             </Badge>
                           </div>
-                          <p className="mt-2 truncate text-sm text-muted-foreground">
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
                             {device.has_video ? 'Video source' : 'Audio monitor'} •{' '}
                             {device.has_audio ? 'Audio enabled' : 'Preview only'}
                           </p>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
-                          <Wifi className="size-4" />
+                        <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                          <Wifi className="size-3.5" />
                           <span>{signalLabel}</span>
                         </div>
                       </div>
-                    </button>
+                    </Button>
                   );
                 })
               )}
@@ -469,17 +525,19 @@ function RouteComponent() {
                   : 'Select a connected device'}
               </CardDescription>
             </div>
-            <Badge className="rounded-full px-4">{previewConnected ? 'Live' : 'Idle'}</Badge>
+            <Badge variant={previewConnected ? 'default' : 'secondary'}>
+              {previewConnected ? 'Live' : 'Idle'}
+            </Badge>
           </CardHeader>
 
-          <div className="relative flex min-h-[20rem] flex-1 items-center justify-center overflow-hidden rounded-[1.75rem] border border-primary/20 p-4">
+          <div className="relative flex min-h-80 flex-1 items-center justify-center overflow-hidden rounded-lg border border-primary/20 p-3">
             <div
               className={cn(
-                'relative flex items-center justify-center overflow-hidden rounded-[1.35rem] border border-white/6 bg-black/35',
+                'relative flex items-center justify-center overflow-hidden rounded-md border border-white/6 bg-black/35',
                 previewSurfaceClass
               )}
             >
-              <div className="absolute left-6 top-6 z-10 text-xs font-semibold uppercase tracking-[0.22em] text-slate-100/90">
+              <div className="absolute left-3 top-3 z-10 text-xs font-semibold uppercase tracking-[0.18em] text-slate-100/90">
                 Live output
               </div>
               <video
@@ -513,28 +571,14 @@ function RouteComponent() {
             </div>
           </div>
 
-          {/* biome-ignore lint/a11y/useMediaCaption: live monitor audio preview without media file captions */}
-          <audio ref={audioRef} autoPlay controls className="sr-only" />
-
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Button
               variant="outline"
-              className="py-6 min-w-52 bg-transparent hover:bg-primary/5 rounded-2xl"
-              onClick={() => {
-                void toggleProtection();
-              }}
-            >
-              <Volume2 className="size-5" />
-              {audioTrackActive ? 'Mute Audio' : 'Audio Idle'}
-            </Button>
-            <Button
-              variant="outline"
-              className="py-6 min-w-52 bg-transparent hover:bg-primary/5 rounded-2xl"
               onClick={() => {
                 void togglePreview();
               }}
             >
-              <Square className="size-5" />
+              <Square className="size-4" />
               {config.preview_enabled ? 'Mute Video' : 'Enable Video'}
             </Button>
           </div>

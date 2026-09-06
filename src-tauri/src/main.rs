@@ -590,6 +590,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             streaming::manager::update_streaming_config,
             streaming::manager::get_streaming_status,
             streaming::manager::set_stream_content_protected,
+            streaming::manager::set_stream_master_volume,
+            streaming::manager::set_stream_device_volume,
             streaming::manager::set_mobile_preview_device,
             streaming::manager::push_stream_slide,
             streaming::manager::push_stream_blank,

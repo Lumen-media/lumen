@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,14 @@ pub struct StreamingConfig {
     pub html_server_port: u16,
     pub hardware_encoding: bool,
     pub content_protection: bool,
+    #[serde(default = "default_master_volume")]
+    pub master_volume: u8,
+    #[serde(default)]
+    pub device_volumes: HashMap<String, u8>,
+}
+
+fn default_master_volume() -> u8 {
+    80
 }
 
 impl Default for StreamingConfig {
@@ -23,6 +31,8 @@ impl Default for StreamingConfig {
             html_server_port: 8090,
             hardware_encoding: false,
             content_protection: true,
+            master_volume: 80,
+            device_volumes: HashMap::new(),
         }
     }
 }
@@ -34,6 +44,10 @@ pub struct StreamingStatus {
     pub mobile_connected: bool,
     pub html_active: bool,
     pub html_url: Option<String>,
+    #[serde(default = "default_master_volume")]
+    pub master_volume: u8,
+    #[serde(default)]
+    pub device_volumes: HashMap<String, u8>,
 }
 
 impl Default for StreamingStatus {
@@ -44,6 +58,8 @@ impl Default for StreamingStatus {
             mobile_connected: false,
             html_active: false,
             html_url: None,
+            master_volume: 80,
+            device_volumes: HashMap::new(),
         }
     }
 }
@@ -62,6 +78,11 @@ pub fn sanitize_config(mut config: StreamingConfig) -> StreamingConfig {
 
     if config.html_server_port == 0 {
         config.html_server_port = 8090;
+    }
+
+    config.master_volume = config.master_volume.min(100);
+    for volume in config.device_volumes.values_mut() {
+        *volume = (*volume).min(100);
     }
 
     config

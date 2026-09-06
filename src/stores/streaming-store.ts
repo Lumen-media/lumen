@@ -20,9 +20,13 @@ interface StreamingStore {
   config: StreamingConfig;
   status: StreamingStatus;
   mobileStreams: Record<string, MobileStreamState>;
+  masterVolume: number;
+  deviceVolumes: Record<string, number>;
   init: () => Promise<void>;
   updateConfig: (partial: Partial<StreamingConfig>) => Promise<void>;
   setContentProtection: (isProtected: boolean) => Promise<void>;
+  setMasterVolume: (volume: number) => Promise<void>;
+  setDeviceVolume: (deviceId: string, volume: number) => Promise<void>;
   pushBlank: () => Promise<void>;
 }
 
@@ -34,6 +38,8 @@ const DEFAULT_CONFIG: StreamingConfig = {
   html_server_port: 8090,
   hardware_encoding: false,
   content_protection: true,
+  master_volume: 80,
+  device_volumes: {},
 };
 
 const DEFAULT_STATUS: StreamingStatus = {
@@ -42,6 +48,8 @@ const DEFAULT_STATUS: StreamingStatus = {
   mobile_connected: false,
   html_active: false,
   html_url: null,
+  master_volume: 80,
+  device_volumes: {},
 };
 
 let unlistenStatus: UnlistenFn | null = null;
@@ -54,6 +62,8 @@ export const useStreamingStore = create<StreamingStore>((set, get) => ({
   config: DEFAULT_CONFIG,
   status: DEFAULT_STATUS,
   mobileStreams: {},
+  masterVolume: DEFAULT_STATUS.master_volume,
+  deviceVolumes: {},
 
   init: async () => {
     if (get().initialized) {
@@ -65,7 +75,13 @@ export const useStreamingStore = create<StreamingStore>((set, get) => ({
       streamingService.getStatus(),
     ]);
 
-    set({ config, status, initialized: true });
+    set({
+      config,
+      status,
+      masterVolume: status.master_volume,
+      deviceVolumes: status.device_volumes,
+      initialized: true,
+    });
 
     unlistenStatus?.();
     unlistenMobileStarted?.();
@@ -73,7 +89,11 @@ export const useStreamingStore = create<StreamingStore>((set, get) => ({
     unlistenMobileOrientationChanged?.();
 
     unlistenStatus = await listen<StreamingStatus>('streaming_status_changed', ({ payload }) => {
-      set({ status: payload });
+      set({
+        status: payload,
+        masterVolume: payload.master_volume,
+        deviceVolumes: payload.device_volumes,
+      });
     });
 
     unlistenMobileStarted = await listen<MobileStreamState>('mobile_stream_started', ({ payload }) => {
@@ -134,6 +154,18 @@ export const useStreamingStore = create<StreamingStore>((set, get) => ({
 
   setContentProtection: async (isProtected) => {
     await streamingService.setContentProtected(isProtected);
+  },
+
+  setMasterVolume: async (volume) => {
+    const saved = await streamingService.setMasterVolume(volume);
+    set({ masterVolume: saved });
+  },
+
+  setDeviceVolume: async (deviceId, volume) => {
+    const saved = await streamingService.setDeviceVolume(deviceId, volume);
+    set((state) => ({
+      deviceVolumes: { ...state.deviceVolumes, [deviceId]: saved },
+    }));
   },
 
   pushBlank: async () => {
