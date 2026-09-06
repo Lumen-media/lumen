@@ -34,6 +34,11 @@ export async function getProfilesPath(): Promise<string> {
   return join(base, 'config', 'profiles');
 }
 
+export async function getQuickPresentationPath(): Promise<string> {
+  const base = await getAppBasePath();
+  return join(base, 'config', 'quick-presentation.md');
+}
+
 export async function getNotesPath(): Promise<string> {
   const base = await getAppBasePath();
   return join(base, 'files', 'notes');
