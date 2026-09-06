@@ -23,6 +23,7 @@ import { useMenuOverflow } from './use-menu-overflow';
 import { useOsType } from './use-os-type';
 import { useWindowState } from './use-window-state';
 import { TitlebarWindowControls } from './window-controls';
+import { formatShortcutForDisplay } from '@/lib/shortcuts';
 
 function MenuItems({ items, t }: { items: MenuItemDef[]; t: (key: string) => string }) {
   return items.map((item, i) => {
@@ -42,7 +43,7 @@ function MenuItems({ items, t }: { items: MenuItemDef[]; t: (key: string) => str
     return (
       <MenubarItem key={item.label} onClick={item.onClick}>
         {t(item.label)}
-        {item.shortcut && <MenubarShortcut>{item.shortcut}</MenubarShortcut>}
+        {item.shortcut && <MenubarShortcut>{formatShortcutForDisplay(item.shortcut)}</MenubarShortcut>}
       </MenubarItem>
     );
   });

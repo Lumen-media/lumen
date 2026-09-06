@@ -214,29 +214,6 @@ function stopKeyboardShortcutPropagation(event: KeyboardEvent) {
   event.stopImmediatePropagation();
 }
 
-function emitPresenterShortcut(key: string) {
-  if (key === 'F8') {
-    emitPresenterEvent('presenter:wallpaper-toggle');
-    return true;
-  }
-
-  if (key === 'F9') {
-    emitPresenterEvent('presenter:lyrics-toggle');
-    return true;
-  }
-
-  if (key === 'F10') {
-    emitPresenterEvent('presenter:blackout-toggle');
-    return true;
-  }
-
-  if (key === 'Escape') {
-    emitPresenterEvent('presenter:exit');
-    return true;
-  }
-
-  return false;
-}
 function getPresenterNavigationIndex(key: string, currentIndex: number, totalItems: number) {
   if (totalItems <= 0) return null;
 
@@ -1192,12 +1169,6 @@ export function PresenterControls({ className }: PresenterControlsProps) {
     'keydown',
     (event) => {
       if (!presenter.active || !presenter.kind) return;
-
-      if (emitPresenterShortcut(event.key)) {
-        event.preventDefault();
-        stopKeyboardShortcutPropagation(event);
-        return;
-      }
 
       const nextIndex = getPresenterNavigationIndex(event.key, currentIndex, totalItems);
       if (nextIndex === null) return;

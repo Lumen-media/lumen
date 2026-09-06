@@ -65,17 +65,6 @@ export function AppHeader() {
     window.dispatchEvent(new CustomEvent('lumen:chat-focus'));
   }, [chatInit, setAsideTab]);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'C') {
-        e.preventDefault();
-        openChat();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [openChat]);
-
   const activeTab: TabTo = NAV_TABS.find((t) => pathname.startsWith(t.to))?.to ?? '/edit';
 
   const navRef = useRef<HTMLElement>(null);
