@@ -2,11 +2,12 @@ import { createFileRoute } from '@tanstack/react-router';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
+import { useDebounceCallback, useInterval } from 'usehooks-ts';
 import { MarkdownPresentation } from '@/components/markdown-presentation';
 import { PptxPresentation } from '@/components/reveal-presentation';
 import { Videoplayer } from '@/components/ui/videoplayer';
 import { useProfiles } from '@/hooks/use-profiles';
+import { useScopedShortcuts } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
 import { lumenUrl } from '@/services/lumen-url';
 import { PresenterSlot } from '@/modules/components/PresenterSlot';
@@ -368,71 +369,65 @@ function MediaWindowComponent() {
     };
   }, []);
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      const key = event.key || event.code;
-
-      if (key === 'F11') {
-        event.preventDefault();
-        void toggleFullscreen();
-      }
-
-      if (key === 'F8') {
-        event.preventDefault();
+  useScopedShortcuts(
+    'media-window',
+    {
+      'media.fullscreen': () => void toggleFullscreen(),
+      'media.wallpaper': () => {
         setIsBlackoutActive(false);
         setUseProfileWallpaper((active) => !active);
-      }
-
-      if (key === 'F9') {
-        event.preventDefault();
+      },
+      'media.hide-lyrics': () => {
         setIsBlackoutActive(false);
         setHideLyrics((active) => !active);
-      }
-
-      if (key === 'F10') {
-        event.preventDefault();
+      },
+      'media.blackout': () =>
         setIsBlackoutActive((active) => {
           const next = !active;
-          if (next) invoke('push_stream_blank').catch(() => { });
+          if (next) invoke('push_stream_blank').catch(() => {});
           return next;
-        });
-      }
-
-      if (key === 'Escape') {
-        event.preventDefault();
+        }),
+      'media.escape': () => {
         const hasPresentedContent =
-          mode === 'lyric' || imagePath || presentationPath || useModuleStore.getState().presenterViewId !== null;
+          mode === 'lyric' ||
+          imagePath ||
+          presentationPath ||
+          useModuleStore.getState().presenterViewId !== null;
 
         if (hasPresentedContent) {
           exitPresentedContent();
         } else {
           void closeWindow();
         }
-      }
-
-      if (presentationPath) {
-        let nextIndex: number | null = null;
-
-        if (key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown') {
-          nextIndex = Math.min(presentationCurrentSlide + 1, presentationTotalSlides - 1);
-        } else if (key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp') {
-          nextIndex = Math.max(presentationCurrentSlide - 1, 0);
-        } else if (key === 'Home') {
-          nextIndex = 0;
-        } else if (key === 'End') {
-          nextIndex = presentationTotalSlides - 1;
-        }
-
-        if (nextIndex !== null && nextIndex !== presentationCurrentSlide) {
-          event.preventDefault();
-          emit('presentation:set-slide', { index: nextIndex }).catch(() => { });
-        }
-      }
+      },
+      'media.next-slide': () => {
+        if (presentationCurrentSlide >= presentationTotalSlides - 1) return;
+        emit('presentation:set-slide', {
+          index: Math.min(presentationCurrentSlide + 1, presentationTotalSlides - 1),
+        }).catch(() => {});
+      },
+      'media.prev-slide': () => {
+        if (presentationCurrentSlide <= 0) return;
+        emit('presentation:set-slide', {
+          index: Math.max(presentationCurrentSlide - 1, 0),
+        }).catch(() => {});
+      },
+      'media.first-slide': () => {
+        if (presentationCurrentSlide === 0) return;
+        emit('presentation:set-slide', { index: 0 }).catch(() => {});
+      },
+      'media.last-slide': () => {
+        if (presentationCurrentSlide === presentationTotalSlides - 1) return;
+        emit('presentation:set-slide', { index: presentationTotalSlides - 1 }).catch(() => {});
+      },
     },
-    [closeWindow, exitPresentedContent, imagePath, mode, toggleFullscreen, presentationPath, presentationCurrentSlide, presentationTotalSlides]
+    {
+      'media.next-slide': { enabled: Boolean(presentationPath) },
+      'media.prev-slide': { enabled: Boolean(presentationPath) },
+      'media.first-slide': { enabled: Boolean(presentationPath) },
+      'media.last-slide': { enabled: Boolean(presentationPath) },
+    }
   );
-
-  useEventListener('keydown', handleKeyDown);
 
   useEffect(() => {
     const unlistenLyric = listen<{ url: string }>('load-lyric', (event) => {
