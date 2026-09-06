@@ -1,17 +1,9 @@
-import { createRouter, RouterProvider } from "@tanstack/react-router";
+import { RouterProvider } from "@tanstack/react-router";
 import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./App.css";
 
-import { routeTree } from "./routeTree.gen";
-
-const router = createRouter({ routeTree });
-
-declare module "@tanstack/react-router" {
-  interface Register {
-    router: typeof router;
-  }
-}
+import { router } from "./lib/router";
 
 const GlobalErrorBoundary = ({ children }: { children: React.ReactNode }) => {
   return (

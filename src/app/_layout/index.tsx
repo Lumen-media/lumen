@@ -1,10 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { PreviewPanel } from '@/components/preview-panel';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/_layout/')({
-  component: RouteComponent,
+  beforeLoad: () => {
+    throw redirect({ to: '/edit' });
+  },
+  component: () => null,
 });
-
-function RouteComponent() {
-  return <PreviewPanel />;
-}

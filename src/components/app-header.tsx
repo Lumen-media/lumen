@@ -22,7 +22,6 @@ import { Card } from './ui/card';
 
 const NAV_TABS = [
   { label: 'Edit', to: '/edit' },
-  { label: 'View', to: '/' },
   { label: 'Presentation', to: '/presentation' },
   { label: 'Live', to: '/live' },
   // { label: 'Settings', to: '/settings' },
@@ -77,10 +76,7 @@ export function AppHeader() {
     return () => window.removeEventListener('keydown', handler);
   }, [openChat]);
 
-  const activeTab: TabTo = (() => {
-    const match = NAV_TABS.find((t) => t.to !== '/' && pathname.startsWith(t.to));
-    return match ? match.to : '/';
-  })();
+  const activeTab: TabTo = NAV_TABS.find((t) => pathname.startsWith(t.to))?.to ?? '/edit';
 
   const navRef = useRef<HTMLElement>(null);
   const indicatorRef = useRef<HTMLSpanElement>(null);

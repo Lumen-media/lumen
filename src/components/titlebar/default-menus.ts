@@ -1,17 +1,59 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
-import { useSettingsStore } from '@/stores/settings-store';
 import { installModule } from '@/modules/injector';
+import { openPresentation } from '@/lib/present-window';
+import { router } from '@/lib/router';
+import { fileManagementService } from '@/services';
+import { useLyricModalStore } from '@/stores/lyric-modal-store';
+import { usePresentationStore } from '@/stores/presentation-store';
+import { useSettingsStore } from '@/stores/settings-store';
 import type { MenuDef } from './menu-registry';
 import { useMenuRegistry } from './menu-registry';
+
+const PRESENTATION_PREVIEW_STORAGE_KEY = 'lumen:presentation-preview-file';
+
+function goToLyricEditor(): void {
+  useLyricModalStore.getState().open();
+  router.navigate({ to: '/edit' });
+}
+
+async function openPresentationFile(): Promise<void> {
+  const selected = await fileManagementService.openFilePicker('presentation');
+  if (!selected || selected.length === 0) return;
+
+  try {
+    await fileManagementService.uploadFiles('presentation', selected);
+  } catch (err) {
+    console.error('Failed to import presentation:', err);
+  }
+
+  goToLyricEditor();
+}
+
+async function startPresentation(): Promise<void> {
+  const { filePath } = usePresentationStore.getState();
+  const target = filePath ?? localStorage.getItem(PRESENTATION_PREVIEW_STORAGE_KEY);
+  if (!target) return;
+  await openPresentation(target);
+}
 
 const DEFAULT_MENUS: MenuDef[] = [
   {
     id: 'file',
     label: 'File',
     items: [
-      { type: 'action', label: 'New Presentation', shortcut: 'Ctrl+N' },
-      { type: 'action', label: 'Open', shortcut: 'Ctrl+O' },
+      {
+        type: 'action',
+        label: 'New Presentation',
+        shortcut: 'Ctrl+N',
+        onClick: goToLyricEditor,
+      },
+      {
+        type: 'action',
+        label: 'Open',
+        shortcut: 'Ctrl+O',
+        onClick: () => void openPresentationFile(),
+      },
       { type: 'separator' },
       // { type: 'action', label: 'Save', shortcut: 'Ctrl+S' },
       // { type: 'action', label: 'Save As', shortcut: 'Ctrl+Shift+S' },
@@ -26,6 +68,7 @@ const DEFAULT_MENUS: MenuDef[] = [
   {
     id: 'edit',
     label: 'Edit',
+    hidden: true,
     items: [
       { type: 'action', label: 'Undo', shortcut: 'Ctrl+Z' },
       { type: 'action', label: 'Redo', shortcut: 'Ctrl+Shift+Z' },
@@ -38,36 +81,40 @@ const DEFAULT_MENUS: MenuDef[] = [
     ],
   },
   {
-    id: 'view',
-    label: 'View',
-    items: [
-      { type: 'action', label: 'Toggle Media Panel' },
-      { type: 'action', label: 'Toggle Properties Panel' },
-      { type: 'separator' },
-      { type: 'action', label: 'Full Screen', shortcut: 'F11' },
-      { type: 'separator' },
-      { type: 'action', label: 'Zoom In', shortcut: 'Ctrl++' },
-      { type: 'action', label: 'Zoom Out', shortcut: 'Ctrl+-' },
-      { type: 'action', label: 'Reset Zoom', shortcut: 'Ctrl+0' },
-    ],
-  },
-  {
     id: 'presentation',
     label: 'Presentation',
     items: [
-      { type: 'action', label: 'Start', shortcut: 'F5' },
-      { type: 'action', label: 'Stop', shortcut: 'Esc' },
+      {
+        type: 'action',
+        label: 'Start',
+        shortcut: 'F5',
+        onClick: () => void startPresentation(),
+      },
+      {
+        type: 'action',
+        label: 'Stop',
+        shortcut: 'Esc',
+        onClick: () => usePresentationStore.getState().clearPresentation(),
+      },
       { type: 'separator' },
-      { type: 'action', label: 'Next Slide', shortcut: '→' },
-      { type: 'action', label: 'Previous Slide', shortcut: '←' },
-      { type: 'separator' },
-      { type: 'action', label: 'Loop' },
-      { type: 'action', label: 'Shuffle' },
+      {
+        type: 'action',
+        label: 'Next Slide',
+        shortcut: '→',
+        onClick: () => usePresentationStore.getState().nextSlide(),
+      },
+      {
+        type: 'action',
+        label: 'Previous Slide',
+        shortcut: '←',
+        onClick: () => usePresentationStore.getState().prevSlide(),
+      },
     ],
   },
   {
     id: 'live',
     label: 'Live',
+    hidden: true,
     items: [
       { type: 'action', label: 'Start Streaming' },
       { type: 'action', label: 'Stop Streaming' },
