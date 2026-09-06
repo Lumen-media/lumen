@@ -2,8 +2,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useEventListener, useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
+import { useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
 import { useProfiles } from '@/hooks/use-profiles';
+import { useScopedShortcuts } from '@/lib/shortcuts';
 import { type LyricData, parseLyricFile } from '@/services/lyric-service';
 import { lumenUrl } from '@/services/lumen-url';
 import { useProfileStore } from '@/stores/profile-store';
@@ -197,20 +198,11 @@ export function MarkdownPresentation({
     };
   }, [goNext, goPrev, changeSlide]);
 
-  useEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
-      e.preventDefault();
-      goNext();
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
-      e.preventDefault();
-      goPrev();
-    } else if (e.key === 'Home') {
-      e.preventDefault();
-      changeSlide(0);
-    } else if (e.key === 'End') {
-      e.preventDefault();
-      changeSlide(Math.max(totalSlides - 1, 0));
-    }
+  useScopedShortcuts('markdown-presentation', {
+    'markdown.next': goNext,
+    'markdown.prev': goPrev,
+    'markdown.first': () => changeSlide(0),
+    'markdown.last': () => changeSlide(Math.max(totalSlides - 1, 0)),
   });
 
   const slide = lyricData?.slides[currentSlide];
