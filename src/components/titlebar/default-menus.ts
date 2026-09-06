@@ -1,41 +1,10 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
 import { installModule } from '@/modules/injector';
-import { openPresentation } from '@/lib/present-window';
-import { router } from '@/lib/router';
-import { fileManagementService } from '@/services';
-import { useLyricModalStore } from '@/stores/lyric-modal-store';
-import { usePresentationStore } from '@/stores/presentation-store';
 import { useSettingsStore } from '@/stores/settings-store';
+import { menuShortcut, shortcutAction } from '@/lib/shortcuts';
 import type { MenuDef } from './menu-registry';
 import { useMenuRegistry } from './menu-registry';
-
-const PRESENTATION_PREVIEW_STORAGE_KEY = 'lumen:presentation-preview-file';
-
-function goToLyricEditor(): void {
-  useLyricModalStore.getState().open();
-  router.navigate({ to: '/edit' });
-}
-
-async function openPresentationFile(): Promise<void> {
-  const selected = await fileManagementService.openFilePicker('presentation');
-  if (!selected || selected.length === 0) return;
-
-  try {
-    await fileManagementService.uploadFiles('presentation', selected);
-  } catch (err) {
-    console.error('Failed to import presentation:', err);
-  }
-
-  goToLyricEditor();
-}
-
-async function startPresentation(): Promise<void> {
-  const { filePath } = usePresentationStore.getState();
-  const target = filePath ?? localStorage.getItem(PRESENTATION_PREVIEW_STORAGE_KEY);
-  if (!target) return;
-  await openPresentation(target);
-}
 
 const DEFAULT_MENUS: MenuDef[] = [
   {
@@ -45,14 +14,14 @@ const DEFAULT_MENUS: MenuDef[] = [
       {
         type: 'action',
         label: 'New Presentation',
-        shortcut: 'Ctrl+N',
-        onClick: () => useLyricModalStore.getState().openQuick(),
+        shortcut: menuShortcut('file.new'),
+        onClick: shortcutAction('file.new'),
       },
       {
         type: 'action',
         label: 'Open',
-        shortcut: 'Ctrl+O',
-        onClick: () => void openPresentationFile(),
+        shortcut: menuShortcut('file.open'),
+        onClick: shortcutAction('file.open'),
       },
       { type: 'separator' },
       // { type: 'action', label: 'Save', shortcut: 'Ctrl+S' },
@@ -70,14 +39,14 @@ const DEFAULT_MENUS: MenuDef[] = [
     label: 'Edit',
     hidden: true,
     items: [
-      { type: 'action', label: 'Undo', shortcut: 'Ctrl+Z' },
-      { type: 'action', label: 'Redo', shortcut: 'Ctrl+Shift+Z' },
+      { type: 'action', label: 'Undo', shortcut: menuShortcut('edit.undo') },
+      { type: 'action', label: 'Redo', shortcut: menuShortcut('edit.redo') },
       { type: 'separator' },
-      { type: 'action', label: 'Cut', shortcut: 'Ctrl+X' },
-      { type: 'action', label: 'Copy', shortcut: 'Ctrl+C' },
-      { type: 'action', label: 'Paste', shortcut: 'Ctrl+V' },
+      { type: 'action', label: 'Cut', shortcut: menuShortcut('edit.cut') },
+      { type: 'action', label: 'Copy', shortcut: menuShortcut('edit.copy') },
+      { type: 'action', label: 'Paste', shortcut: menuShortcut('edit.paste') },
       { type: 'separator' },
-      { type: 'action', label: 'Select All', shortcut: 'Ctrl+A' },
+      { type: 'action', label: 'Select All', shortcut: menuShortcut('edit.select-all') },
     ],
   },
   {
@@ -87,27 +56,27 @@ const DEFAULT_MENUS: MenuDef[] = [
       {
         type: 'action',
         label: 'Start',
-        shortcut: 'F5',
-        onClick: () => void startPresentation(),
+        shortcut: menuShortcut('presentation.start'),
+        onClick: shortcutAction('presentation.start'),
       },
       {
         type: 'action',
         label: 'Stop',
-        shortcut: 'Esc',
-        onClick: () => usePresentationStore.getState().clearPresentation(),
+        shortcut: menuShortcut('presentation.stop'),
+        onClick: shortcutAction('presentation.stop'),
       },
       { type: 'separator' },
       {
         type: 'action',
         label: 'Next Slide',
-        shortcut: '→',
-        onClick: () => usePresentationStore.getState().nextSlide(),
+        shortcut: menuShortcut('presentation.next'),
+        onClick: shortcutAction('presentation.next'),
       },
       {
         type: 'action',
         label: 'Previous Slide',
-        shortcut: '←',
-        onClick: () => usePresentationStore.getState().prevSlide(),
+        shortcut: menuShortcut('presentation.prev'),
+        onClick: shortcutAction('presentation.prev'),
       },
     ],
   },
@@ -148,7 +117,7 @@ const DEFAULT_MENUS: MenuDef[] = [
     label: 'Help',
     items: [
       { type: 'action', label: 'Documentation' },
-      { type: 'action', label: 'Keyboard Shortcuts', shortcut: 'Ctrl+Shift+K' },
+      { type: 'action', label: 'Keyboard Shortcuts', shortcut: menuShortcut('help.shortcuts') },
       { type: 'separator' },
       {
         type: 'action',
