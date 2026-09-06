@@ -322,7 +322,7 @@ app.listen("lyric-slide-changed", {
 });
 ```
 
-The HTML template mirrors the behavior of `lyric-presentation.tsx`: CSS `opacity` fade transition of 250ms, CSS vars for font/alignment/background, `innerHTML` updated via WS without page reload.
+The HTML template mirrors the behavior of `markdown-presentation.tsx`: CSS `opacity` fade transition of 250ms, CSS vars for font/alignment/background, `innerHTML` updated via WS without page reload.
 
 ---
 
