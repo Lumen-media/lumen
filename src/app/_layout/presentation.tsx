@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { type FileInfo, fileManagementService } from '@/services';
+import { type FileInfo, fileManagementService, presentationPreviewsCache } from '@/services';
 import { type PresentationSlide, usePresentationStore } from '@/stores/presentation-store';
 
 export const Route = createFileRoute('/_layout/presentation')({
@@ -88,6 +88,18 @@ function PresentationPreviewRenderer({
 
     async function renderPreview() {
       try {
+        const cached = await presentationPreviewsCache.get(targetFilePath);
+        if (cancelled) return;
+        if (cached) {
+          const thumbs: PresentationSlide[] = cached.thumbnails.map((thumbnail, index) => ({
+            index,
+            thumbnail,
+            label: `Slide ${index + 1}`,
+          }));
+          onSlidesChange(thumbs, cached.slideCount);
+          return;
+        }
+
         targetContainer.replaceChildren();
         const bytes = await readFile(targetFilePath);
         if (cancelled) return;
@@ -109,6 +121,7 @@ function PresentationPreviewRenderer({
         onSlidesChange(placeholders, count);
 
         const thumbs: PresentationSlide[] = [];
+        const savings: Array<Promise<void>> = [];
         for (let i = 0; i < count; i++) {
           if (cancelled) return;
 
@@ -134,9 +147,15 @@ function PresentationPreviewRenderer({
           thumbnail?.dispose();
           wrapper.remove();
           thumbs.push({ index: i, thumbnail: dataUrl, label: `Slide ${i + 1}` });
+          savings.push(presentationPreviewsCache.saveSlide(targetFilePath, i, dataUrl));
         }
 
-        if (!cancelled) onSlidesChange(thumbs, count);
+        if (cancelled) return;
+
+        void Promise.all(savings)
+          .then(() => presentationPreviewsCache.finish(targetFilePath, count))
+          .catch((err) => console.error('Failed to cache presentation preview:', err));
+        onSlidesChange(thumbs, count);
       } catch (err) {
         if (!cancelled) {
           console.error('Failed to preview presentation:', err);
@@ -195,6 +214,7 @@ function RouteComponent() {
     try {
       const result = await fileManagementService.listFiles('presentation');
       setFiles(result);
+      await presentationPreviewsCache.purgeOrphans(new Set(result.map((file) => file.path)));
     } catch {
       setFiles([]);
     } finally {
