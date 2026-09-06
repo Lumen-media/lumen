@@ -156,6 +156,27 @@ export function LyricPresentation({
     changeSlide(currentSlide - 1);
   }, [currentSlide, changeSlide]);
 
+  const autoplaySeconds = lyricData?.metadata.intervalSeconds;
+  useEffect(() => {
+    const data = lyricData;
+    if (data?.metadata.autoPlay !== true || data.slides.length <= 1) return;
+
+    const intervalMs = Math.max(1000, (autoplaySeconds ?? 5) * 1000);
+    const repeat = data.metadata.repeat === true;
+    const last = data.slides.length - 1;
+
+    const id = setInterval(() => {
+      if (pendingSlideRef.current !== null) return;
+      if (currentSlide < last) {
+        changeSlide(currentSlide + 1);
+      } else if (repeat) {
+        changeSlide(0);
+      }
+    }, intervalMs);
+
+    return () => clearInterval(id);
+  }, [lyricData, autoplaySeconds, currentSlide, changeSlide]);
+
   useEffect(() => {
     const unlistenNext = listen('next', () => goNext());
     const unlistenPrev = listen('previous', () => goPrev());
