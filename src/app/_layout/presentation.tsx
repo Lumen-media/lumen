@@ -359,8 +359,9 @@ function RouteComponent() {
                   type="button"
                   onClick={() => handleSelectSlide(slide.index)}
                   onDoubleClick={() => handleStartPresentation(slide.index)}
+                  aria-label={slide.label}
                   className={cn(
-                    'shrink-0 w-36 rounded-lg overflow-hidden transition-all outline-none',
+                    'shrink-0 w-40 rounded-md overflow-hidden transition-all outline-none',
                     slide.index === displayCurrentSlide
                       ? 'ring-2 ring-primary'
                       : 'ring-1 ring-border/40 hover:ring-border/70'
@@ -376,12 +377,11 @@ function RouteComponent() {
                     ) : (
                       <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
                         <Loader2 className="size-4 animate-spin" />
-                        <span className="text-xs font-medium">{slide.label}</span>
                       </div>
                     )}
-                  </div>
-                  <div className="p-1.5 text-[10px] font-medium text-center text-muted-foreground truncate">
-                    {slide.label}
+                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white backdrop-blur-sm">
+                      {slide.index + 1}
+                    </span>
                   </div>
                 </button>
               ))}
