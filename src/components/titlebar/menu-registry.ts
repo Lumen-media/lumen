@@ -24,6 +24,7 @@ export type MenuDef = {
   id: string
   label: string
   items: MenuItemDef[]
+  hidden?: boolean
 }
 
 type RegisteredMenu = { def: MenuDef; priority: number }
@@ -69,7 +70,9 @@ export function useMenus(): MenuDef[] {
   const extraItems = useMenuRegistry((s) => s._extraItems)
   return useMemo(
     () =>
-      registeredMenus.map(({ def }) => {
+      registeredMenus
+        .filter(({ def }) => !def.hidden)
+        .map(({ def }) => {
         const extras = extraItems
           .filter((i) => i.menuId === def.id)
           .sort((a, b) => a.priority - b.priority)
