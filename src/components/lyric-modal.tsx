@@ -1,14 +1,16 @@
-import { useForm } from '@tanstack/react-form';
+import { useForm, useStore } from '@tanstack/react-form';
 import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, ImagePlus, Palette } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
 import { useTranslation } from '@/lib/i18n';
-import { type LyricData, lyricService } from '@/services/lyric-service';
+import { getQuickPresentationPath } from '@/services/app-paths';
+import { type LyricData, type LyricMetadata, lyricService } from '@/services/lyric-service';
 import { lumenUrl } from '@/services/lumen-url';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
+import { usePlayerStore } from '@/stores/player-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { LyricBackgroundModal, type LyricBackgroundModalRef } from './lyric-background-modal';
 import { TextEditor, type TextEditorRef } from './text-editor';
@@ -25,8 +27,16 @@ import {
 import { Dialog, DialogClose, DialogContent } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import {
+  NumberField,
+  NumberFieldDecrement,
+  NumberFieldGroup,
+  NumberFieldIncrement,
+  NumberFieldInput,
+} from './ui/number-field';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
+import { Switch } from './ui/switch';
 import { Toggle } from './ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
@@ -186,6 +196,9 @@ type LyricFormValues = {
   markdown: string;
   globalBackground: string;
   slideBackgrounds: Record<number, string>;
+  autoPlay: boolean;
+  intervalSeconds: string;
+  repeat: boolean;
 };
 
 const defaultValues: LyricFormValues = {
@@ -198,11 +211,42 @@ const defaultValues: LyricFormValues = {
   markdown: '',
   globalBackground: '',
   slideBackgrounds: {},
+  autoPlay: true,
+  intervalSeconds: '5',
+  repeat: true,
 };
+
+function buildLyricData(values: LyricFormValues, quick = false): LyricData {
+  const slides = parseSlides(values.markdown);
+  const metadata: LyricMetadata = {
+    name: values.name,
+    author: values.author,
+    notes: values.notes,
+    font: values.font,
+    fontSize: values.fontSize,
+    alignment: values.alignment[0] || 'center',
+    globalBackground: values.globalBackground,
+  };
+  if (quick) {
+    metadata.autoPlay = values.autoPlay;
+    metadata.intervalSeconds = Number(values.intervalSeconds) || 5;
+    metadata.repeat = values.repeat;
+  }
+  return {
+    metadata,
+    slides: slides.map((s, i) => ({
+      lines: s.lines,
+      background: values.slideBackgrounds[i],
+    })),
+  };
+}
+
+const QUICK_LOAD_MARKER = '__quick__';
 
 export const LyricModal = () => {
   const { t } = useTranslation();
-  const { isOpen, filePath, close } = useLyricModalStore();
+  const { isOpen, filePath, title, close } = useLyricModalStore();
+  const isQuick = title === 'Quick Presentation';
   const { profiles, activeProfileId } = useProfileStore();
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
   const profileBackground = activeProfile?.defaultBackground?.src ?? undefined;
@@ -210,6 +254,7 @@ export const LyricModal = () => {
   const backgroundModalRef = useRef<LyricBackgroundModalRef>(null);
   const [saving, setSaving] = useState(false);
   const [loadingFile, setLoadingFile] = useState(false);
+  const [quickLoaded, setQuickLoaded] = useState(false);
   const { fonts } = useLocalFonts();
   const loadedPathRef = useRef<string | null>(null);
 
@@ -217,11 +262,66 @@ export const LyricModal = () => {
     defaultValues,
   });
 
+  const quickValues = useStore(form.store, (s) => s.values);
+
+  const applyData = useCallback(
+    (data: LyricData) => {
+      const slideBackgrounds: Record<number, string> = {};
+      for (let i = 0; i < data.slides.length; i++) {
+        if (data.slides[i].background) {
+          slideBackgrounds[i] = data.slides[i].background!;
+        }
+      }
+
+      const html = data.slides
+        .map((s) => s.lines.map((l) => `<p>${l}</p>`).join(''))
+        .join('<p></p>');
+
+      form.reset();
+      form.setFieldValue('name', data.metadata.name);
+      form.setFieldValue('author', data.metadata.author);
+      form.setFieldValue('notes', data.metadata.notes);
+      form.setFieldValue('font', data.metadata.font);
+      form.setFieldValue('fontSize', data.metadata.fontSize);
+      form.setFieldValue('alignment', [data.metadata.alignment || 'center']);
+      form.setFieldValue('globalBackground', data.metadata.globalBackground);
+      form.setFieldValue('slideBackgrounds', slideBackgrounds);
+      form.setFieldValue('autoPlay', data.metadata.autoPlay ?? true);
+      form.setFieldValue('intervalSeconds', String(data.metadata.intervalSeconds ?? 5));
+      form.setFieldValue('repeat', data.metadata.repeat ?? true);
+      editorRef.current?.editor?.commands.setContent(html);
+      const markdown = editorRef.current?.getMarkdown() ?? '';
+      form.setFieldValue('markdown', markdown);
+    },
+    [form]
+  );
+
   useEffect(() => {
     if (!isOpen) {
       loadedPathRef.current = null;
+      setQuickLoaded(false);
       return;
     }
+
+    if (isQuick) {
+      if (loadedPathRef.current === QUICK_LOAD_MARKER) return;
+
+      setLoadingFile(true);
+      lyricService
+        .loadQuick()
+        .then((data) => {
+          loadedPathRef.current = QUICK_LOAD_MARKER;
+          applyData(data);
+          setQuickLoaded(true);
+        })
+        .catch((err) => {
+          console.error('Failed to load quick presentation:', err);
+          toast.error(t('Failed to load lyric file'));
+        })
+        .finally(() => setLoadingFile(false));
+      return;
+    }
+
     if (!filePath || filePath === loadedPathRef.current) return;
 
     setLoadingFile(true);
@@ -229,36 +329,27 @@ export const LyricModal = () => {
       .load(filePath)
       .then((data) => {
         loadedPathRef.current = filePath;
-        const slideBackgrounds: Record<number, string> = {};
-        for (let i = 0; i < data.slides.length; i++) {
-          if (data.slides[i].background) {
-            slideBackgrounds[i] = data.slides[i].background!;
-          }
-        }
-
-        const html = data.slides
-          .map((s) => s.lines.map((l) => `<p>${l}</p>`).join(''))
-          .join('<p></p>');
-
-        form.reset();
-        form.setFieldValue('name', data.metadata.name);
-        form.setFieldValue('author', data.metadata.author);
-        form.setFieldValue('notes', data.metadata.notes);
-        form.setFieldValue('font', data.metadata.font);
-        form.setFieldValue('fontSize', data.metadata.fontSize);
-        form.setFieldValue('alignment', [data.metadata.alignment || 'center']);
-        form.setFieldValue('globalBackground', data.metadata.globalBackground);
-        form.setFieldValue('slideBackgrounds', slideBackgrounds);
-        editorRef.current?.editor?.commands.setContent(html);
-        const markdown = editorRef.current?.getMarkdown() ?? '';
-        form.setFieldValue('markdown', markdown);
+        applyData(data);
       })
       .catch((err) => {
         console.error('Failed to load lyric file:', err);
         toast.error(t('Failed to load lyric file'));
       })
       .finally(() => setLoadingFile(false));
-  }, [isOpen, filePath, form.reset, form.setFieldValue, t]);
+  }, [isOpen, isQuick, filePath, applyData, t]);
+
+  const persistQuick = useCallback(
+    (values: LyricFormValues) => lyricService.saveQuick(buildLyricData(values, true)),
+    []
+  );
+
+  useEffect(() => {
+    if (!isOpen || !isQuick || !quickLoaded) return;
+    const id = setTimeout(() => {
+      void persistQuick(quickValues);
+    }, 600);
+    return () => clearTimeout(id);
+  }, [isOpen, isQuick, quickLoaded, quickValues, persistQuick]);
 
   const fontOptions = fonts.map((f) => ({ label: f, value: f }));
 
@@ -266,24 +357,12 @@ export const LyricModal = () => {
     if (saving) return;
     setSaving(true);
     try {
-      const values = form.state.values;
-      const slides = parseSlides(values.markdown);
-      const data: LyricData = {
-        metadata: {
-          name: values.name,
-          author: values.author,
-          notes: values.notes,
-          font: values.font,
-          fontSize: values.fontSize,
-          alignment: values.alignment[0] || 'center',
-          globalBackground: values.globalBackground,
-        },
-        slides: slides.map((s, i) => ({
-          lines: s.lines,
-          background: values.slideBackgrounds[i],
-        })),
-      };
-      await lyricService.save(data, filePath ?? undefined);
+      const data = buildLyricData(form.state.values, isQuick);
+      if (isQuick) {
+        await lyricService.saveQuick(data);
+      } else {
+        await lyricService.save(data, filePath ?? undefined);
+      }
       toast.success(t('Lyrics saved successfully.'));
       form.reset();
       editorRef.current?.setMarkdown('');
@@ -298,9 +377,30 @@ export const LyricModal = () => {
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
+      if (isQuick && quickLoaded) {
+        lyricService.saveQuick(buildLyricData(form.state.values, true)).catch(() => {});
+      }
       close();
       form.reset();
       editorRef.current?.setMarkdown('');
+    }
+  };
+
+  const handleQuickPresent = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await lyricService.saveQuick(buildLyricData(form.state.values, true));
+      const filePath = await getQuickPresentationPath();
+      await usePlayerStore.getState().presentLyric(filePath);
+      form.reset();
+      editorRef.current?.setMarkdown('');
+      close();
+    } catch (err) {
+      console.error(err);
+      toast.error(t('Failed to start presentation'));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -320,6 +420,9 @@ export const LyricModal = () => {
               fontSize: s.values.fontSize,
               globalBackground: s.values.globalBackground,
               slideBackgrounds: s.values.slideBackgrounds,
+              autoPlay: s.values.autoPlay,
+              intervalSeconds: s.values.intervalSeconds,
+              repeat: s.values.repeat,
             })}
           >
             {({
@@ -329,6 +432,9 @@ export const LyricModal = () => {
               fontSize,
               globalBackground,
               slideBackgrounds,
+              autoPlay,
+              intervalSeconds,
+              repeat,
             }) => {
               const slides = parseSlides(markdown);
               const textAlign = (alignment[0] || 'center') as React.CSSProperties['textAlign'];
@@ -338,7 +444,7 @@ export const LyricModal = () => {
                 <>
                   <Card className="flex-1 p-0 gap-0 overflow-hidden">
                     <CardHeader className="p-4 flex-row items-center gap-7">
-                      <h4 className="uppercase">{t('Lyric Editor')}</h4>
+                      <h4 className="uppercase">{t(title)}</h4>
 
                       <Combobox
                         value={selectedFont}
@@ -472,52 +578,103 @@ export const LyricModal = () => {
                       </ToggleGroup>
                     </section>
 
-                    <section className="flex flex-col gap-3">
-                      <Label className="uppercase text-xs">{t('Metadata')}</Label>
-                      <form.Field name="name">
-                        {(field) => (
-                          <Input
-                            className="h-8 bg-background border-0"
-                            placeholder={t('Name')}
-                            value={field.state.value}
-                            onChange={(e) => field.handleChange(e.target.value)}
-                            onBlur={field.handleBlur}
+                    {isQuick && (
+                      <section className="flex flex-col gap-3">
+                        <Label className="uppercase text-xs">{t('Auto Presentation')}</Label>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium">{t('Auto advance')}</p>
+                          <Switch
+                            size="sm"
+                            checked={autoPlay}
+                            onCheckedChange={(checked) => form.setFieldValue('autoPlay', checked)}
                           />
-                        )}
-                      </form.Field>
-                      <form.Field name="author">
-                        {(field) => (
-                          <Input
-                            className="h-8 bg-background border-0"
-                            placeholder={t('Author')}
-                            value={field.state.value}
-                            onChange={(e) => field.handleChange(e.target.value)}
-                            onBlur={field.handleBlur}
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium">{t('Interval (seconds)')}</p>
+                          <NumberField
+                            className="inline-flex h-8 items-stretch overflow-hidden rounded-lg border border-input bg-background transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/25"
+                            min={1}
+                            value={Number(intervalSeconds) || null}
+                            disabled={!autoPlay}
+                            onValueChange={(value) =>
+                              form.setFieldValue(
+                                'intervalSeconds',
+                                value === null ? '' : String(value)
+                              )
+                            }
+                          >
+                            <NumberFieldGroup className="flex items-stretch">
+                              <NumberFieldInput className="w-12 px-2 text-right" />
+                              <span className="flex shrink-0 flex-col border-l border-input">
+                                <NumberFieldIncrement className="flex-1" />
+                                <NumberFieldDecrement className="flex-1 border-t border-input" />
+                              </span>
+                            </NumberFieldGroup>
+                          </NumberField>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium">{t('Repeat')}</p>
+                          <Switch
+                            size="sm"
+                            checked={repeat}
+                            onCheckedChange={(checked) => form.setFieldValue('repeat', checked)}
                           />
-                        )}
-                      </form.Field>
-                      <form.Field name="notes">
-                        {(field) => (
-                          <Input
-                            className="h-8 bg-background border-0"
-                            placeholder={t('Notes (Key, BPM...)')}
-                            value={field.state.value}
-                            onChange={(e) => field.handleChange(e.target.value)}
-                            onBlur={field.handleBlur}
-                          />
-                        )}
-                      </form.Field>
-                    </section>
+                        </div>
+                      </section>
+                    )}
+
+                    {!isQuick && (
+                      <section className="flex flex-col gap-3">
+                        <Label className="uppercase text-xs">{t('Metadata')}</Label>
+                        <form.Field name="name">
+                          {(field) => (
+                            <Input
+                              className="h-8 bg-background border-0"
+                              placeholder={t('Name')}
+                              value={field.state.value}
+                              onChange={(e) => field.handleChange(e.target.value)}
+                              onBlur={field.handleBlur}
+                            />
+                          )}
+                        </form.Field>
+                        <form.Field name="author">
+                          {(field) => (
+                            <Input
+                              className="h-8 bg-background border-0"
+                              placeholder={t('Author')}
+                              value={field.state.value}
+                              onChange={(e) => field.handleChange(e.target.value)}
+                              onBlur={field.handleBlur}
+                            />
+                          )}
+                        </form.Field>
+                        <form.Field name="notes">
+                          {(field) => (
+                            <Input
+                              className="h-8 bg-background border-0"
+                              placeholder={t('Notes (Key, BPM...)')}
+                              value={field.state.value}
+                              onChange={(e) => field.handleChange(e.target.value)}
+                              onBlur={field.handleBlur}
+                            />
+                          )}
+                        </form.Field>
+                      </section>
+                    )}
 
                     <section className="flex flex-col flex-1 gap-3 min-h-0">
-                      <Label className="uppercase">{t('Lyrics Editor')}</Label>
+                      <Label className="uppercase">
+                        {t(isQuick ? 'Slide Editor' : 'Lyrics Editor')}
+                      </Label>
 
                       <ScrollArea className="flex-1 overflow-hidden bg-background rounded-xl pb-4">
                         <TextEditor
                           ref={editorRef}
                           onChange={(md) => form.setFieldValue('markdown', md)}
                           debounce={300}
-                          placeholder={t('Type your lyrics here...')}
+                          placeholder={t(
+                            isQuick ? 'Type your slides here...' : 'Type your lyrics here...'
+                          )}
                         />
                       </ScrollArea>
 
@@ -536,9 +693,9 @@ export const LyricModal = () => {
                       <Button
                         className="flex-1 h-auto py-2"
                         disabled={saving || loadingFile}
-                        onClick={handleSave}
+                        onClick={isQuick ? handleQuickPresent : handleSave}
                       >
-                        {t('save')}
+                        {isQuick ? t('Present') : t('save')}
                       </Button>
                     </CardFooter>
                   </Card>

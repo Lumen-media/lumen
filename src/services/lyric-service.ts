@@ -1,5 +1,6 @@
-import { join } from '@tauri-apps/api/path';
-import { exists, readTextFile, rename, stat, writeTextFile } from '@tauri-apps/plugin-fs';
+import { dirname, join } from '@tauri-apps/api/path';
+import { exists, mkdir, readTextFile, rename, stat, writeTextFile } from '@tauri-apps/plugin-fs';
+import { getQuickPresentationPath } from './app-paths';
 import { fileInitService } from './file-init-service';
 import { mediaDbService } from './media-db-service';
 
@@ -11,6 +12,9 @@ export interface LyricMetadata {
   fontSize: string;
   alignment: string;
   globalBackground: string;
+  autoPlay?: boolean;
+  intervalSeconds?: number;
+  repeat?: boolean;
 }
 
 export interface LyricSlide {
@@ -38,6 +42,15 @@ function serializeLyric(data: LyricData): string {
   lines.push(`alignment: ${data.metadata.alignment}`);
   if (data.metadata.globalBackground) {
     lines.push(`globalBackground: ${data.metadata.globalBackground}`);
+  }
+  if (data.metadata.autoPlay !== undefined) {
+    lines.push(`autoPlay: ${data.metadata.autoPlay}`);
+  }
+  if (data.metadata.intervalSeconds !== undefined) {
+    lines.push(`intervalSeconds: ${data.metadata.intervalSeconds}`);
+  }
+  if (data.metadata.repeat !== undefined) {
+    lines.push(`repeat: ${data.metadata.repeat}`);
   }
   lines.push('---');
 
@@ -114,16 +127,21 @@ export function buildLyricSearchContent(data: LyricData): string {
 export function parseLyricFile(content: string): LyricData {
   const { metadata, body } = parseFrontmatter(content);
   const slides = parseSlides(body);
+  const raw = metadata as Record<string, string | undefined>;
 
   return {
     metadata: {
-      name: metadata.name ?? '',
-      author: metadata.author ?? '',
-      notes: metadata.notes ?? '',
-      font: metadata.font ?? '',
-      fontSize: metadata.fontSize ?? '48px',
-      alignment: metadata.alignment ?? 'center',
-      globalBackground: metadata.globalBackground ?? '',
+      name: raw.name ?? '',
+      author: raw.author ?? '',
+      notes: raw.notes ?? '',
+      font: raw.font ?? '',
+      fontSize: raw.fontSize ?? '48px',
+      alignment: raw.alignment ?? 'center',
+      globalBackground: raw.globalBackground ?? '',
+      autoPlay: raw.autoPlay === undefined ? undefined : raw.autoPlay === 'true',
+      intervalSeconds:
+        raw.intervalSeconds === undefined ? undefined : Number(raw.intervalSeconds) || undefined,
+      repeat: raw.repeat === undefined ? undefined : raw.repeat === 'true',
     },
     slides,
   };
@@ -195,6 +213,36 @@ class LyricService {
   async load(filePath: string): Promise<LyricData> {
     const content = await readTextFile(filePath);
     return parseLyricFile(content);
+  }
+
+  async loadQuick(): Promise<LyricData> {
+    const filePath = await getQuickPresentationPath();
+    if (!(await exists(filePath))) {
+      return {
+        metadata: {
+          name: '',
+          author: '',
+          notes: '',
+          font: '',
+          fontSize: '48px',
+          alignment: 'center',
+          globalBackground: '',
+        },
+        slides: [],
+      };
+    }
+    const content = await readTextFile(filePath);
+    return parseLyricFile(content);
+  }
+
+  async saveQuick(data: LyricData): Promise<void> {
+    const content = serializeLyric(data);
+    const filePath = await getQuickPresentationPath();
+    const folder = await dirname(filePath);
+    if (!(await exists(folder))) {
+      await mkdir(folder, { recursive: true });
+    }
+    await writeTextFile(filePath, content);
   }
 }
 

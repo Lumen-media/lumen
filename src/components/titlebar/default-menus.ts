@@ -46,7 +46,7 @@ const DEFAULT_MENUS: MenuDef[] = [
         type: 'action',
         label: 'New Presentation',
         shortcut: 'Ctrl+N',
-        onClick: goToLyricEditor,
+        onClick: () => useLyricModalStore.getState().openQuick(),
       },
       {
         type: 'action',
