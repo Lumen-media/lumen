@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { emit, listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect } from 'react';
+import { useScopedShortcuts } from '@/lib/shortcuts';
 import { PresenterSlot } from '@/modules/components/PresenterSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
@@ -105,22 +106,10 @@ function ModuleOverlayWindow() {
     };
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'F11') {
-        event.preventDefault();
-        void toggleFullscreen();
-        return;
-      }
-
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      void closeWindow();
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [closeWindow, toggleFullscreen]);
+  useScopedShortcuts('overlay-window', {
+    'overlay.fullscreen': () => void toggleFullscreen(),
+    'overlay.close': () => void closeWindow(),
+  });
 
   useEffect(() => {
     const unlisteners: (() => void)[] = [];

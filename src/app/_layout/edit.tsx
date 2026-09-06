@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pencil } from 'lucide-react';
 import { forwardRef, memo, useCallback, useEffect, useRef, useState } from 'react';
-import { useEventListener, useIsomorphicLayoutEffect } from 'usehooks-ts';
+import { useIsomorphicLayoutEffect } from 'usehooks-ts';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
@@ -10,11 +10,13 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { useScopedShortcuts } from '@/lib/shortcuts';
 import type { LyricData, LyricSlide } from '@/services/lyric-service';
 import { thumbnailService } from '@/services/thumbnail-service';
 import { useLyricEditStore } from '@/stores/lyric-edit-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { usePlayerStore } from '@/stores/player-store';
+import { usePresentationStore } from '@/stores/presentation-store';
 import { useProfileStore } from '@/stores/profile-store';
 
 export const Route = createFileRoute('/_layout/edit')({
@@ -37,6 +39,7 @@ function RouteComponent() {
       }))
     );
   const presentLyric = usePlayerStore((s) => s.presentLyric);
+  const presentationActive = usePresentationStore((s) => s.isActive);
   const { profiles, activeProfileId } = useProfileStore(
     useShallow((s) => ({ profiles: s.profiles, activeProfileId: s.activeProfileId }))
   );
@@ -125,19 +128,23 @@ function RouteComponent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSlideIndex, rowVirtualizer, thumbVirtualizer]);
 
-  useEventListener('keydown', (e: KeyboardEvent) => {
-    if (!lyricData) return;
-    const total = lyricData.slides.length;
-    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-      e.preventDefault();
-      handleSelectSlide(
-        selectedSlideIndex === null ? 0 : Math.min(selectedSlideIndex + 1, total - 1)
-      );
-    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-      e.preventDefault();
-      handleSelectSlide(selectedSlideIndex === null ? 0 : Math.max(selectedSlideIndex - 1, 0));
+  useScopedShortcuts(
+    'editor',
+    {
+      'editor.next-slide': () =>
+        handleSelectSlide(
+          selectedSlideIndex === null
+            ? 0
+            : Math.min(selectedSlideIndex + 1, (lyricData?.slides.length ?? 0) - 1)
+        ),
+      'editor.prev-slide': () =>
+        handleSelectSlide(selectedSlideIndex === null ? 0 : Math.max(selectedSlideIndex - 1, 0)),
+    },
+    {
+      'editor.next-slide': { enabled: Boolean(lyricData) && !presentationActive },
+      'editor.prev-slide': { enabled: Boolean(lyricData) && !presentationActive },
     }
-  });
+  );
 
   if (!lyricData || !filePath) {
     return (
