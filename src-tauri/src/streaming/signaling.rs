@@ -24,13 +24,14 @@ use webrtc::{
 use crate::devices::DeviceState;
 use super::manager::{StreamingState, cleanup_session};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum StreamType {
     Preview,
     AppPreview,
     Main,
     Mobile,
     MobilePreview,
+    MobileAudio(String),
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -50,17 +51,18 @@ impl StreamType {
             "main" => Some(Self::Main),
             "mobile" => Some(Self::Mobile),
             "mobile_preview" => Some(Self::MobilePreview),
-            _ => None,
+            _ => value.strip_prefix("mobile_audio:").map(|id| Self::MobileAudio(id.to_string())),
         }
     }
 
-    fn as_str(self) -> &'static str {
+    fn label(&self) -> String {
         match self {
-            Self::Preview => "preview",
-            Self::AppPreview => "app_preview",
-            Self::Main => "main",
-            Self::Mobile => "mobile",
-            Self::MobilePreview => "mobile_preview",
+            Self::Preview => "preview".to_string(),
+            Self::AppPreview => "app_preview".to_string(),
+            Self::Main => "main".to_string(),
+            Self::Mobile => "mobile".to_string(),
+            Self::MobilePreview => "mobile_preview".to_string(),
+            Self::MobileAudio(device_id) => format!("mobile_audio:{device_id}"),
         }
     }
 }
@@ -118,7 +120,6 @@ pub async fn subscribe_stream(
         app_preview_track,
         main_track,
         mobile_preview_video_h264_track,
-        mobile_preview_audio_track,
         preview_enabled,
     ) = {
         let manager = manager_arc.lock().await;
@@ -128,7 +129,6 @@ pub async fn subscribe_stream(
             manager.app_preview_track.clone(),
             manager.main_track.clone(),
             manager.mobile_preview_video_h264_track.clone(),
-            manager.mobile_preview_audio_track.clone(),
             manager.config.preview_enabled,
         )
     };
@@ -147,7 +147,7 @@ pub async fn subscribe_stream(
 
     {
         let sender_clone = sender.clone();
-        let stream_type_label = stream_type.as_str().to_string();
+        let stream_type_label = stream_type.label();
         peer.on_ice_candidate(Box::new(move |candidate| {
             let sender_clone = sender_clone.clone();
             let stream_type_label = stream_type_label.clone();
@@ -194,7 +194,7 @@ pub async fn subscribe_stream(
         }));
     }
 
-    match stream_type {
+    match &stream_type {
         StreamType::Preview => {
             let local_track = preview_track as Arc<dyn TrackLocal + Send + Sync>;
             let _ = peer
@@ -219,11 +219,16 @@ pub async fn subscribe_stream(
         StreamType::MobilePreview => {
             let h264_video_track =
                 mobile_preview_video_h264_track as Arc<dyn TrackLocal + Send + Sync>;
-            let audio_track = mobile_preview_audio_track as Arc<dyn TrackLocal + Send + Sync>;
             let _ = peer
                 .add_track(h264_video_track)
                 .await
                 .map_err(|error| error.to_string())?;
+        }
+        StreamType::MobileAudio(device_id) => {
+            let audio_track = {
+                let mut manager = manager_arc.lock().await;
+                manager.ensure_device_audio_track(device_id) as Arc<dyn TrackLocal + Send + Sync>
+            };
             let _ = peer
                 .add_track(audio_track)
                 .await
@@ -242,14 +247,17 @@ pub async fn subscribe_stream(
 
     let previous_peer = {
         let mut manager = manager_arc.lock().await;
-        let old = match stream_type {
+        let old = match &stream_type {
             StreamType::Preview => manager.preview_peers.remove(session_id),
             StreamType::AppPreview => manager.app_preview_peers.remove(session_id),
             StreamType::Main => manager.main_peers.remove(session_id),
             StreamType::MobilePreview => manager.mobile_preview_peers.remove(session_id),
+            StreamType::MobileAudio(device_id) => {
+                manager.remove_mobile_audio_peer(device_id, session_id)
+            }
             StreamType::Mobile => None,
         };
-        match stream_type {
+        match &stream_type {
             StreamType::Preview => {
                 manager
                     .preview_peers
@@ -270,6 +278,9 @@ pub async fn subscribe_stream(
                     .mobile_preview_peers
                     .insert(session_id.to_string(), peer.clone());
             }
+            StreamType::MobileAudio(device_id) => {
+                manager.insert_mobile_audio_peer(device_id, session_id, peer.clone());
+            }
             StreamType::Mobile => unreachable!(),
         }
         manager.emit_status();
@@ -282,7 +293,7 @@ pub async fn subscribe_stream(
 
     let payload = json!({
         "event": "stream_offer",
-        "stream_type": stream_type.as_str(),
+        "stream_type": stream_type.label(),
         "sdp": offer.sdp,
     });
     let _ = sender.send(Message::Text(payload.to_string()));
@@ -304,11 +315,14 @@ pub async fn unsubscribe_stream(
     let state = app.state::<StreamingState>();
     let peer = {
         let mut manager = state.manager.lock().await;
-        let peer = match stream_type {
+        let peer = match &stream_type {
             StreamType::Preview => manager.preview_peers.remove(session_id),
             StreamType::AppPreview => manager.app_preview_peers.remove(session_id),
             StreamType::Main => manager.main_peers.remove(session_id),
             StreamType::MobilePreview => manager.mobile_preview_peers.remove(session_id),
+            StreamType::MobileAudio(device_id) => {
+                manager.remove_mobile_audio_peer(device_id, session_id)
+            }
             StreamType::Mobile => None,
         };
         manager.emit_status();
@@ -337,11 +351,14 @@ pub async fn set_webrtc_answer(
     let state = app.state::<StreamingState>();
     let peer = {
         let manager = state.manager.lock().await;
-        match stream_type {
+        match &stream_type {
             StreamType::Preview => manager.preview_peers.get(session_id).cloned(),
             StreamType::AppPreview => manager.app_preview_peers.get(session_id).cloned(),
             StreamType::Main => manager.main_peers.get(session_id).cloned(),
             StreamType::MobilePreview => manager.mobile_preview_peers.get(session_id).cloned(),
+            StreamType::MobileAudio(device_id) => {
+                manager.get_mobile_audio_peer(device_id, session_id)
+            }
             StreamType::Mobile => None,
         }
     }
@@ -366,11 +383,14 @@ pub async fn add_webrtc_ice_candidate(
 
     let peer = {
         let manager = state.manager.lock().await;
-        match stream_type {
+        match &stream_type {
             StreamType::Preview => manager.preview_peers.get(session_id).cloned(),
             StreamType::AppPreview => manager.app_preview_peers.get(session_id).cloned(),
             StreamType::Main => manager.main_peers.get(session_id).cloned(),
             StreamType::MobilePreview => manager.mobile_preview_peers.get(session_id).cloned(),
+            StreamType::MobileAudio(device_id) => {
+                manager.get_mobile_audio_peer(device_id, session_id)
+            }
             StreamType::Mobile => manager.get_mobile_peer(session_id),
         }
     }
@@ -494,17 +514,21 @@ pub async fn handle_mobile_offer(
                     let mut forwarded_packets: u64 = 0;
                     while let Ok((packet, _)) = track_reader.read_rtp().await {
                         let maybe_relay_track = {
-                            let manager = manager_arc_forward.lock().await;
-                            if !manager.should_forward_mobile_preview(&device_id_forward) {
-                                None
-                            } else if track_kind == RTPCodecType::Video {
-                                if codec_mime.contains("h264") {
+                            let mut manager = manager_arc_forward.lock().await;
+                            if track_kind == RTPCodecType::Video {
+                                if !manager.should_forward_mobile_preview(&device_id_forward) {
+                                    None
+                                } else if codec_mime.contains("h264") {
                                     Some(manager.mobile_preview_video_h264_track.clone())
                                 } else {
                                     None
                                 }
                             } else if track_kind == RTPCodecType::Audio {
-                                Some(manager.mobile_preview_audio_track.clone())
+                                if manager.has_mobile_audio_subscriber(&device_id_forward) {
+                                    Some(manager.ensure_device_audio_track(&device_id_forward))
+                                } else {
+                                    None
+                                }
                             } else {
                                 None
                             }

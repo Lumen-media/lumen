@@ -38,12 +38,13 @@ pub struct StreamManager {
     pub app_preview_track: Arc<TrackLocalStaticSample>,
     pub main_track: Arc<TrackLocalStaticSample>,
     pub mobile_preview_video_h264_track: Arc<TrackLocalStaticRTP>,
-    pub mobile_preview_audio_track: Arc<TrackLocalStaticRTP>,
+    pub device_audio_tracks: HashMap<String, Arc<TrackLocalStaticRTP>>,
     pub preview_peers: HashMap<String, Arc<RTCPeerConnection>>,
     pub app_preview_peers: HashMap<String, Arc<RTCPeerConnection>>,
     pub main_peers: HashMap<String, Arc<RTCPeerConnection>>,
     pub mobile_preview_peers: HashMap<String, Arc<RTCPeerConnection>>,
     mobile_peers: HashMap<String, MobilePeer>,
+    pub mobile_audio_peers: HashMap<String, HashMap<String, Arc<RTCPeerConnection>>>,
     pub selected_mobile_preview_device: Option<String>,
     pub config: StreamingConfig,
     pub is_content_protected: bool,
@@ -64,6 +65,8 @@ impl StreamManager {
             mobile_connected: !self.mobile_peers.is_empty(),
             html_active: self.html_server.is_active(),
             html_url: self.html_server.url(),
+            master_volume: self.config.master_volume,
+            device_volumes: self.config.device_volumes.clone(),
         }
     }
 
@@ -134,6 +137,88 @@ impl StreamManager {
         }
     }
 
+    pub fn ensure_device_audio_track(&mut self, device_id: &str) -> Arc<TrackLocalStaticRTP> {
+        self.device_audio_tracks
+            .entry(device_id.to_string())
+            .or_insert_with(|| {
+                Arc::new(TrackLocalStaticRTP::new(
+                    super::signaling::opus_codec_capability(),
+                    format!("mobile_audio_{device_id}"),
+                    "lumen".to_string(),
+                ))
+            })
+            .clone()
+    }
+
+    pub fn has_mobile_audio_subscriber(&self, device_id: &str) -> bool {
+        self.mobile_audio_peers
+            .get(device_id)
+            .map(|sessions| !sessions.is_empty())
+            .unwrap_or(false)
+    }
+
+    pub fn insert_mobile_audio_peer(
+        &mut self,
+        device_id: &str,
+        session_id: &str,
+        peer: Arc<RTCPeerConnection>,
+    ) -> Option<Arc<RTCPeerConnection>> {
+        self.mobile_audio_peers
+            .entry(device_id.to_string())
+            .or_default()
+            .insert(session_id.to_string(), peer)
+    }
+
+    pub fn get_mobile_audio_peer(
+        &self,
+        device_id: &str,
+        session_id: &str,
+    ) -> Option<Arc<RTCPeerConnection>> {
+        self.mobile_audio_peers
+            .get(device_id)
+            .and_then(|sessions| sessions.get(session_id))
+            .cloned()
+    }
+
+    pub fn remove_mobile_audio_peer(
+        &mut self,
+        device_id: &str,
+        session_id: &str,
+    ) -> Option<Arc<RTCPeerConnection>> {
+        let removed = self
+            .mobile_audio_peers
+            .get_mut(device_id)
+            .and_then(|sessions| sessions.remove(session_id));
+        if self
+            .mobile_audio_peers
+            .get(device_id)
+            .is_none_or(|sessions| sessions.is_empty())
+        {
+            self.mobile_audio_peers.remove(device_id);
+        }
+        removed
+    }
+
+    pub fn remove_mobile_audio_session(
+        &mut self,
+        session_id: &str,
+    ) -> Vec<Arc<RTCPeerConnection>> {
+        let mut closed = Vec::new();
+        let mut empty_devices = Vec::new();
+        for (device_id, sessions) in self.mobile_audio_peers.iter_mut() {
+            if let Some(peer) = sessions.remove(session_id) {
+                closed.push(peer);
+            }
+            if sessions.is_empty() {
+                empty_devices.push(device_id.clone());
+            }
+        }
+        for device_id in empty_devices {
+            self.mobile_audio_peers.remove(&device_id);
+        }
+        closed
+    }
+
     pub fn remove_session(
         &mut self,
         session_id: &str,
@@ -197,16 +282,13 @@ pub fn initialize_streaming_state(app: &AppHandle) -> Result<StreamingState, Str
             "mobile_preview_video_h264".to_string(),
             "lumen".to_string(),
         )),
-        mobile_preview_audio_track: Arc::new(TrackLocalStaticRTP::new(
-            super::signaling::opus_codec_capability(),
-            "mobile_preview_audio".to_string(),
-            "lumen".to_string(),
-        )),
+        device_audio_tracks: HashMap::new(),
         preview_peers: HashMap::new(),
         app_preview_peers: HashMap::new(),
         main_peers: HashMap::new(),
         mobile_preview_peers: HashMap::new(),
         mobile_peers: HashMap::new(),
+        mobile_audio_peers: HashMap::new(),
         selected_mobile_preview_device: None,
         is_content_protected: false,
         html_server: HtmlServerRuntime::new(),
@@ -268,6 +350,33 @@ pub async fn set_stream_content_protected(
 }
 
 #[tauri::command]
+pub async fn set_stream_master_volume(
+    state: State<'_, StreamingState>,
+    volume: u8,
+) -> Result<u8, String> {
+    let mut manager = state.manager.lock().await;
+    let next = volume.min(100);
+    manager.config.master_volume = next;
+    save_streaming_config(&manager.config)?;
+    manager.emit_status();
+    Ok(next)
+}
+
+#[tauri::command]
+pub async fn set_stream_device_volume(
+    state: State<'_, StreamingState>,
+    device_id: String,
+    volume: u8,
+) -> Result<u8, String> {
+    let mut manager = state.manager.lock().await;
+    let next = volume.min(100);
+    manager.config.device_volumes.insert(device_id, next);
+    save_streaming_config(&manager.config)?;
+    manager.emit_status();
+    Ok(next)
+}
+
+#[tauri::command]
 pub async fn push_stream_slide(
     state: State<'_, StreamingState>,
     update: SlideUpdate,
@@ -300,11 +409,12 @@ pub async fn cleanup_session(state: Arc<Mutex<StreamManager>>, session_id: &str)
         manager.app.clone()
     };
 
-    let (preview, app_preview, main, mobile_preview, mobile) = {
+    let ((preview, app_preview, main, mobile_preview, mobile), mobile_audio_peers) = {
         let mut manager = state.lock().await;
         let removed = manager.remove_session(session_id);
+        let mobile_audio_peers = manager.remove_mobile_audio_session(session_id);
         manager.emit_status();
-        removed
+        (removed, mobile_audio_peers)
     };
 
     if let Some(preview) = preview {
@@ -321,6 +431,10 @@ pub async fn cleanup_session(state: Arc<Mutex<StreamManager>>, session_id: &str)
 
     if let Some(mobile_preview) = mobile_preview {
         let _ = mobile_preview.close().await;
+    }
+
+    for mobile_audio_peer in mobile_audio_peers {
+        let _ = mobile_audio_peer.close().await;
     }
 
     if let Some((mobile, device_id)) = mobile {

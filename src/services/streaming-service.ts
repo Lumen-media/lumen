@@ -8,6 +8,8 @@ export interface StreamingConfig {
   html_server_port: number;
   hardware_encoding: boolean;
   content_protection: boolean;
+  master_volume: number;
+  device_volumes: Record<string, number>;
 }
 
 export interface StreamingStatus {
@@ -16,6 +18,8 @@ export interface StreamingStatus {
   mobile_connected: boolean;
   html_active: boolean;
   html_url: string | null;
+  master_volume: number;
+  device_volumes: Record<string, number>;
 }
 
 class StreamingService {
@@ -33,6 +37,14 @@ class StreamingService {
 
   async setContentProtected(isProtected: boolean): Promise<void> {
     await invoke('set_stream_content_protected', { isProtected });
+  }
+
+  async setMasterVolume(volume: number): Promise<number> {
+    return invoke<number>('set_stream_master_volume', { volume });
+  }
+
+  async setDeviceVolume(deviceId: string, volume: number): Promise<number> {
+    return invoke<number>('set_stream_device_volume', { deviceId, volume });
   }
 
   async pushBlank(): Promise<void> {
