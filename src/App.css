@@ -149,3 +149,33 @@
     border-width: 0;
   }
 }
+
+@keyframes md-verse-fade-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes md-verse-fade-out {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+.md-verse-enter {
+  animation: md-verse-fade-in 0.4s ease-out forwards;
+}
+
+.md-verse-exit {
+  animation: md-verse-fade-out 0.25s ease-in forwards;
+}

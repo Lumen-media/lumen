@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebounceCallback, useEventListener, useInterval } from 'usehooks-ts';
-import { LyricPresentation } from '@/components/lyric-presentation';
+import { MarkdownPresentation } from '@/components/markdown-presentation';
 import { PptxPresentation } from '@/components/reveal-presentation';
 import { Videoplayer } from '@/components/ui/videoplayer';
 import { useProfiles } from '@/hooks/use-profiles';
@@ -568,7 +568,7 @@ function MediaWindowComponent() {
       )}
       {mode === 'lyric' && lyricPath && (
         <div className="absolute inset-0 z-10">
-          <LyricPresentation
+          <MarkdownPresentation
             filePath={lyricPath}
             startIndex={lyricStartIndex}
             hideLyrics={hideLyrics}

@@ -7,6 +7,7 @@ import { useProfiles } from '@/hooks/use-profiles';
 import { type LyricData, parseLyricFile } from '@/services/lyric-service';
 import { lumenUrl } from '@/services/lumen-url';
 import { useProfileStore } from '@/stores/profile-store';
+import { cn } from '@/lib/utils';
 
 function useBackgroundSrc(path?: string) {
   const [src, setSrc] = useState<string | undefined>();
@@ -40,7 +41,7 @@ function useSlideBgSrc(path?: string) {
   return displayedSrc;
 }
 
-export function LyricPresentation({
+export function MarkdownPresentation({
   filePath,
   startIndex = 0,
   hideLyrics = false,
@@ -60,6 +61,7 @@ export function LyricPresentation({
 
   const [lyricData, setLyricData] = useState<LyricData | null>(null);
   const [currentSlide, setCurrentSlide] = useState(startIndex);
+  const [exiting, setExiting] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
   const startIndexRef = useRef(startIndex);
   startIndexRef.current = startIndex;
@@ -130,18 +132,19 @@ export function LyricPresentation({
   }, [blackoutActive, currentSlide, filePath, hideLyrics, lyricData, profileBackground, useProfileWallpaper]);
 
   const totalSlides = lyricData?.slides.length ?? 0;
-  const [textVisible, setTextVisible] = useState(true);
   const pendingSlideRef = useRef<number | null>(null);
-  const fadeMs = 250;
 
   const changeSlide = useCallback((next: number) => {
-    setTextVisible(false);
+    if (pendingSlideRef.current !== null) return;
     pendingSlideRef.current = next;
+    setExiting(true);
     setTimeout(() => {
       setCurrentSlide(next);
-      setTextVisible(true);
-      pendingSlideRef.current = null;
-    }, fadeMs);
+      setExiting(false);
+      setTimeout(() => {
+        pendingSlideRef.current = null;
+      }, 410);
+    }, 250);
   }, []);
 
   const goNext = useCallback(() => {
@@ -268,24 +271,27 @@ export function LyricPresentation({
       )}
 
       <div
-        className="absolute inset-0 z-2 flex items-center justify-center overflow-hidden p-[5%]"
+        className="absolute inset-0 z-2 overflow-hidden p-[5%]"
         style={{
-          opacity: textVisible && !hideLyrics && !useProfileWallpaper ? 1 : 0,
-          transition: `opacity ${fadeMs}ms ease`,
+          opacity: !hideLyrics && !useProfileWallpaper ? 1 : 0,
         }}
       >
-        <div
-          ref={textRef}
-          className="text-white uppercase leading-relaxed w-full font-semibold"
-          style={{
-            textAlign,
-            fontFamily: lyricData.metadata.font || undefined,
-          }}
-        >
-          {slide.lines.map((line) => {
-            const id = crypto.randomUUID();
-            return <div key={`${currentSlide}-${id}`}>{line}</div>;
-          })}
+        <div className="flex h-full w-full items-center justify-center">
+          <div
+            ref={textRef}
+            className={cn(
+              'w-full text-white uppercase leading-relaxed font-semibold',
+              exiting ? 'md-verse-exit' : 'md-verse-enter'
+            )}
+            style={{
+              textAlign,
+              fontFamily: lyricData.metadata.font || undefined,
+            }}
+          >
+            {slide.lines.map((line, i) => (
+              <div key={`${currentSlide}-${i}`}>{line}</div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
