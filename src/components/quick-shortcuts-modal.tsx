@@ -28,7 +28,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useDebounceValue, useEventListener } from 'usehooks-ts';
+import { useDebounceValue } from 'usehooks-ts';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type {
@@ -769,7 +769,7 @@ function AppView({
 }
 
 export function QuickShortcutsModal() {
-  const { isOpen, toggle, close, activeApp, popApp } = useCommandStore();
+  const { isOpen, close, activeApp, popApp } = useCommandStore();
   const [appBackHandler, setAppBackHandler] = useState<CommanderBackHandler>();
 
   const handleActiveAppBack = useCallback(async () => {
@@ -786,13 +786,6 @@ export function QuickShortcutsModal() {
       setAppBackHandler(undefined);
     }
   }, [activeApp]);
-
-  useEventListener('keydown', (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-      event.preventDefault();
-      toggle();
-    }
-  });
 
   return (
     <Dialog

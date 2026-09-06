@@ -6,6 +6,7 @@ import { OptimizingIndicator } from '@/components/optimizing-indicator';
 import { QuickShortcutsModal } from '@/components/quick-shortcuts-modal';
 import { Toaster } from '@/components/ui/sonner';
 import { useModules } from '@/hooks/use-modules';
+import { GlobalShortcuts } from '@/lib/shortcuts';
 import { useOptimizingEvents } from '@/hooks/use-optimizing-events';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useSingleInstance } from '@/hooks/use-single-instance';
@@ -35,6 +36,7 @@ function RootComponent() {
       <Outlet />
       {!isAuxiliaryWindow && (
         <React.Fragment>
+          <GlobalShortcuts />
           <Toaster />
           <GlobalAlert />
           <QuickShortcutsModal />
