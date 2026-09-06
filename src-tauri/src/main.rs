@@ -511,11 +511,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
 
-                        let (message, keep_btn, close_btn) = if is_portuguese {
-                            ("Deseja manter o Lumen em segundo plano?", "Manter em segundo plano", "Fechar")
+                        let (message, keep_btn, close_btn, cancel_btn) = if is_portuguese {
+                            (
+                                "Deseja manter o Lumen em segundo plano?",
+                                "Manter em segundo plano",
+                                "Fechar",
+                                "Cancelar",
+                            )
                         } else {
-                            ("Keep Lumen running in the background?", "Keep in background", "Close")
+                            (
+                                "Keep Lumen running in the background?",
+                                "Keep in background",
+                                "Close",
+                                "Cancel",
+                            )
                         };
+
+                        let keep_label = keep_btn.to_string();
+                        let close_label = close_btn.to_string();
 
                         let app = app_handle.clone();
                         let win = window_clone.clone();
@@ -523,19 +536,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         app_handle
                             .dialog()
                             .message(message)
-                            .buttons(MessageDialogButtons::OkCancelCustom(
+                            .buttons(MessageDialogButtons::YesNoCancelCustom(
                                 keep_btn.into(),
                                 close_btn.into(),
+                                cancel_btn.into(),
                             ))
                             .title("Lumen")
-                            .show(move |keep_in_background| {
-                                if keep_in_background {
-                                    let _ = app.save_window_state(
-                                        StateFlags::all() & !StateFlags::DECORATIONS & !StateFlags::VISIBLE,
-                                    );
-                                    let _ = win.hide();
-                                } else {
-                                    app.exit(0);
+                            .show_with_result(move |result| {
+                                use tauri_plugin_dialog::MessageDialogResult as DialogResult;
+
+                                match result {
+                                    DialogResult::Custom(clicked) if clicked == keep_label => {
+                                        let _ = app.save_window_state(
+                                            StateFlags::all()
+                                                & !StateFlags::DECORATIONS
+                                                & !StateFlags::VISIBLE,
+                                        );
+                                        let _ = win.hide();
+                                    }
+                                    DialogResult::Custom(clicked) if clicked == close_label => {
+                                        app.exit(0);
+                                    }
+                                    _ => {}
                                 }
                             });
                     }
