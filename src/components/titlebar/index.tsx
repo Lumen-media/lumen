@@ -25,7 +25,7 @@ import { useOsType } from './use-os-type';
 import { useWindowState } from './use-window-state';
 import { TitlebarWindowControls } from './window-controls';
 
-const SHORTCUT_INLINE_MAX_LABEL_LENGTH = 13;
+const SHORTCUT_INLINE_MAX_LABEL_LENGTH = 15;
 
 function MenuItems({ items, t }: { items: MenuItemDef[]; t: (key: string) => string }) {
   return items.map((item, i) => {
