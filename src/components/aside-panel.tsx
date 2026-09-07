@@ -588,7 +588,7 @@ function QueueTab({
             })()}
           {!contextTargetItem && triggerSpecs.length > 0 && triggerSpecs.length <= 6 && (
             <ContextMenuGroup>
-              <ContextMenuLabel>Queue Triggers</ContextMenuLabel>
+              <ContextMenuLabel>{t('Queue Triggers')}</ContextMenuLabel>
               {triggerSpecs.map((spec) => (
                 <ContextMenuItem key={spec.id} onClick={() => openAddTrigger(spec.id)}>
                   {spec.icon ? <spec.icon size={14} /> : <Zap className="h-4 w-4" />}
@@ -599,7 +599,7 @@ function QueueTab({
           )}
           {!contextTargetItem && triggerSpecs.length > 6 && (
             <ContextMenuGroup>
-              <ContextMenuLabel>Queue Triggers</ContextMenuLabel>
+              <ContextMenuLabel>{t('Queue Triggers')}</ContextMenuLabel>
               <ContextMenuSub>
                 <ContextMenuSubTrigger>
                   <Zap className="h-4 w-4" />

@@ -211,7 +211,7 @@ export function AppHeader() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" sideOffset={8}>
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>Profiles</DropdownMenuLabel>
+                  <DropdownMenuLabel>{t('Profiles')}</DropdownMenuLabel>
                 </DropdownMenuGroup>
                 {profiles.map((p) => (
                   <DropdownMenuItem

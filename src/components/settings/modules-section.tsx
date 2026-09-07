@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle, Package, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import { t } from '@/lib/i18n';
 import { disableModule, reloadModule, uninstallModule } from '@/modules/injector';
 import { useModuleStore } from '@/modules/store';
 import type { ModuleRecord, ModuleStatus } from '@/modules/types';
@@ -10,27 +11,27 @@ function StatusBadge({ status }: { status: ModuleStatus }) {
   if (status === 'active') {
     return (
       <Badge variant="outline" className="gap-1 text-emerald-400 border-emerald-400/30">
-        <CheckCircle className="size-3" /> Active
+        <CheckCircle className="size-3" /> {t('Active')}
       </Badge>
     );
   }
   if (status === 'faulted') {
     return (
       <Badge variant="outline" className="gap-1 text-destructive border-destructive/30">
-        <AlertTriangle className="size-3" /> Faulted
+        <AlertTriangle className="size-3" /> {t('Faulted')}
       </Badge>
     );
   }
   if (status === 'loading') {
     return (
       <Badge variant="outline" className="gap-1 text-muted-foreground">
-        <RefreshCw className="size-3 animate-spin" /> Loading
+        <RefreshCw className="size-3 animate-spin" /> {t('Loading')}
       </Badge>
     );
   }
   return (
     <Badge variant="outline" className="gap-1 text-muted-foreground">
-      <XCircle className="size-3" /> Disabled
+      <XCircle className="size-3" /> {t('Disabled')}
     </Badge>
   );
 }
@@ -64,7 +65,7 @@ function ModuleRow({ record }: { record: ModuleRecord }) {
             <Button
               variant="ghost"
               size="icon-sm"
-              title="Reload"
+              title={t('Reload')}
               onClick={() => reloadModule(manifest.id)}
             >
               <RefreshCw className="size-3.5" />
@@ -74,7 +75,7 @@ function ModuleRow({ record }: { record: ModuleRecord }) {
             <Button
               variant="ghost"
               size="icon-sm"
-              title="Disable"
+              title={t('Disable')}
               onClick={() => disableModule(manifest.id)}
             >
               <XCircle className="size-3.5" />
@@ -84,7 +85,7 @@ function ModuleRow({ record }: { record: ModuleRecord }) {
             <Button
               variant="ghost"
               size="icon-sm"
-              title="Uninstall"
+              title={t('Uninstall')}
               className="text-destructive hover:text-destructive"
               onClick={() => uninstallModule(manifest.id)}
             >
@@ -106,7 +107,7 @@ export function ModulesSection() {
       {list.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-8 text-center text-muted-foreground">
           <Package className="size-8 opacity-40" />
-          <p className="text-sm">No modules installed</p>
+          <p className="text-sm">{t('No modules installed')}</p>
         </div>
       ) : (
         <div className="divide-y divide-border">
