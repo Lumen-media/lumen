@@ -339,7 +339,7 @@ export function MediaPanel() {
               autoComplete={'off'}
               aria-label={
                 activeMedia
-                  ? `${'Search'} ${currentItem?.label.toLowerCase()} ${t('files')}`
+                  ? `${t('Search')} ${currentItem?.label.toLowerCase()} ${t('files')}`
                   : t('Search files')
               }
               role="searchbox"
@@ -414,10 +414,10 @@ export function MediaPanel() {
                 <div
                   className="flex items-center justify-center h-32"
                   role="status"
-                  aria-label="Loading files"
+                  aria-label={t('Loading files...')}
                 >
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                  <span className="sr-only">Loading files...</span>
+                  <span className="sr-only">{t('Loading files...')}</span>
                 </div>
               ) : error ? (
                 <div

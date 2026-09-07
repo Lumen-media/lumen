@@ -459,7 +459,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-225 p-0 gap-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-0">
-          <DialogTitle className="text-base font-semibold">Select Media</DialogTitle>
+          <DialogTitle className="text-base font-semibold">{t('Select Media')}</DialogTitle>
         </DialogHeader>
 
         <Tabs
