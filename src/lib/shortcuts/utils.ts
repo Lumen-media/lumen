@@ -1,5 +1,14 @@
-import { formatForDisplay, validateHotkey } from '@tanstack/react-hotkeys';
+import { detectPlatform, formatForDisplay, validateHotkey } from '@tanstack/react-hotkeys';
 import { SHORTCUTS } from './default-shortcuts';
+
+export function isMacPlatform(): boolean {
+  return detectPlatform() === 'mac';
+}
+
+export function hotkeyDisplayTokens(hotkey: string): string[] {
+  const formatted = formatForDisplay(hotkey);
+  return formatted.split(isMacPlatform() ? ' ' : '+');
+}
 
 export function formatShortcutForDisplay(shortcut: string): string {
   try {
