@@ -117,7 +117,12 @@ const DEFAULT_MENUS: MenuDef[] = [
     label: 'Help',
     items: [
       { type: 'action', label: 'Documentation' },
-      { type: 'action', label: 'Keyboard Shortcuts', shortcut: menuShortcut('help.shortcuts') },
+      {
+        type: 'action',
+        label: 'Keyboard Shortcuts',
+        shortcut: menuShortcut('help.shortcuts'),
+        onClick: shortcutAction('help.shortcuts'),
+      },
       { type: 'separator' },
       {
         type: 'action',

@@ -4,6 +4,7 @@ import { GlobalAlert } from '@/components/global-alert';
 import { LyricModal } from '@/components/lyric-modal';
 import { OptimizingIndicator } from '@/components/optimizing-indicator';
 import { QuickShortcutsModal } from '@/components/quick-shortcuts-modal';
+import { ShortcutsSheet } from '@/components/shortcuts-sheet';
 import { Toaster } from '@/components/ui/sonner';
 import { useModules } from '@/hooks/use-modules';
 import { GlobalShortcuts } from '@/lib/shortcuts';
@@ -40,6 +41,7 @@ function RootComponent() {
           <Toaster />
           <GlobalAlert />
           <QuickShortcutsModal />
+          <ShortcutsSheet />
           <LyricModal />
           <DialogSlot />
           <BackgroundPickerSlot />
