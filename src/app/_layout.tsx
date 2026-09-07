@@ -2,6 +2,7 @@ import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@
 import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { Presentation } from 'lucide-react';
 import * as React from 'react';
+import { toast } from 'sonner';
 import { AppHeader } from '@/components/app-header';
 import { AsidePanel } from '@/components/aside-panel';
 import { DownloadsCookiesDialog } from '@/components/downloads-cookies-dialog';
@@ -12,14 +13,11 @@ import { PresenterControls } from '@/components/presenter-controls';
 import { TitleBar } from '@/components/title-bar';
 import { Card } from '@/components/ui/card';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { initI18n } from '@/lib/i18n';
 import type { FileInfo } from '@/services';
+import { COOKIE_VALIDATION_CACHE_KEY, useDownloadStore } from '@/stores/download-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 import { useQueueStore } from '@/stores/queue-store';
-import {
-  COOKIE_VALIDATION_CACHE_KEY,
-  useDownloadStore,
-} from '@/stores/download-store';
-import { toast } from 'sonner';
 
 export const Route = createFileRoute('/_layout')({
   component: LayoutComponent,
@@ -66,6 +64,8 @@ function LayoutComponent() {
   }
 
   React.useEffect(() => {
+    void initI18n();
+
     try {
       const cached = localStorage.getItem(COOKIE_VALIDATION_CACHE_KEY);
       if (cached) {
@@ -73,9 +73,7 @@ function LayoutComponent() {
           result: { status: string; detail: string };
         };
         if (parsed?.result) {
-          useDownloadStore
-            .getState()
-            .setCookieValidation(parsed.result as never);
+          useDownloadStore.getState().setCookieValidation(parsed.result as never);
         }
       }
     } catch {
@@ -111,7 +109,13 @@ function LayoutComponent() {
           if (cur !== idx) useQueueEntriesStore.getState().setDropTargetIndex(idx);
         };
         window.addEventListener('pointermove', onMove);
-        window.addEventListener('pointerup', (e) => { finalCursorY.current = e.clientY; }, { capture: true, once: true });
+        window.addEventListener(
+          'pointerup',
+          (e) => {
+            finalCursorY.current = e.clientY;
+          },
+          { capture: true, once: true }
+        );
         dragCleanup.current = () => window.removeEventListener('pointermove', onMove);
       }}
       onDragEnd={(event) => {
