@@ -7,6 +7,7 @@ import { useChatStore } from '@/stores/chat-store';
 import { useCommandStore } from '@/stores/command-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { usePresentationStore } from '@/stores/presentation-store';
+import { useShortcutsSheetStore } from '@/stores/shortcuts-sheet-store';
 import type { ShortcutDefinition } from './types';
 
 const PRESENTATION_PREVIEW_STORAGE_KEY = 'lumen:presentation-preview-file';
@@ -162,8 +163,15 @@ export const SHORTCUTS: ShortcutDefinition[] = [
   { id: 'live.start-streaming', keys: [], name: 'Start Streaming', group: 'Live', scope: 'global' },
   { id: 'live.stop-streaming', keys: [], name: 'Stop Streaming', group: 'Live', scope: 'global' },
   { id: 'live.configure-stream', keys: [], name: 'Configure Stream...', group: 'Live', scope: 'global' },
-  // Help (unbound until the shortcuts dialog exists)
-  { id: 'help.shortcuts', keys: ['Mod+Shift+K'], name: 'Keyboard Shortcuts', group: 'Help', scope: 'global', enabled: false },
+  // Help
+  {
+    id: 'help.shortcuts',
+    keys: ['Mod+Shift+K'],
+    name: 'Keyboard Shortcuts',
+    group: 'Help',
+    scope: 'global',
+    action: () => useShortcutsSheetStore.getState().open(),
+  },
   // Editor (scoped to the /edit route)
   {
     id: 'editor.next-slide',
