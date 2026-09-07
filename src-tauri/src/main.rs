@@ -3,6 +3,7 @@
 mod chat;
 mod devices;
 mod download;
+mod locales;
 mod module_runtime;
 mod presentation;
 mod streaming;
@@ -637,6 +638,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             download::get_download_status,
             download::install_cookies_file,
             download::validate_cookies,
+            locales::check_locales,
+            locales::sync_locales,
+            locales::apply_locale,
+            locales::list_locales,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -93,6 +93,66 @@ pub async fn fetch_latest_ffmpeg() -> Result<ToolRelease, String> {
 }
 
 #[derive(Debug, Deserialize)]
+struct LocalRelease {
+    tag_name: String,
+}
+
+pub async fn fetch_latest_locales_tag() -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get("https://api.github.com/repos/Lumen-media/lumen-locales/releases/latest")
+        .header("User-Agent", "lumen-app")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch locales release: {}", e))?;
+
+    if response.status() == reqwest::StatusCode::FORBIDDEN {
+        return Err("GitHub API rate limit exceeded. Try again later.".to_string());
+    }
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "GitHub API returned status {} for locales",
+            response.status()
+        ));
+    }
+
+    let release: LocalRelease = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse locales release JSON: {}", e))?;
+
+    Ok(release.tag_name)
+}
+
+pub async fn fetch_locale_file(tag: &str, path: &str) -> Result<String, String> {
+    let url = format!("https://cdn.jsdelivr.net/gh/Lumen-media/lumen-locales@{}/{}", tag, path);
+    let client = reqwest::Client::new();
+    let response = client
+        .get(url)
+        .header("User-Agent", "lumen-app")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch {}: {}", path, e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("jsDelivr returned status {} for {}", response.status(), path));
+    }
+
+    if let Some(len) = response.content_length() {
+        if len > 1_048_576 {
+            return Err(format!("{} exceeds the 1 MB size cap", path));
+        }
+    }
+
+    response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read {}: {}", path, e))
+}
+
+#[derive(Debug, Deserialize)]
 struct NodeRelease {
     version: String,
     lts: Option<serde_json::Value>,
