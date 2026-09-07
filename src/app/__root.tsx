@@ -7,20 +7,41 @@ import { QuickShortcutsModal } from '@/components/quick-shortcuts-modal';
 import { ShortcutsSheet } from '@/components/shortcuts-sheet';
 import { Toaster } from '@/components/ui/sonner';
 import { useModules } from '@/hooks/use-modules';
-import { GlobalShortcuts } from '@/lib/shortcuts';
+import { useScopedShortcuts } from '@/lib/shortcuts';
 import { useOptimizingEvents } from '@/hooks/use-optimizing-events';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useSingleInstance } from '@/hooks/use-single-instance';
 import { useTheme } from '@/hooks/use-theme';
 import { BackgroundPickerSlot } from '@/modules/components/BackgroundPickerSlot';
 import { DialogSlot } from '@/modules/components/DialogSlot';
+import { useModuleStore } from '@/modules/store';
+import { usePlayerStore } from '@/stores/player-store';
+import { usePresentationStore } from '@/stores/presentation-store';
 
 export const Route = createRootRoute({
   component: RootComponent,
 });
 
-const AUXILIARY_WINDOW_PATHS = new Set(['/media-window', '/module-overlay-window', '/module-surface-window']);
+const AUXILIARY_WINDOW_PATHS = new Set([
+  '/media-window',
+  '/module-overlay-window',
+  '/module-surface-window',
+]);
 const SURFACE_WINDOW_PATH = '/module-surface-window';
+
+function ShortcutRegistrar() {
+  const presentationActive = usePresentationStore((s) => s.isActive);
+  const lyricPath = usePlayerStore((s) => s.currentLyricPath);
+  const imagePath = usePlayerStore((s) => s.currentImagePath);
+  const presenterViewId = useModuleStore((s) => s.presenterViewId);
+
+  const gates = {
+    presenter: Boolean(lyricPath || imagePath || presenterViewId || presentationActive),
+  };
+
+  useScopedShortcuts('global', undefined, undefined, gates);
+  return null;
+}
 
 function RootComponent() {
   const isAuxiliaryWindow = AUXILIARY_WINDOW_PATHS.has(window.location.pathname);
@@ -37,7 +58,7 @@ function RootComponent() {
       <Outlet />
       {!isAuxiliaryWindow && (
         <React.Fragment>
-          <GlobalShortcuts />
+          <ShortcutRegistrar />
           <Toaster />
           <GlobalAlert />
           <QuickShortcutsModal />
