@@ -1,6 +1,6 @@
 import { dirname, join } from '@tauri-apps/api/path';
 import { exists, mkdir, readTextFile, rename, stat, writeTextFile } from '@tauri-apps/plugin-fs';
-import { getQuickPresentationPath } from './app-paths';
+import { getNoticesPath, getQuickPresentationPath } from './app-paths';
 import { fileInitService } from './file-init-service';
 import { mediaDbService } from './media-db-service';
 
@@ -238,6 +238,36 @@ class LyricService {
   async saveQuick(data: LyricData): Promise<void> {
     const content = serializeLyric(data);
     const filePath = await getQuickPresentationPath();
+    const folder = await dirname(filePath);
+    if (!(await exists(folder))) {
+      await mkdir(folder, { recursive: true });
+    }
+    await writeTextFile(filePath, content);
+  }
+
+  async loadNotices(): Promise<LyricData> {
+    const filePath = await getNoticesPath();
+    if (!(await exists(filePath))) {
+      return {
+        metadata: {
+          name: '',
+          author: '',
+          notes: '',
+          font: '',
+          fontSize: '48px',
+          alignment: 'center',
+          globalBackground: '',
+        },
+        slides: [],
+      };
+    }
+    const content = await readTextFile(filePath);
+    return parseLyricFile(content);
+  }
+
+  async saveNotices(data: LyricData): Promise<void> {
+    const content = serializeLyric(data);
+    const filePath = await getNoticesPath();
     const folder = await dirname(filePath);
     if (!(await exists(folder))) {
       await mkdir(folder, { recursive: true });
