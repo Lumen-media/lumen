@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Download,
   Info,
+  Languages,
   Monitor,
   Package,
   Palette,
@@ -25,6 +26,7 @@ import { AdvancedSection } from './settings/advanced-section';
 import { DevicePermissionsSection } from './settings/device-permissions-section';
 import { DownloadsSection } from './settings/downloads-section';
 import { GeneralAccessSection } from './settings/general-access-section';
+import { LocalesSection } from './settings/locales-section';
 import { ModulesSection } from './settings/modules-section';
 import { ThemeSection } from './settings/theme-section';
 import { Button } from './ui/button';
@@ -42,6 +44,11 @@ const SECTION_TITLES: Record<
   remote_permissions: { label: 'Remote Access', title: 'Device Permissions' },
   advanced: { label: 'Application settings', title: 'Advanced Settings' },
   downloads: { label: 'Application settings', title: 'Downloads' },
+  locales: {
+    label: 'Application settings',
+    title: 'Translations',
+    description: 'Manage localized language files for the app interface.',
+  },
   about: {
     label: 'Application settings',
     title: 'About',
@@ -194,6 +201,18 @@ export const SettingsDialog = () => {
 
             <Button
               variant="ghost"
+              onClick={() => handleNavClick('locales')}
+              className={cn(
+                'w-full justify-start gap-2.5',
+                activeSection === 'locales' && 'bg-primary/10 text-primary font-medium'
+              )}
+            >
+              <Languages className="size-4" />
+              {t('Languages')}
+            </Button>
+
+            <Button
+              variant="ghost"
               onClick={() => handleNavClick('modules')}
               className={cn(
                 'w-full justify-start gap-2.5',
@@ -272,6 +291,7 @@ export const SettingsDialog = () => {
                 {activeSection === 'remote_permissions' && <DevicePermissionsSection />}
                 {activeSection === 'advanced' && <AdvancedSection />}
                 {activeSection === 'downloads' && <DownloadsSection />}
+                {activeSection === 'locales' && <LocalesSection />}
                 {activeSection === 'modules' && <ModulesSection />}
                 {activeSection === 'about' && <AboutSection />}
               </div>
