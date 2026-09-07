@@ -460,16 +460,16 @@ The module still owns YouTube-specific normalization. Lumen only owns the generi
 
 ## Implementation Checklist
 
-- [ ] Promote `NetAPI` into `@lumen-media/module-sdk`.
-- [ ] Add `permissions.network` to the module manifest schema.
-- [ ] Implement Rust `module_net_request` command.
-- [ ] Replace renderer `fetch()` implementation with Tauri invoke.
-- [ ] Implement structured body encoders for JSON, text, bytes, form, and optionally multipart.
-- [ ] Implement response parsers for JSON, text, bytes, and none.
-- [ ] Decide whether to ship `get()` and `post()` wrappers or only `request()` in the first public SDK shape.
+- [x] Promote `NetAPI` into `@lumen-media/module-sdk`.
+- [x] Add `permissions.network` to the module manifest schema.
+- [x] Implement Rust `module_net_request` command.
+- [x] Replace renderer `fetch()` implementation with Tauri invoke.
+- [x] Implement structured body encoders for JSON, text, bytes, form, and optionally multipart.
+- [x] Implement response parsers for JSON, text, bytes, and none.
+- [x] Decide whether to ship `get()` and `post()` wrappers or only `request()` in the first public SDK shape.
 - [ ] Add URL permission matcher tests.
 - [ ] Add blocked localhost/private-network tests.
 - [ ] Add response-size and timeout tests.
-- [ ] Document module author examples in `module-api-reference.md`.
+- [x] Document module author examples in `module-api-reference.md`.
 - [ ] Update the YouTube module manifest to request Google API access.
 
