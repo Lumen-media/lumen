@@ -1,8 +1,9 @@
 import { PhysicalPosition } from '@tauri-apps/api/window';
 import { MoreHorizontal, Search } from 'lucide-react';
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef } from 'react';
-import { useTranslation } from '@/lib/i18n';
 import { useEventListener } from 'usehooks-ts';
+import { useTranslation } from '@/lib/i18n';
+import { formatShortcutForDisplay, menuShortcut } from '@/lib/shortcuts';
 import { useCommandStore } from '@/stores/command-store';
 import { Kbd } from '../ui/kbd';
 import {
@@ -23,7 +24,8 @@ import { useMenuOverflow } from './use-menu-overflow';
 import { useOsType } from './use-os-type';
 import { useWindowState } from './use-window-state';
 import { TitlebarWindowControls } from './window-controls';
-import { formatShortcutForDisplay } from '@/lib/shortcuts';
+
+const SHORTCUT_INLINE_MAX_LABEL_LENGTH = 13;
 
 function MenuItems({ items, t }: { items: MenuItemDef[]; t: (key: string) => string }) {
   return items.map((item, i) => {
@@ -40,10 +42,16 @@ function MenuItems({ items, t }: { items: MenuItemDef[]; t: (key: string) => str
         </MenubarSub>
       );
     }
+    const shortcut = item.shortcut ? formatShortcutForDisplay(item.shortcut) : undefined;
+    const isLongLabel = item.label.length > SHORTCUT_INLINE_MAX_LABEL_LENGTH;
     return (
-      <MenubarItem key={item.label} onClick={item.onClick}>
+      <MenubarItem
+        key={item.label}
+        onClick={item.onClick}
+        title={isLongLabel ? shortcut : undefined}
+      >
         {t(item.label)}
-        {item.shortcut && <MenubarShortcut>{formatShortcutForDisplay(item.shortcut)}</MenubarShortcut>}
+        {shortcut && !isLongLabel && <MenubarShortcut>{shortcut}</MenubarShortcut>}
       </MenubarItem>
     );
   });
@@ -227,7 +235,9 @@ export function TitleBar() {
             <span className="truncate text-left text-muted-foreground">
               {t('Type a command or search...')}
             </span>
-            <Kbd className="h-auto text-xs">⌘ K</Kbd>
+            <Kbd className="h-auto text-xs">
+              {formatShortcutForDisplay(menuShortcut('app.command-palette') ?? 'Mod+K')}
+            </Kbd>
           </button>
         </div>
 
