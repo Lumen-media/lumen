@@ -4,6 +4,7 @@ import { type MouseEvent as ReactMouseEvent, useEffect, useRef } from 'react';
 import { useEventListener } from 'usehooks-ts';
 import { useTranslation } from '@/lib/i18n';
 import { formatShortcutForDisplay, menuShortcut } from '@/lib/shortcuts';
+import { useAppSettingsStore } from '@/stores/app-settings-store';
 import { useCommandStore } from '@/stores/command-store';
 import { Kbd } from '../ui/kbd';
 import {
@@ -72,11 +73,16 @@ export function TitleBar() {
   } | null>(null);
   const restoreDragInFlightRef = useRef(false);
 
+  const menus = useMenus();
+
   useEffect(() => {
     registerDefaultMenus();
+    return useAppSettingsStore.subscribe((state, prevState) => {
+      if (prevState.developerMode !== state.developerMode) {
+        registerDefaultMenus();
+      }
+    });
   }, []);
-
-  const menus = useMenus();
 
   const { containerRef, measureRef, visibleMenus, overflowMenus } = useMenuOverflow(menus);
 

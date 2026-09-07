@@ -1,8 +1,11 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
-import { installModule } from '@/modules/injector';
-import { useSettingsStore } from '@/stores/settings-store';
 import { menuShortcut, shortcutAction } from '@/lib/shortcuts';
+import { installModule } from '@/modules/injector';
+import { useAppSettingsStore } from '@/stores/app-settings-store';
+import { useLyricModalStore } from '@/stores/lyric-modal-store';
+import { useNoticesDialogStore } from '@/stores/notices-dialog-store';
+import { useSettingsStore } from '@/stores/settings-store';
 import type { MenuDef } from './menu-registry';
 import { useMenuRegistry } from './menu-registry';
 
@@ -13,17 +16,10 @@ const DEFAULT_MENUS: MenuDef[] = [
     items: [
       {
         type: 'action',
-        label: 'New Presentation',
-        shortcut: menuShortcut('file.new'),
-        onClick: shortcutAction('file.new'),
-      },
-      {
-        type: 'action',
         label: 'Open',
         shortcut: menuShortcut('file.open'),
         onClick: shortcutAction('file.open'),
       },
-      { type: 'separator' },
       // { type: 'action', label: 'Save', shortcut: 'Ctrl+S' },
       // { type: 'action', label: 'Save As', shortcut: 'Ctrl+Shift+S' },
       { type: 'separator' },
@@ -31,6 +27,24 @@ const DEFAULT_MENUS: MenuDef[] = [
         type: 'action',
         label: 'Exit',
         onClick: () => void getCurrentWindow().close(),
+      },
+    ],
+  },
+  {
+    id: 'new',
+    label: 'New',
+    items: [
+      {
+        type: 'action',
+        label: 'New Presentation',
+        shortcut: menuShortcut('file.new'),
+        onClick: shortcutAction('file.new'),
+      },
+      {
+        type: 'action',
+        id: 'new-lyric',
+        label: 'New Lyric',
+        onClick: () => useLyricModalStore.getState().open(),
       },
     ],
   },
@@ -101,6 +115,14 @@ const DEFAULT_MENUS: MenuDef[] = [
     items: [
       {
         type: 'action',
+        id: 'notices',
+        label: 'Notices',
+        onClick: () => useNoticesDialogStore.getState().open(),
+      },
+      { type: 'separator' },
+      {
+        type: 'action',
+        id: 'new-module',
         label: 'New Module',
         onClick: async () => {
           const selected = await open({
@@ -135,5 +157,15 @@ const DEFAULT_MENUS: MenuDef[] = [
 
 export function registerDefaultMenus() {
   const { registerMenu } = useMenuRegistry.getState();
-  DEFAULT_MENUS.forEach((menu, index) => { registerMenu(menu, index * 10); });
+  const { developerMode } = useAppSettingsStore.getState();
+  DEFAULT_MENUS.forEach((menu, index) => {
+    let items = menu.items;
+    if (menu.id === 'tools' && !developerMode) {
+      items = items.filter((item) => !(item.type === 'action' && item.id === 'new-module'));
+      while (items.length > 0 && items[items.length - 1].type === 'separator') {
+        items = items.slice(0, -1);
+      }
+    }
+    registerMenu(menu.id === 'tools' ? { ...menu, items } : menu, index * 10);
+  });
 }
