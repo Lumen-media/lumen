@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 
-export type SettingsSection = 'theme' | 'remote_general' | 'remote_permissions' | 'advanced' | 'downloads' | 'about' | 'modules';
+export type SettingsSection =
+  | 'theme'
+  | 'remote_general'
+  | 'remote_permissions'
+  | 'advanced'
+  | 'downloads'
+  | 'locales'
+  | 'about'
+  | 'modules';
 
 interface SettingsStore {
   isOpen: boolean;

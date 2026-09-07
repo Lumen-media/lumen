@@ -4,7 +4,7 @@ import { ImagePlus, X } from 'lucide-react';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { useBoolean, useOnClickOutside } from 'usehooks-ts';
 import { useTheme } from '@/hooks/use-theme';
-import { useTranslation } from '@/lib/i18n';
+import { useAvailableLanguages, useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { lumenUrl } from '@/services/lumen-url';
 import type { Profile } from '@/services/profile-service';
@@ -19,12 +19,12 @@ import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 function BackgroundPreview({ background }: { background: Profile['defaultBackground'] }) {
-  const srcUrl = background ? lumenUrl(background.src, background.type === 'video' ? {} : { w: 550 }) : null;
+  const srcUrl = background
+    ? lumenUrl(background.src, background.type === 'video' ? {} : { w: 550 })
+    : null;
 
   if (!background) {
-    return (
-      <div className="size-full bg-linear-to-br from-slate-700 via-slate-800 to-slate-900" />
-    );
+    return <div className="size-full bg-linear-to-br from-slate-700 via-slate-800 to-slate-900" />;
   }
 
   if (!srcUrl) {
@@ -35,16 +35,14 @@ function BackgroundPreview({ background }: { background: Profile['defaultBackgro
     return <video src={srcUrl} className="size-full object-cover" muted />;
   }
 
-  return <img src={srcUrl} alt={background.name} decoding="async" className="size-full object-cover" />;
+  return (
+    <img src={srcUrl} alt={background.name} decoding="async" className="size-full object-cover" />
+  );
 }
-
-const LANGUAGES = [
-  { value: 'en', label: 'English' },
-  { value: 'pt-BR', label: 'Português (Brasil)' },
-];
 
 export function ThemeSection() {
   const { t, locale } = useTranslation();
+  const availableLanguages = useAvailableLanguages();
   const { colorMode, accentId } = useTheme();
   const {
     profiles,
@@ -211,9 +209,9 @@ export function ThemeSection() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {LANGUAGES.map((lang) => (
-                    <SelectItem key={lang.value} value={lang.value}>
-                      {lang.label}
+                  {availableLanguages.map((lang) => (
+                    <SelectItem key={lang.code} value={lang.code}>
+                      {lang.nativeName}
                     </SelectItem>
                   ))}
                 </SelectContent>
