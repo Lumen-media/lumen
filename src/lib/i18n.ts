@@ -11,6 +11,36 @@ const BUNDLED_FALLBACK: Record<string, Record<string, string>> = {
   'pt-BR': pt as Record<string, string>,
 };
 
+const BUNDLED_LANGUAGES: LanguageMeta[] = [
+  { code: 'en', name: 'English', nativeName: 'English' },
+  { code: 'pt-BR', name: 'Portuguese (Brazil)', nativeName: 'Português (Brasil)' },
+];
+
+const LOCALES_CACHE_KEY = 'lumen-locales-cache';
+
+interface LocalesCache {
+  runtime: Record<string, Record<string, string>>;
+  languages: LanguageMeta[];
+}
+
+function readLocalesCache(): LocalesCache | null {
+  try {
+    const raw = localStorage.getItem(LOCALES_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as LocalesCache;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalesCache(cache: LocalesCache): void {
+  try {
+    localStorage.setItem(LOCALES_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    /* storage full or unavailable */
+  }
+}
+
 export interface LanguageMeta {
   code: string;
   name: string;
@@ -79,11 +109,19 @@ async function loadLocalesFromDisk(): Promise<void> {
 
     if (Object.keys(runtime).length > 0) {
       useI18nStore.setState({ runtime, languages });
+      writeLocalesCache({ runtime, languages });
     } else if (languages.length > 0) {
       useI18nStore.setState({ languages });
+      writeLocalesCache({ runtime, languages });
     }
   } catch {
     /* not synced yet */
+  }
+  const cached = readLocalesCache();
+  if (cached && Object.keys(cached.runtime).length > 0) {
+    useI18nStore.setState({ runtime: cached.runtime, languages: cached.languages });
+  } else if (cached && cached.languages.length > 0) {
+    useI18nStore.setState({ languages: cached.languages });
   }
 }
 
@@ -100,11 +138,21 @@ export async function initI18n(): Promise<void> {
 
 export function useAvailableLanguages(): LanguageMeta[] {
   const languages = useI18nStore((s) => s.languages);
-  if (languages.length > 0) return languages;
-  return [
-    { code: 'en', name: 'English', nativeName: 'English' },
-    { code: 'pt-BR', name: 'Portuguese (Brazil)', nativeName: 'Português (Brasil)' },
-  ];
+  const runtime = useI18nStore((s) => s.runtime);
+
+  const resolveable = languages.filter((l) => runtime[l.code] ?? BUNDLED_FALLBACK[l.code]);
+  if (resolveable.length > 0) return resolveable;
+
+  const runtimeCodes = Object.keys(runtime).filter((code) => runtime[code]);
+  if (runtimeCodes.length > 0) {
+    return runtimeCodes.map((code) => ({
+      code,
+      name: code,
+      nativeName: code,
+    }));
+  }
+
+  return BUNDLED_LANGUAGES;
 }
 
 export function useTranslation() {
