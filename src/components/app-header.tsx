@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/lib/i18n';
+import { formatShortcutForDisplay, menuShortcut } from '@/lib/shortcuts';
 import { HeaderTrailingSlot } from '@/modules/components/HeaderTrailingSlot';
 import { useAsideStore } from '@/stores/aside-store';
 import { useChatStore } from '@/stores/chat-store';
@@ -38,6 +40,7 @@ function getInitials(name: string): string {
 }
 
 export function AppHeader() {
+  const { t } = useTranslation();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const profiles = useProfileStore((s) => s.profiles);
@@ -182,7 +185,7 @@ export function AppHeader() {
               type="button"
               onClick={openChat}
               className="relative inline-flex items-center justify-center"
-              title="Chat (Ctrl+Shift+C)"
+              title={`${t('Chat')} (${formatShortcutForDisplay(menuShortcut('app.open-chat') ?? 'Mod+Shift+C')})`}
             >
               <MessageCircle
                 className={cn(
