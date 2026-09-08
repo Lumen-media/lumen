@@ -1,10 +1,21 @@
 import { RouterProvider } from "@tanstack/react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./App.css";
 
 import { router } from "./lib/router";
 import { prewarmWebRtc } from "./lib/prewarm-webrtc";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const schedulePrewarmWebRtc = () => {
   const run = () => prewarmWebRtc();
@@ -71,9 +82,11 @@ const ErrorBoundary = ({
 try {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <GlobalErrorBoundary>
-        <RouterProvider router={router} />
-      </GlobalErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <GlobalErrorBoundary>
+          <RouterProvider router={router} />
+        </GlobalErrorBoundary>
+      </QueryClientProvider>
     </StrictMode>,
   );
 } catch (error) {
