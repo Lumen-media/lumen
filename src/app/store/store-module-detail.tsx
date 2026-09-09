@@ -1,14 +1,7 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
-import {
-  CheckCircle2,
-  ExternalLink,
-  Loader2,
-  ShieldCheck,
-  ShieldQuestion,
-} from 'lucide-react';
+import { CheckCircle2, ExternalLink, Loader2, ShieldCheck, ShieldQuestion } from 'lucide-react';
 import type React from 'react';
 import { useEffect } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -24,6 +17,7 @@ import {
 } from '@/services/store-service';
 import { useModulesStore } from '@/stores/modules-store';
 import { Markdown } from './markdown';
+import { ModuleIcon } from './module-icon';
 import { installFromStore } from './store-actions';
 import { useModuleManifest, useModuleReadme, useModuleRelease } from './use-store-data';
 
@@ -55,7 +49,6 @@ export function StoreModuleDetail({ module }: { module: StoreCatalogModule }) {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [module, installed, updateAvailable, busy]);
 
-  const iconSrc = catalogAssetUrl(module.icon);
   const coverSrc = catalogAssetUrl(module.cover);
 
   let action: React.ReactNode;
@@ -133,13 +126,12 @@ export function StoreModuleDetail({ module }: { module: StoreCatalogModule }) {
           />
         )}
         <div className="flex items-start gap-3">
-          <Avatar size="lg" className="size-12 rounded-lg after:rounded-lg">
-            {iconSrc ? (
-              <AvatarImage src={iconSrc} alt={module.name} />
-            ) : (
-              <AvatarFallback>{module.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-            )}
-          </Avatar>
+          <ModuleIcon
+            name={module.name}
+            icon={module.icon}
+            boxClassName="size-12 rounded-lg"
+            iconClassName="size-7"
+          />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-semibold">{module.name}</h2>

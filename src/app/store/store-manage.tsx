@@ -18,13 +18,9 @@ import { cn } from '@/lib/utils';
 import { disableModule, enableModule, reloadModule, uninstallModule } from '@/modules/injector';
 import { useModuleStore } from '@/modules/store';
 import type { ModuleRecord, ModuleStatus } from '@/modules/types';
-import {
-  catalogAssetUrl,
-  compareVersions,
-  type StoreCatalogModule,
-  storeService,
-} from '@/services/store-service';
+import { compareVersions, type StoreCatalogModule, storeService } from '@/services/store-service';
 import { useModulesStore } from '@/stores/modules-store';
+import { ModuleIcon } from './module-icon';
 import { installFromStore } from './store-actions';
 import { useModuleRelease } from './use-store-data';
 
@@ -135,7 +131,6 @@ function ModuleRow({ record, selected, onSelect }: ModuleRowProps) {
   const entry = useModulesStore((s) =>
     s.catalog?.modules.find((m) => m.id === manifest.id && m.status === 'approved')
   );
-  const iconSrc = entry ? catalogAssetUrl(entry.icon) : null;
 
   return (
     <div
@@ -150,15 +145,12 @@ function ModuleRow({ record, selected, onSelect }: ModuleRowProps) {
           : 'border-transparent hover:border-primary/20 hover:bg-primary/5'
       )}
     >
-      <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-purple-500/25 bg-purple-500/10 text-purple-300">
-        {iconSrc ? (
-          <img src={iconSrc} alt="" className="size-5" />
-        ) : (
-          <span className="text-[11px] font-semibold">
-            {manifest.name.slice(0, 2).toUpperCase()}
-          </span>
-        )}
-      </div>
+      <ModuleIcon
+        name={manifest.name}
+        icon={entry?.icon}
+        boxClassName="size-9"
+        iconClassName="size-5"
+      />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-sm font-medium">{manifest.name}</span>
