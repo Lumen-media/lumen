@@ -3,7 +3,6 @@ import { ChevronRight, CloudOff, Layers, PackageOpen, RefreshCw } from 'lucide-r
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Kbd } from '@/components/ui/kbd';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,10 +13,7 @@ import { useModuleStore } from '@/modules/store';
 import { compareVersions, type StoreCatalogModule } from '@/services/store-service';
 import { useModulesStore } from '@/stores/modules-store';
 import { ModuleIcon } from './module-icon';
-import { installFromStore } from './store-actions';
 import { useCachedReleases, useModuleRelease, useStoreCatalog } from './use-store-data';
-
-const IS_MAC = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform);
 
 interface StoreBrowseProps {
   query?: string;
@@ -78,22 +74,7 @@ function RowActions({ module }: { module: StoreCatalogModule }) {
   }
 
   if (!installed) {
-    return (
-      <div className="flex shrink-0 items-center gap-2">
-        <Kbd className="opacity-60">{IS_MAC ? '⌘' : 'Ctrl'}↵</Kbd>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="h-7 px-2.5 text-xs"
-          onClick={(e) => {
-            e.stopPropagation();
-            void installFromStore(module);
-          }}
-        >
-          {t('Install')}
-        </Button>
-      </div>
-    );
+    return null;
   }
 
   return (

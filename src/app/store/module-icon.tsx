@@ -84,7 +84,10 @@ export function ModuleIcon({
     <div
       className={cn(
         'flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-purple-500/25 bg-purple-500/10 text-purple-300',
-        boxClassName
+        {
+          "border-none": !isSvg,
+        },
+        boxClassName,
       )}
     >
       {content}
