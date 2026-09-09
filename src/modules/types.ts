@@ -50,7 +50,7 @@ export interface CommanderAppProps {
   setSearchTrailing?: React.Dispatch<
     React.SetStateAction<CommanderSearchTrailingComponent | undefined>
   >;
-  setBackHandler?: React.Dispatch<React.SetStateAction<CommanderBackHandler | undefined>>;
+  setBackHandler?: (handler: CommanderBackHandler | undefined) => void;
 }
 
 export interface CommandSpec {
@@ -101,7 +101,12 @@ export interface SelectedBackground {
 }
 
 export interface UIAPI {
-  notify(opts: { title?: string; message: React.ReactNode; level?: 'info' | 'warn' | 'error' | 'success' | 'loading' | 'custom'; [key: string]: unknown }): void;
+  notify(opts: {
+    title?: string;
+    message: React.ReactNode;
+    level?: 'info' | 'warn' | 'error' | 'success' | 'loading' | 'custom';
+    [key: string]: unknown;
+  }): void;
   confirm(opts: { title: string; message: string; danger?: boolean }): Promise<boolean>;
   prompt(opts: { title: string; placeholder?: string; initial?: string }): Promise<string | null>;
   openCommandPalette(prefilter?: string): void;
@@ -384,9 +389,7 @@ export interface ThemeRef {
   language?: string;
 }
 
-export type ThemeAddSource =
-  | { type: 'url'; url: string }
-  | { type: 'file'; path: string };
+export type ThemeAddSource = { type: 'url'; url: string } | { type: 'file'; path: string };
 
 export interface ThemeAddInput {
   source: ThemeAddSource;
@@ -405,7 +408,11 @@ export interface ThemesHostAPI {
   list(): ThemeRef[];
   apply(id: string): void;
   addBackground(input: ThemeAddInput): Promise<ThemeAddResult>;
-  defaultBackground(): Promise<{ src: string; type: 'theme' | 'image' | 'video'; name: string } | null>;
+  defaultBackground(): Promise<{
+    src: string;
+    type: 'theme' | 'image' | 'video';
+    name: string;
+  } | null>;
   onChange(handler: (theme: ThemeRef) => void): Disposable;
   onDefaultBackgroundChange(
     handler: (

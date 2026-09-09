@@ -17,10 +17,8 @@ import {
 } from 'lucide-react';
 import {
   type ComponentType,
-  type Dispatch,
   Fragment,
   type KeyboardEvent,
-  type SetStateAction,
   useCallback,
   useEffect,
   useId,
@@ -531,12 +529,12 @@ function RootView() {
     if (results.activePrefix) {
       return results.commands.length
         ? [
-          {
-            key: 'commands' as SearchScope,
-            heading: results.activePrefix.title,
-            results: results.commands,
-          },
-        ]
+            {
+              key: 'commands' as SearchScope,
+              heading: results.activePrefix.title,
+              results: results.commands,
+            },
+          ]
         : [];
     }
     const g: Array<{ key: SearchScope; heading: string; results: SearchResult[] }> = [];
@@ -712,7 +710,7 @@ function AppView({
 }: {
   app: ActiveApp;
   onBackAction: () => Promise<void>;
-  setBackHandler: Dispatch<SetStateAction<CommanderBackHandler | undefined>>;
+  setBackHandler: (handler: CommanderBackHandler | undefined) => void;
 }) {
   const { close } = useCommandStore();
   const AppComponent = app.component;
@@ -733,6 +731,10 @@ function AppView({
     };
   }, [setBackHandler]);
 
+  useEffect(() => {
+    setBackHandler(undefined);
+  }, [app.commandId, setBackHandler]);
+
   const searchTrailingProps = useMemo<CommanderSearchAccessoryProps>(
     () => ({ query: value, setQuery: setValue, close, back: () => void onBackAction() }),
     [value, close, onBackAction]
@@ -743,7 +745,7 @@ function AppView({
       <PaletteHeader
         app={app}
         fullContent={false}
-        setFullContent={() => { }}
+        setFullContent={() => {}}
         inputValue={value}
         setInputValue={setValue}
         inputId={inputId}
@@ -753,7 +755,7 @@ function AppView({
         searchTrailingProps={searchTrailingProps}
         onBack={() => void onBackAction()}
       />
-      <div className="min-h-[320px] flex-1 overflow-auto px-3 pb-3">
+      <div className="min-h-[320px] flex-1 px-3 pb-3">
         <AppComponent
           onClose={close}
           onBack={() => void onBackAction()}
@@ -772,6 +774,10 @@ export function QuickShortcutsModal() {
   const { isOpen, close, activeApp, popApp } = useCommandStore();
   const [appBackHandler, setAppBackHandler] = useState<CommanderBackHandler>();
 
+  const registerBackHandler = useCallback((handler: CommanderBackHandler | undefined) => {
+    setAppBackHandler(() => handler);
+  }, []);
+
   const handleActiveAppBack = useCallback(async () => {
     const handled = await appBackHandler?.();
     if (handled) {
@@ -783,7 +789,7 @@ export function QuickShortcutsModal() {
 
   useEffect(() => {
     if (!activeApp) {
-      setAppBackHandler(undefined);
+      setAppBackHandler(() => undefined);
     }
   }, [activeApp]);
 
@@ -806,7 +812,7 @@ export function QuickShortcutsModal() {
           <AppView
             app={activeApp}
             onBackAction={handleActiveAppBack}
-            setBackHandler={setAppBackHandler}
+            setBackHandler={registerBackHandler}
           />
         ) : (
           <RootView />
