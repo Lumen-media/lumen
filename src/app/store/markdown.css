@@ -1,0 +1,159 @@
+.store-readme {
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+.store-readme > :first-child {
+  margin-top: 0;
+}
+
+.store-readme > :last-child {
+  margin-bottom: 0;
+}
+
+.store-readme h1,
+.store-readme h2,
+.store-readme h3,
+.store-readme h4,
+.store-readme h5,
+.store-readme h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.store-readme h1 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+  font-size: 1.5em;
+}
+
+.store-readme h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+  font-size: 1.25em;
+}
+
+.store-readme h3 {
+  font-size: 1.125em;
+}
+
+.store-readme h4 {
+  font-size: 1em;
+}
+
+.store-readme h5 {
+  font-size: 0.875em;
+}
+
+.store-readme h6 {
+  color: var(--muted-foreground);
+  font-size: 0.85em;
+}
+
+.store-readme p,
+.store-readme blockquote,
+.store-readme ul,
+.store-readme ol,
+.store-readme dl,
+.store-readme pre {
+  margin-top: 0;
+  margin-bottom: 0.875em;
+}
+
+.store-readme ul,
+.store-readme ol {
+  padding-left: 2em;
+}
+
+.store-readme ul ul,
+.store-readme ul ol,
+.store-readme ol ul,
+.store-readme ol ol {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.store-readme li + li {
+  margin-top: 0.25em;
+}
+
+.store-readme li > p {
+  margin-bottom: 0.25em;
+}
+
+.store-readme a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.store-readme a:hover {
+  text-decoration: underline;
+}
+
+.store-readme strong {
+  font-weight: 600;
+}
+
+.store-readme-code {
+  padding: 0.15em 0.4em;
+  border-radius: 6px;
+  background: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.store-readme pre {
+  padding: 1em;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--muted);
+  line-height: 1.45;
+}
+
+.store-readme pre code {
+  padding: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  white-space: pre;
+}
+
+.store-readme blockquote {
+  padding: 0 1em;
+  color: var(--muted-foreground);
+  border-left: 0.25em solid var(--border);
+}
+
+.store-readme img {
+  max-width: 100%;
+  height: auto;
+}
+
+.store-readme hr {
+  height: 0.25em;
+  margin: 1.5em 0;
+  padding: 0;
+  background: var(--border);
+  border: 0;
+}
+
+.store-readme-table {
+  max-width: 100%;
+  border-collapse: collapse;
+}
+
+.store-readme-table th,
+.store-readme-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.store-readme-table thead th {
+  background: var(--card);
+}
