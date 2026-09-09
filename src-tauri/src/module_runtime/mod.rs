@@ -4,6 +4,7 @@ pub mod manifest;
 pub mod net;
 pub mod protocol;
 pub mod registry;
+pub mod store;
 pub mod themes;
 
 use std::collections::HashMap;
