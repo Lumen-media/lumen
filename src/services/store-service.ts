@@ -89,7 +89,7 @@ class StoreService {
   async getReadme(
     repo: string,
     locale?: string,
-    branch?: string,
+    branch?: string
   ): Promise<StoreReadmeResponse | null> {
     return invoke<StoreReadmeResponse | null>('store_get_readme', {
       repo,
@@ -115,7 +115,7 @@ class StoreService {
 
   onDownloadProgress(callback: (payload: StoreDownloadProgressPayload) => void): UnlistenFn {
     const promise = listen<StoreDownloadProgressPayload>('store:download-progress', (event) =>
-      callback(event.payload),
+      callback(event.payload)
     );
     return () => {
       void promise.then((fn) => fn());
@@ -127,9 +127,19 @@ export const storeService = new StoreService();
 
 const CATALOG_RAW_BASE = 'https://raw.githubusercontent.com/Lumen-media/community-modules/main';
 
+const GITHUB_BLOB_RE = /^https:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/;
+
+function toRawGitHubUrl(url: string): string {
+  const match = GITHUB_BLOB_RE.exec(url);
+  if (match) {
+    return `https://raw.githubusercontent.com/${match[1]}/${match[2]}/${match[3]}/${match[4]}`;
+  }
+  return url;
+}
+
 export function catalogAssetUrl(path?: string): string | null {
   if (!path) return null;
-  if (/^https?:\/\//i.test(path)) return path;
+  if (/^https?:\/\//i.test(path)) return toRawGitHubUrl(path);
   return `${CATALOG_RAW_BASE}/${path.replace(/^\/+/, '')}`;
 }
 
@@ -157,7 +167,7 @@ export function compareVersions(a: string, b: string): number {
 export async function installModuleFromStore(
   repo: string,
   tag: string,
-  expectedId: string,
+  expectedId: string
 ): Promise<StoreInstallResult> {
   const store = useModuleStore.getState();
   const existed = store.modules.has(expectedId);

@@ -11,12 +11,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
-import {
-  catalogAssetUrl,
-  compareVersions,
-  type StoreCatalogModule,
-} from '@/services/store-service';
+import { compareVersions, type StoreCatalogModule } from '@/services/store-service';
 import { useModulesStore } from '@/stores/modules-store';
+import { ModuleIcon } from './module-icon';
 import { installFromStore } from './store-actions';
 import { useCachedReleases, useModuleRelease, useStoreCatalog } from './use-store-data';
 
@@ -29,19 +26,6 @@ interface StoreBrowseProps {
 }
 
 type BrowseRow = { kind: 'installed' } | { kind: 'module'; module: StoreCatalogModule };
-
-function ModuleIcon({ module }: { module: StoreCatalogModule }) {
-  const iconSrc = catalogAssetUrl(module.icon);
-  return (
-    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-purple-500/25 bg-purple-500/10 text-purple-300">
-      {iconSrc ? (
-        <img src={iconSrc} alt={module.name} className="size-6" />
-      ) : (
-        <span className="text-[11px] font-semibold">{module.name.slice(0, 2).toUpperCase()}</span>
-      )}
-    </div>
-  );
-}
 
 function AuthorAvatar({ module }: { module: StoreCatalogModule }) {
   const src = `${module.author.url.replace(/\/+$/, '')}.png`;
@@ -331,7 +315,7 @@ export function StoreBrowse({ query, onOpenModule, onManage }: StoreBrowseProps)
                           : 'border-transparent hover:border-primary/20 hover:bg-primary/5'
                       )}
                     >
-                      <ModuleIcon module={row.module} />
+                      <ModuleIcon name={row.module.name} icon={row.module.icon} />
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <div className="flex min-w-0 items-center gap-1.5">
                           <span className="truncate text-sm font-medium text-foreground">
