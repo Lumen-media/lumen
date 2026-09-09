@@ -73,7 +73,7 @@ export function ModuleIcon({
 
   let content: ReactNode;
   if (iconSrc && !isSvg) {
-    content = <img src={iconSrc} alt="" className={iconClassName} />;
+    content = <img src={iconSrc} alt="" className={cn(iconClassName, { 'size-auto': iconSrc })} />;
   } else if (iconSrc && isSvg && svg) {
     content = <SvgInline html={svg} className={iconClassName} />;
   } else {
