@@ -18,6 +18,7 @@ import type { FileInfo } from '@/services';
 import { COOKIE_VALIDATION_CACHE_KEY, useDownloadStore } from '@/stores/download-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 import { useQueueStore } from '@/stores/queue-store';
+import { registerStoreCommand } from '@/app/store/store-app';
 
 export const Route = createFileRoute('/_layout')({
   component: LayoutComponent,
@@ -65,6 +66,7 @@ function LayoutComponent() {
 
   React.useEffect(() => {
     void initI18n();
+    registerStoreCommand();
 
     try {
       const cached = localStorage.getItem(COOKIE_VALIDATION_CACHE_KEY);

@@ -232,6 +232,15 @@ export async function disableModule(id: string) {
   await invoke('module_disable', { id });
 }
 
+export async function enableModule(id: string) {
+  await invoke('module_enable', { id });
+  const record = useModuleStore.getState().modules.get(id);
+  if (record) {
+    useModuleStore.getState().setStatus(id, 'loading');
+    await loadModule(record.manifest);
+  }
+}
+
 export async function uninstallModule(id: string) {
   await unloadModule(id);
   await invoke('module_uninstall', { id });
