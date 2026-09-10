@@ -51,6 +51,7 @@ export interface CommanderAppProps {
     React.SetStateAction<CommanderSearchTrailingComponent | undefined>
   >;
   setBackHandler?: (handler: CommanderBackHandler | undefined) => void;
+  setFooterTrailing?: React.Dispatch<React.SetStateAction<React.ReactNode | undefined>>;
 }
 
 export interface CommandSpec {

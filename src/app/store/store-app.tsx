@@ -1,13 +1,18 @@
-import { Boxes } from 'lucide-react';
+import { ArrowUpDown, Boxes, CornerDownLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { FooterHint, FooterHints } from '@/components/footer-hint';
 import { t } from '@/lib/i18n';
+import { useModuleStore } from '@/modules/store';
 import type { CommanderAppProps, CommandSpec } from '@/modules/types';
-import type { StoreCatalogModule } from '@/services/store-service';
+import { compareVersions, type StoreCatalogModule } from '@/services/store-service';
 import { useCommandStore } from '@/stores/command-store';
 import { useModulesStore } from '@/stores/modules-store';
 import { StoreBrowse } from './store-browse';
 import { StoreManage } from './store-manage';
 import { StoreModuleDetail } from './store-module-detail';
+import { useModuleRelease } from './use-store-data';
+
+const IS_MAC = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform);
 
 let registered = false;
 
@@ -31,9 +36,73 @@ type StoreView =
   | { kind: 'manage' }
   | { kind: 'detail'; module: StoreCatalogModule };
 
-export function StoreApp({ query, setBackHandler }: CommanderAppProps) {
+function StoreFooter({ view }: { view: StoreView }) {
+  const module = view.kind === 'detail' ? view.module : undefined;
+  const installed = useModuleStore((s) =>
+    module ? s.modules.get(module.id)?.manifest.version : undefined
+  );
+  const progress = useModulesStore((s) => (module ? s.progress[module.id] : undefined));
+  const release = useModuleRelease(module?.repo);
+
+  const busy = progress?.phase === 'downloading' || progress?.phase === 'installing';
+  const latestTag = release.data?.release?.tagName;
+  const updateAvailable = !!installed && !!latestTag && compareVersions(latestTag, installed) > 0;
+  const canInstall = !busy && (!installed || updateAvailable);
+
+  return (
+    <FooterHints>
+      {view.kind === 'browse' && (
+        <>
+          <FooterHint kbd={<ArrowUpDown />} label={t('Navigate')} tooltip={t('Arrow Up / Down')} />
+          <FooterHint kbd={<CornerDownLeft />} label={t('Open')} tooltip={t('Enter')} />
+          <FooterHint
+            kbd={
+              <>
+                <span className="text-[10px]">{IS_MAC ? '⌘' : 'Ctrl'}</span>
+                <CornerDownLeft />
+              </>
+            }
+            label={t('Install')}
+            tooltip={t('Ctrl + Enter')}
+          />
+        </>
+      )}
+      {view.kind === 'detail' && (
+        <>
+          {canInstall && (
+            <FooterHint kbd={<CornerDownLeft />} label={t('Install')} tooltip={t('Enter')} />
+          )}
+          <FooterHint
+            kbd={<span className="text-[10px]">Esc</span>}
+            label={t('Back')}
+            tooltip={t('Esc')}
+          />
+        </>
+      )}
+      {view.kind === 'manage' && (
+        <>
+          <FooterHint kbd={<ArrowUpDown />} label={t('Navigate')} tooltip={t('Arrow Up / Down')} />
+          <FooterHint kbd={<CornerDownLeft />} label={t('Select')} tooltip={t('Enter')} />
+          <FooterHint
+            kbd={<span className="text-[10px]">Esc</span>}
+            label={t('Back')}
+            tooltip={t('Esc')}
+          />
+        </>
+      )}
+    </FooterHints>
+  );
+}
+
+export function StoreApp({ query, setBackHandler, setFooterTrailing }: CommanderAppProps) {
   const [view, setView] = useState<StoreView>({ kind: 'browse' });
   const viewKind = view.kind;
+
+  useEffect(() => {
+    if (!setFooterTrailing) return;
+    setFooterTrailing(<StoreFooter view={view} />);
+    return () => setFooterTrailing(undefined);
+  }, [view, setFooterTrailing]);
 
   useEffect(() => {
     const unsubProgress = useModulesStore.getState().bindDownloadProgress();
