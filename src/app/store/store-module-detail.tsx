@@ -29,8 +29,6 @@ import { ModuleIcon } from './module-icon';
 import { installFromStore } from './store-actions';
 import { useModuleManifest, useModuleReadme, useModuleRelease } from './use-store-data';
 
-const IS_MAC = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform);
-
 function hashString(input: string): number {
   let hash = 0;
   for (let i = 0; i < input.length; i++) {
@@ -169,7 +167,9 @@ export function StoreModuleDetail({ module }: { module: StoreCatalogModule }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      if (e.key === 'Enter') {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest('button, a, [role="button"]')) return;
         e.preventDefault();
         if (busy) return;
         if (!installed || updateAvailable) {
@@ -208,7 +208,7 @@ export function StoreModuleDetail({ module }: { module: StoreCatalogModule }) {
         </Button>
         <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
           <kbd className="inline-flex h-4 items-center rounded-sm bg-muted px-1 font-sans text-[10px]">
-            {IS_MAC ? '⌘' : 'Ctrl'}↵
+            ↵
           </kbd>
           {t('Install with the shortcut')}
         </span>
@@ -222,7 +222,7 @@ export function StoreModuleDetail({ module }: { module: StoreCatalogModule }) {
         </Button>
         <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
           <kbd className="inline-flex h-4 items-center rounded-sm bg-muted px-1 font-sans text-[10px]">
-            {IS_MAC ? '⌘' : 'Ctrl'}↵
+            ↵
           </kbd>
           {t('Update with the shortcut')}
         </span>
@@ -299,9 +299,11 @@ export function StoreModuleDetail({ module }: { module: StoreCatalogModule }) {
           <p className="text-sm text-muted-foreground">{module.description}</p>
         )}
 
-        {manifestQ.data?.permissions?.network.length && <div className="flex flex-col gap-3">
-          <Permissions manifest={manifestQ.data ?? null} isLoading={manifestQ.isLoading} />
-        </div>}
+        {manifestQ.data?.permissions?.network.length && (
+          <div className="flex flex-col gap-3">
+            <Permissions manifest={manifestQ.data ?? null} isLoading={manifestQ.isLoading} />
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           {readmeQ.isLoading ? (

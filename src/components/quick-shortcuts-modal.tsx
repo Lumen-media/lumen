@@ -43,11 +43,11 @@ import {
   type SearchSource,
 } from '@/services/search-service';
 import { type ActiveApp, useCommandStore } from '@/stores/command-store';
+import { FooterHint, FooterHints } from './footer-hint';
 import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
 import { Kbd } from './ui/kbd';
 import { ScrollArea } from './ui/scroll-area';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface SourceTheme {
   icon: ComponentType<{ className?: string }>;
@@ -385,26 +385,16 @@ function CommanderFooter({
   query,
   fullContent,
   showBack,
+  children,
 }: {
   results?: SearchResults;
   query?: string;
   fullContent?: boolean;
   showBack?: boolean;
+  children?: React.ReactNode;
 }) {
   const { t } = useTranslation();
   const hasQuery = !!query?.trim();
-
-  const hint = (kbd: React.ReactNode, label: string, tooltip: string) => (
-    <Tooltip>
-      <TooltipTrigger>
-        <span className="flex cursor-default items-center gap-1">
-          <Kbd className="flex items-center gap-0.5">{kbd}</Kbd>
-          <span>{label}</span>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top">{tooltip}</TooltipContent>
-    </Tooltip>
-  );
 
   return (
     <div className="flex shrink-0 items-center justify-between border-t border-border/40 px-3 py-1.5 text-[10px] text-muted-foreground/60">
@@ -431,27 +421,40 @@ function CommanderFooter({
           </>
         )}
       </div>
-      <TooltipProvider delay={400}>
-        <div className="flex items-center gap-2.5">
-          {hint(<ArrowUpDown />, t('Navigate'), t('Arrow Up / Down'))}
-          {hint(<CornerDownLeft />, showBack ? t('Select') : t('Play'), t('Enter'))}
-          {!showBack &&
-            hint(
-              <>
-                <ArrowBigUp />
-                <CornerDownLeft />
-              </>,
-              t('Queue'),
-              t('Shift + Enter')
-            )}
-          {!showBack && hint(<span className="text-[10px]">Tab</span>, t('Filter'), t('Tab'))}
-          {hint(
-            showBack ? <ArrowLeft /> : <span className="text-[10px]">Esc</span>,
-            showBack ? t('Back') : t('Close'),
-            showBack ? t('←') : t('Esc')
+      {children ?? (
+        <FooterHints>
+          <FooterHint kbd={<ArrowUpDown />} label={t('Navigate')} tooltip={t('Arrow Up / Down')} />
+          <FooterHint
+            kbd={<CornerDownLeft />}
+            label={showBack ? t('Select') : t('Play')}
+            tooltip={t('Enter')}
+          />
+          {!showBack && (
+            <FooterHint
+              kbd={
+                <>
+                  <ArrowBigUp />
+                  <CornerDownLeft />
+                </>
+              }
+              label={t('Queue')}
+              tooltip={t('Shift + Enter')}
+            />
           )}
-        </div>
-      </TooltipProvider>
+          {!showBack && (
+            <FooterHint
+              kbd={<span className="text-[10px]">Tab</span>}
+              label={t('Filter')}
+              tooltip={t('Tab')}
+            />
+          )}
+          <FooterHint
+            kbd={showBack ? <ArrowLeft /> : <span className="text-[10px]">Esc</span>}
+            label={showBack ? t('Back') : t('Close')}
+            tooltip={showBack ? t('←') : t('Esc')}
+          />
+        </FooterHints>
+      )}
     </div>
   );
 }
@@ -572,31 +575,6 @@ function RootView() {
     overscan: 8,
   });
 
-  function handleSelect(r: SearchResult, queued = false) {
-    if (r.source === 'app' && r.commandSpec?.component) {
-      pushApp({
-        commandId: r.commandSpec.id,
-        title: r.commandSpec.title,
-        component: r.commandSpec.component,
-        search: r.commandSpec.commanderSearch,
-      } satisfies ActiveApp);
-      return;
-    }
-    if (r.source === 'command' && r.commandSpec?.run) {
-      r.commandSpec.run();
-      close();
-      return;
-    }
-    if (r.path) {
-      window.dispatchEvent(
-        new CustomEvent('lumen:commander-open', {
-          detail: { source: r.source, id: r.id, path: r.path, action: queued ? 'queue' : 'play' },
-        })
-      );
-      close();
-    }
-  }
-
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === 'Tab') {
       event.preventDefault();
@@ -624,6 +602,31 @@ function RootView() {
       event.preventDefault();
       const row = flatRows[itemIndices[selectedIdx] ?? -1];
       if (row?.kind === 'item') handleSelect(row.result, event.shiftKey);
+    }
+  }
+
+  function handleSelect(r: SearchResult, queued = false) {
+    if (r.source === 'app' && r.commandSpec?.component) {
+      pushApp({
+        commandId: r.commandSpec.id,
+        title: r.commandSpec.title,
+        component: r.commandSpec.component,
+        search: r.commandSpec.commanderSearch,
+      } satisfies ActiveApp);
+      return;
+    }
+    if (r.source === 'command' && r.commandSpec?.run) {
+      r.commandSpec.run();
+      close();
+      return;
+    }
+    if (r.path) {
+      window.dispatchEvent(
+        new CustomEvent('lumen:commander-open', {
+          detail: { source: r.source, id: r.id, path: r.path, action: queued ? 'queue' : 'play' },
+        })
+      );
+      close();
     }
   }
 
@@ -719,6 +722,7 @@ function AppView({
   const searchVisible = app.search === true || !!searchOptions;
   const [value, setValue] = useState(searchOptions?.initialQuery ?? '');
   const [SearchTrailing, setSearchTrailing] = useState<CommanderSearchTrailingComponent>();
+  const [FooterTrailing, setFooterTrailing] = useState<React.ReactNode>();
 
   useEffect(() => {
     setValue(searchOptions?.initialQuery ?? '');
@@ -728,11 +732,17 @@ function AppView({
     return () => {
       setSearchTrailing(undefined);
       setBackHandler(undefined);
+      setFooterTrailing(undefined);
     };
   }, [setBackHandler]);
 
+  const prevCommandId = useRef(app.commandId);
   useEffect(() => {
+    if (prevCommandId.current === app.commandId) return;
+    prevCommandId.current = app.commandId;
     setBackHandler(undefined);
+    setSearchTrailing(undefined);
+    setFooterTrailing(undefined);
   }, [app.commandId, setBackHandler]);
 
   const searchTrailingProps = useMemo<CommanderSearchAccessoryProps>(
@@ -763,9 +773,10 @@ function AppView({
           setQuery={setValue}
           setSearchTrailing={setSearchTrailing}
           setBackHandler={setBackHandler}
+          setFooterTrailing={setFooterTrailing}
         />
       </div>
-      <CommanderFooter showBack />
+      <CommanderFooter showBack>{FooterTrailing}</CommanderFooter>
     </div>
   );
 }

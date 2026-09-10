@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronRight, CloudOff, Layers, PackageOpen, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -13,6 +14,7 @@ import { useModuleStore } from '@/modules/store';
 import { compareVersions, type StoreCatalogModule } from '@/services/store-service';
 import { useModulesStore } from '@/stores/modules-store';
 import { ModuleIcon } from './module-icon';
+import { installFromStore } from './store-actions';
 import { useCachedReleases, useModuleRelease, useStoreCatalog } from './use-store-data';
 
 interface StoreBrowseProps {
@@ -88,6 +90,7 @@ export function StoreBrowse({ query, onOpenModule, onManage }: StoreBrowseProps)
   const { catalog, loading, error, stale, refresh } = useStoreCatalog();
   const installedCount = useModuleStore((s) => s.modules.size);
   const releaseDates = useCachedReleases();
+  const queryClient = useQueryClient();
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -151,6 +154,27 @@ export function StoreBrowse({ query, onOpenModule, onManage }: StoreBrowseProps)
       if (e.key === 'Enter') {
         const target = e.target as HTMLElement | null;
         if (target?.closest('button, a, [role="button"]')) return;
+        if (e.metaKey || e.ctrlKey) {
+          const row = rows[selected];
+          if (row?.kind !== 'module') return;
+          const module = row.module;
+          const progress = useModulesStore.getState().progress[module.id]?.phase;
+          if (progress === 'downloading' || progress === 'installing') return;
+          const installed = useModuleStore.getState().modules.get(module.id)?.manifest.version;
+          if (installed) {
+            const release = queryClient.getQueryData<{ release?: { tagName?: string } }>([
+              'store-release',
+              module.repo,
+              false,
+            ]);
+            const canUpdate =
+              release?.release?.tagName && compareVersions(release.release.tagName, installed) > 0;
+            if (!canUpdate) return;
+          }
+          e.preventDefault();
+          void installFromStore(module);
+          return;
+        }
         e.preventDefault();
         const row = rows[selected];
         if (row?.kind === 'installed') onManage();
@@ -160,7 +184,7 @@ export function StoreBrowse({ query, onOpenModule, onManage }: StoreBrowseProps)
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [rows, selected, onManage, onOpenModule]);
+  }, [rows, selected, onManage, onOpenModule, queryClient]);
 
   const tags = useMemo(() => {
     const set = new Set<string>();
