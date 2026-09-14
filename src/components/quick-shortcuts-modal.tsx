@@ -790,7 +790,15 @@ export function QuickShortcutsModal() {
   }, []);
 
   const handleActiveAppBack = useCallback(async () => {
-    const handled = await appBackHandler?.();
+    const handler = appBackHandler;
+    if (!handler) {
+      popApp();
+      return;
+    }
+
+    const result: unknown = await handler();
+    const handled =
+      typeof result === 'function' ? await (result as CommanderBackHandler)() : result;
     if (handled) {
       return;
     }
