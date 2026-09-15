@@ -18,7 +18,8 @@
         "minWidth": 800,
         "decorations": false,
         "shadow": true,
-        "center": true
+        "center": true,
+        "maximized": true
       }
     ],
     "security": {

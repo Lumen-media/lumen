@@ -417,7 +417,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_fs::init())
         .plugin(
             tauri_plugin_window_state::Builder::new()
-                .with_state_flags(StateFlags::all() & !StateFlags::DECORATIONS & !StateFlags::VISIBLE)
+                .with_state_flags(
+                    StateFlags::all()
+                        & !StateFlags::DECORATIONS
+                        & !StateFlags::VISIBLE
+                        & !StateFlags::MAXIMIZED,
+                )
                 .build(),
         )
         .plugin(tauri_plugin_log::Builder::new().build())
