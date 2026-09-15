@@ -31,8 +31,6 @@ struct OEmbedResponse {
     thumbnail_url: Option<String>,
 }
 
-/// Parses a YouTube URL into its video id and canonical watch URL.
-/// Mirrors the TS `urlMediaService.parseYouTubeUrl`.
 pub fn parse_youtube_url(value: &str) -> Option<YouTubeUrl> {
     let url = url::Url::parse(value.trim()).ok()?;
     let host = url.host_str()?.trim_start_matches("www.").to_lowercase();
@@ -78,8 +76,6 @@ fn is_valid_video_id(id: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-/// Canonicalizes a YouTube URL to its canonical watch URL, leaving non-YouTube
-/// values untouched. Used to compare/persist sources consistently.
 pub fn canonicalize_youtube_url(value: &str) -> String {
     parse_youtube_url(value)
         .map(|parsed| parsed.canonical_url)
@@ -117,9 +113,6 @@ async fn cache_youtube_thumbnail(video_id: &str, thumbnail_url: &str) -> Result<
     Ok(dest.to_string_lossy().to_string())
 }
 
-/// Resolves a YouTube URL: canonicalizes it, queries the oEmbed API for title/
-/// author/thumbnail and caches the thumbnail under `cache/remote-thumbs/youtube_{id}.jpg`.
-/// Network and disk failures fall back to a minimal valid result.
 #[tauri::command]
 pub async fn resolve_youtube(url: String) -> Result<UrlMediaMetadata, String> {
     let parsed = parse_youtube_url(&url)

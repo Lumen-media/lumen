@@ -64,10 +64,6 @@ pub async fn get_thumbnail(app: AppHandle, path: String, size: Option<u32>) -> R
     Ok(dest.to_string_lossy().to_string())
 }
 
-/// Fetches a remote (http/https) image, downscales it to at most `max_size` px
-/// and caches the result as WebP under `cache/remote-thumbs/thumb_{hash(url)}_{size}.webp`
-/// (the same folder/pattern used by YouTube thumbnails). Each URL/size is
-/// processed once and reused forever afterwards.
 #[tauri::command]
 pub async fn get_remote_thumbnail(url: String, max_size: Option<u32>) -> Result<String, String> {
     let max_size = max_size.unwrap_or(480).clamp(16, 4096);
@@ -96,9 +92,6 @@ pub async fn get_remote_thumbnail(url: String, max_size: Option<u32>) -> Result<
     Ok(dest.to_string_lossy().to_string())
 }
 
-/// Decodes an in-memory image and resizes it to fit `max_size` on the longest
-/// edge (never upscales), then encodes it as lossy WebP — the same maths the
-/// frontend canvas used to perform.
 fn downscale_to_webp(bytes: &[u8], dest: &Path, max_size: u32) -> bool {
     let img = match image::load_from_memory(bytes) {
         Ok(img) => img,
