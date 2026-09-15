@@ -6,8 +6,10 @@ mod download;
 mod locales;
 mod module_runtime;
 mod presentation;
+mod remote;
 mod streaming;
 mod thumbnail;
+mod url_media;
 mod websocket;
 
 use module_runtime::{ModuleRuntime, dev_server::start_dev_server, protocol::handle_module_request};
@@ -612,6 +614,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             chat::delete_chat_message,
             set_stream_overlay,
             thumbnail::get_thumbnail,
+            url_media::resolve_youtube,
             module_runtime::module_list_installed,
             module_runtime::module_install,
             module_runtime::module_get,
