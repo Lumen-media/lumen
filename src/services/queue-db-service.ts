@@ -1,220 +1,123 @@
-import Database from '@tauri-apps/plugin-sql';
-import { getDbPath } from './app-paths';
+import { invoke } from '@tauri-apps/api/core';
 import type { FileInfo } from './types';
-import { urlMediaService } from './url-media-service';
-
-interface QueueRow {
-  id: number;
-  position: number;
-  file_path: string;
-  file_name: string;
-  file_size: number;
-  file_modified_at: number;
-  file_extension: string;
-  played: number;
-  duration: number | null;
-  title: string | null;
-  artist: string | null;
-  original_url: string | null;
-  thumbnail_path: string | null;
-  remote_thumbnail_url: string | null;
-  download_status: string | null;
-}
 
 export interface QueueDbItem extends FileInfo {
   id: number;
   played: boolean;
 }
 
-type ColumnSpec = {
-  name: string;
-  sql: string;
-};
+interface QueueRow {
+  id: number;
+  position: number;
+  filePath: string;
+  fileName: string;
+  fileSize: number;
+  fileModifiedAt: number;
+  fileExtension: string;
+  played: number;
+  duration: number | null;
+  title: string | null;
+  artist: string | null;
+  originalUrl: string | null;
+  thumbnailPath: string | null;
+  remoteThumbnailUrl: string | null;
+  downloadStatus: string | null;
+}
 
-const QUEUE_URL_COLUMNS: ColumnSpec[] = [
-  { name: 'original_url', sql: 'ALTER TABLE queue ADD COLUMN original_url TEXT' },
-  { name: 'thumbnail_path', sql: 'ALTER TABLE queue ADD COLUMN thumbnail_path TEXT' },
-  { name: 'remote_thumbnail_url', sql: 'ALTER TABLE queue ADD COLUMN remote_thumbnail_url TEXT' },
-  {
-    name: 'download_status',
-    sql: "ALTER TABLE queue ADD COLUMN download_status TEXT NOT NULL DEFAULT 'downloaded'",
-  },
-];
+interface QueueFileInput {
+  name: string;
+  path: string;
+  size: number;
+  modifiedAt: number;
+  extension: string;
+  duration?: number | null;
+  title?: string | null;
+  artist?: string | null;
+  originalUrl?: string | null;
+  thumbnailPath?: string | null;
+  remoteThumbnailUrl?: string | null;
+  downloadStatus?: string | null;
+}
+
+function toQueueFileInput(file: FileInfo): QueueFileInput {
+  return {
+    name: file.title ?? file.name,
+    path: file.path,
+    size: file.size,
+    modifiedAt: file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
+    extension: file.extension,
+    duration: file.duration ?? null,
+    title: file.title ?? null,
+    artist: file.artist ?? null,
+    originalUrl: file.originalUrl ?? null,
+    thumbnailPath: file.thumbnailPath ?? null,
+    remoteThumbnailUrl: file.remoteThumbnailUrl ?? null,
+    downloadStatus: file.downloadStatus ?? null,
+  };
+}
+
+function toDbItem(item: QueueDbItem & { modifiedAt: number }): QueueDbItem {
+  return { ...item, modifiedAt: new Date(item.modifiedAt) };
+}
 
 class QueueDbService {
-  private readyPromise: Promise<Database> | null = null;
-
-  private ready(): Promise<Database> {
-    if (!this.readyPromise) {
-      this.readyPromise = this.connect();
-    }
-    return this.readyPromise;
-  }
-
-  private async connect(): Promise<Database> {
-    const db = await Database.load(await getDbPath());
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS queue (
-        id               INTEGER PRIMARY KEY AUTOINCREMENT,
-        position         INTEGER NOT NULL DEFAULT 0,
-        file_path        TEXT    NOT NULL,
-        file_name        TEXT    NOT NULL,
-        file_size        INTEGER NOT NULL DEFAULT 0,
-        file_modified_at INTEGER NOT NULL DEFAULT 0,
-        file_extension   TEXT    NOT NULL DEFAULT '',
-        played           INTEGER NOT NULL DEFAULT 0,
-        duration         REAL,
-        title            TEXT,
-        artist           TEXT
-      )
-    `);
-    await this.ensureColumns(db, 'queue', QUEUE_URL_COLUMNS);
-    await db.execute(`CREATE INDEX IF NOT EXISTS idx_queue_original_url ON queue (original_url)`);
-    return db;
-  }
-
-  private async ensureColumns(
-    db: Database,
-    tableName: string,
-    columns: ColumnSpec[]
-  ): Promise<void> {
-    const existing = await db.select<{ name: string }[]>(`PRAGMA table_info(${tableName})`);
-    const names = new Set(existing.map((column) => column.name));
-    for (const column of columns) {
-      if (!names.has(column.name)) {
-        await db.execute(column.sql);
-      }
-    }
-  }
-
   async loadQueue(): Promise<QueueDbItem[]> {
-    const db = await this.ready();
-    const rows = await db.select<QueueRow[]>('SELECT * FROM queue ORDER BY position ASC');
-    return rows.map(rowToItem);
+    const items = await invoke<Array<QueueDbItem & { modifiedAt: number }>>('queue_load');
+    return items.map(toDbItem);
   }
 
   async loadAllRows(): Promise<QueueRow[]> {
-    const db = await this.ready();
-    return db.select<QueueRow[]>('SELECT * FROM queue ORDER BY position ASC');
+    return invoke<QueueRow[]>('queue_load_rows');
   }
 
-  async addTriggerEntry(entryId: string, triggerId: string, configJson: string, title: string, tag: string): Promise<number> {
-    const db = await this.ready();
-    const filePath = `trigger://${entryId}`;
-    const existing = await db.select<{ id: number }[]>(
-      'SELECT id FROM queue WHERE file_path = $1',
-      [filePath]
-    );
-    if (existing.length > 0) {
-      return existing[0].id;
-    }
-    const [{ max_pos }] = await db.select<[{ max_pos: number | null }]>(
-      'SELECT MAX(position) as max_pos FROM queue'
-    );
-    const position = (max_pos ?? -1) + 1;
-    const result = await db.execute(
-      `INSERT INTO queue (
-         position, file_path, file_name, file_size, file_modified_at, file_extension,
-         played, title, artist, original_url, download_status
-       )
-       VALUES ($1, $2, $3, 0, 0, '', 0, $4, $5, $6, 'downloaded')`,
-      [position, filePath, triggerId, title, tag, configJson]
-    );
-    return result.lastInsertId!;
+  async addTriggerEntry(
+    entryId: string,
+    triggerId: string,
+    configJson: string,
+    title: string,
+    tag: string
+  ): Promise<number> {
+    return invoke<number>('queue_add_trigger_entry', { entryId, triggerId, configJson, title, tag });
   }
 
   async removeTriggerEntry(entryId: string): Promise<void> {
-    const db = await this.ready();
-    await db.execute("DELETE FROM queue WHERE file_path = $1", [`trigger://${entryId}`]);
+    await invoke('queue_remove_trigger_entry', { entryId });
   }
 
   async toggleTriggerPlayed(entryId: string): Promise<void> {
-    const db = await this.ready();
-    await db.execute(
-      "UPDATE queue SET played = CASE WHEN played = 0 THEN 1 ELSE 0 END WHERE file_path = $1",
-      [`trigger://${entryId}`]
-    );
+    await invoke('queue_toggle_trigger_played', { entryId });
   }
 
   async loadTriggerEntries(): Promise<QueueRow[]> {
-    const db = await this.ready();
-    return db.select<QueueRow[]>("SELECT * FROM queue WHERE file_path LIKE 'trigger://%' ORDER BY position ASC");
+    return invoke<QueueRow[]>('queue_load_trigger_entries');
   }
 
   async exists(filePath: string): Promise<boolean> {
-    const db = await this.ready();
-    const parsed = urlMediaService.parseYouTubeUrl(filePath);
-    const sourceUrl = parsed?.canonicalUrl ?? filePath;
-    const [{ count }] = await db.select<[{ count: number }]>(
-      'SELECT COUNT(*) as count FROM queue WHERE file_path = $1 OR original_url = $2',
-      [sourceUrl, sourceUrl]
-    );
-    return count > 0;
+    return invoke<boolean>('queue_exists', { filePath });
   }
 
   async addToQueue(file: FileInfo): Promise<number> {
-    const db = await this.ready();
-    const [{ max_pos }] = await db.select<[{ max_pos: number | null }]>(
-      'SELECT MAX(position) as max_pos FROM queue'
-    );
-    return this.insertAtPosition(db, file, (max_pos ?? -1) + 1);
+    return invoke<number>('queue_add_to_queue', { file: toQueueFileInput(file) });
   }
 
   async playNext(file: FileInfo): Promise<number> {
-    const db = await this.ready();
-    const [{ min_pos }] = await db.select<[{ min_pos: number | null }]>(
-      'SELECT MIN(position) as min_pos FROM queue'
-    );
-    return this.insertAtPosition(db, file, (min_pos ?? 1) - 1);
+    return invoke<number>('queue_play_next', { file: toQueueFileInput(file) });
   }
 
   async addUrlToQueue(url: string): Promise<number> {
-    const file = await urlMediaService.createYouTubeFileInfo(url);
-    return this.addToQueue(file);
-  }
-
-  private async insertAtPosition(db: Database, file: FileInfo, position: number): Promise<number> {
-    const result = await db.execute(
-      `INSERT INTO queue (
-         position, file_path, file_name, file_size, file_modified_at, file_extension,
-         duration, title, artist, original_url, thumbnail_path, remote_thumbnail_url, download_status
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      [
-        position,
-        file.path,
-        file.title ?? file.name,
-        file.size,
-        file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
-        file.extension,
-        file.duration ?? null,
-        file.title ?? null,
-        file.artist ?? null,
-        file.originalUrl ?? null,
-        file.thumbnailPath ?? null,
-        file.remoteThumbnailUrl ?? null,
-        file.downloadStatus ?? (file.extension === 'url' ? 'not_downloaded' : 'downloaded'),
-      ]
-    );
-    return result.lastInsertId!;
+    return invoke<number>('queue_add_url_to_queue', { url });
   }
 
   async removeFromQueue(id: number): Promise<void> {
-    const db = await this.ready();
-    await db.execute('DELETE FROM queue WHERE id = $1', [id]);
+    await invoke('queue_remove', { id });
   }
 
   async markPlayed(id: number): Promise<void> {
-    const db = await this.ready();
-    await db.execute('UPDATE queue SET played = 1 WHERE id = $1', [id]);
+    await invoke('queue_mark_played', { id });
   }
 
   async togglePlayed(id: number): Promise<void> {
-    const db = await this.ready();
-    await db.execute(
-      'UPDATE queue SET played = CASE WHEN played = 0 THEN 1 ELSE 0 END WHERE id = $1',
-      [id]
-    );
+    await invoke('queue_toggle_played', { id });
   }
 
   /**
@@ -222,55 +125,29 @@ class QueueDbService {
    * Marks the found item as played and returns it without deleting it from the queue.
    */
   async shiftQueue(excludePath?: string): Promise<QueueDbItem | null> {
-    const db = await this.ready();
-    const parsed = excludePath ? urlMediaService.parseYouTubeUrl(excludePath) : null;
-    const normalizedExcludePath = parsed?.canonicalUrl ?? excludePath;
-    const rows = normalizedExcludePath
-      ? await db.select<QueueRow[]>(
-          'SELECT * FROM queue WHERE played = 0 AND file_path != $1 ORDER BY position ASC LIMIT 1',
-          [normalizedExcludePath]
-        )
-      : await db.select<QueueRow[]>(
-          'SELECT * FROM queue WHERE played = 0 ORDER BY position ASC LIMIT 1'
-        );
-
-    if (rows.length === 0) return null;
-    await db.execute('UPDATE queue SET played = 1 WHERE id = $1', [rows[0].id]);
-    return rowToItem(rows[0]);
+    const item = await invoke<QueueDbItem | null>('queue_shift', {
+      excludePath: excludePath ?? null,
+    });
+    return item ? (toDbItem(item as QueueDbItem & { modifiedAt: number }) ?? null) : null;
   }
 
   async clearQueue(): Promise<void> {
-    const db = await this.ready();
-    await db.execute('DELETE FROM queue');
+    await invoke('queue_clear');
   }
 
   async reorderQueue(orderedIds: number[]): Promise<void> {
-    const db = await this.ready();
-    for (let i = 0; i < orderedIds.length; i++) {
-      await db.execute('UPDATE queue SET position = $1 WHERE id = $2', [i, orderedIds[i]]);
-    }
+    await invoke('queue_reorder', { orderedIds });
   }
 
   async updateAllPositions(
     idUpdates: { id: number; position: number }[],
     pathUpdates: { path: string; position: number }[]
   ): Promise<void> {
-    const db = await this.ready();
-    for (const { id, position } of idUpdates) {
-      await db.execute('UPDATE queue SET position = $1 WHERE id = $2', [position, id]);
-    }
-    for (const { path, position } of pathUpdates) {
-      await db.execute('UPDATE queue SET position = $1 WHERE file_path = $2', [position, path]);
-    }
+    await invoke('queue_update_all_positions', { idUpdates, pathUpdates });
   }
 
   async shuffleQueue(): Promise<void> {
-    const db = await this.ready();
-    const rows = await db.select<QueueRow[]>('SELECT * FROM queue ORDER BY position ASC');
-    const shuffled = [...rows].sort(() => Math.random() - 0.5);
-    for (let i = 0; i < shuffled.length; i++) {
-      await db.execute('UPDATE queue SET position = $1 WHERE id = $2', [i, shuffled[i].id]);
-    }
+    await invoke('queue_shuffle');
   }
 
   async updateMetadata(
@@ -283,63 +160,31 @@ class QueueDbService {
       remoteThumbnailUrl?: string;
     }
   ): Promise<void> {
-    const db = await this.ready();
-    const updates: string[] = [];
-    const values: (number | string | null)[] = [];
-
-    if (metadata.duration !== undefined) {
-      updates.push(`duration = $${updates.length + 1}`);
-      values.push(metadata.duration);
-    }
-    if (metadata.title !== undefined) {
-      updates.push(`title = $${updates.length + 1}`);
-      values.push(metadata.title);
-    }
-    if (metadata.artist !== undefined) {
-      updates.push(`artist = $${updates.length + 1}`);
-      values.push(metadata.artist);
-    }
-    if (metadata.thumbnailPath !== undefined) {
-      updates.push(`thumbnail_path = $${updates.length + 1}`);
-      values.push(metadata.thumbnailPath);
-    }
-    if (metadata.remoteThumbnailUrl !== undefined) {
-      updates.push(`remote_thumbnail_url = $${updates.length + 1}`);
-      values.push(metadata.remoteThumbnailUrl);
-    }
-
-    if (updates.length === 0) return;
-
-    const parsed = urlMediaService.parseYouTubeUrl(filePath);
-    const sourceUrl = parsed?.canonicalUrl ?? filePath;
-    values.push(sourceUrl);
-    const query = `UPDATE queue SET ${updates.join(', ')} WHERE file_path = $${values.length} OR original_url = $${values.length}`;
-    await db.execute(query, values);
+    await invoke('queue_update_metadata', { filePath, metadata });
   }
 }
 
-function isDownloadStatus(value: string | null): value is NonNullable<FileInfo['downloadStatus']> {
-  return value === 'not_downloaded' || value === 'downloaded' || value === 'missing';
-}
-
 export function rowToItem(row: QueueRow): QueueDbItem {
+  const valid = (value: string | null): boolean =>
+    value === 'not_downloaded' || value === 'downloaded' || value === 'missing';
+
   return {
     id: row.id,
-    name: row.title ?? row.file_name,
-    path: row.file_path,
-    size: row.file_size,
-    modifiedAt: new Date(row.file_modified_at),
-    extension: row.file_extension,
+    name: row.title ?? row.fileName,
+    path: row.filePath,
+    size: row.fileSize,
+    modifiedAt: new Date(row.fileModifiedAt),
+    extension: row.fileExtension,
     played: row.played === 1,
     duration: row.duration ?? undefined,
-    title: row.title ?? row.file_name,
+    title: row.title ?? row.fileName,
     artist: row.artist ?? undefined,
-    originalUrl: row.original_url ?? undefined,
-    thumbnailPath: row.thumbnail_path ?? undefined,
-    remoteThumbnailUrl: row.remote_thumbnail_url ?? undefined,
-    downloadStatus: isDownloadStatus(row.download_status)
-      ? row.download_status
-      : row.file_extension === 'url'
+    originalUrl: row.originalUrl ?? undefined,
+    thumbnailPath: row.thumbnailPath ?? undefined,
+    remoteThumbnailUrl: row.remoteThumbnailUrl ?? undefined,
+    downloadStatus: valid(row.downloadStatus)
+      ? row.downloadStatus as NonNullable<FileInfo['downloadStatus']>
+      : row.fileExtension === 'url'
         ? 'not_downloaded'
         : 'downloaded',
   };
