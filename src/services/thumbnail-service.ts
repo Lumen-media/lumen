@@ -1,13 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
-import { join } from '@tauri-apps/api/path';
-import { exists, mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs';
-import { getAppBasePath } from './app-paths';
+import { readFile } from '@tauri-apps/plugin-fs';
 import type { FileInfo } from './types';
 
 const MAX_CONCURRENT = 2;
 const REMOTE_THUMB_SIZE = 480;
 const REMOTE_THUMB_MIME = 'image/webp';
-const REMOTE_THUMB_QUALITY = 0.8;
 
 /**
  * Resolves downscaled blob URLs for thumbnails, hiding all pipeline details.
@@ -16,8 +13,9 @@ const REMOTE_THUMB_QUALITY = 0.8;
  * - Local files go through the Rust `get_thumbnail` command, which downsizes to
  *   the requested size and persists the result on disk under `cache/thumbs/{hash(path)}_{size}.jpg`,
  *   so each size is generated once and survives restarts.
- * - Remote images (http/https) are fetched, downscaled on a canvas to at most
- *   `REMOTE_THUMB_SIZE` px and persisted as WebP under `cache/remote-thumbs/thumb_{hash(url)}_{size}.webp`
+ * - Remote images (http/https) go through the Rust `get_remote_thumbnail` command,
+ *   which fetches, downscales to at most `REMOTE_THUMB_SIZE` px and persists the result
+ *   as WebP under `cache/remote-thumbs/thumb_{hash(url)}_{size}.webp`
  *   (the same folder/pattern as YouTube thumbnails). Every load reuses that file —
  *   no re-download, no re-process, no full-size decode in the DOM.
  * - Results live in an in-memory Map for the session, and blob URLs are shared
@@ -32,7 +30,6 @@ class ThumbnailService {
   private pending = new Map<string, Promise<string>>();
   private active = 0;
   private queue: Array<() => void> = [];
-  private remoteThumbsDir: Promise<string> | null = null;
 
   private acquireSlot(): Promise<void> {
     if (this.active < MAX_CONCURRENT) {
@@ -62,17 +59,6 @@ class ThumbnailService {
       this.pending.delete(key);
     });
     return promise;
-  }
-
-  private remoteThumbsDirPath(): Promise<string> {
-    if (!this.remoteThumbsDir) {
-      this.remoteThumbsDir = getAppBasePath().then(async (base) => {
-        const dir = await join(base, 'cache', 'remote-thumbs');
-        await mkdir(dir, { recursive: true });
-        return dir;
-      });
-    }
-    return this.remoteThumbsDir;
   }
 
   /**
@@ -151,9 +137,10 @@ class ThumbnailService {
   }
 
   /**
-   * Thumbnail for a remote (http/https) image. Fetches once, downsizes on a canvas
-   * and persists the result as WebP under `cache/remote-thumbs/` (the same folder
-   * as YouTube thumbnails), so restarts never re-download or re-process it.
+   * Thumbnail for a remote (http/https) image. Powered by the Rust
+   * `get_remote_thumbnail` command, which fetches once, downsizes and persists
+   * the result as WebP under `cache/remote-thumbs/`, so restarts never
+   * re-download or re-process it.
    * @param url The remote image URL.
    * @param maxSize Longest edge in px (default 480).
    * @returns A blob URL for the downscaled image. Do not revoke it.
@@ -163,89 +150,13 @@ class ThumbnailService {
     const cached = this.cache.get(key);
     if (cached) return cached;
     return this.withDedup(key, async () => {
-      const dir = await this.remoteThumbsDirPath();
-      const hash = await sha256Hex(url);
-      const filePath = await join(dir, `thumb_${hash}_${maxSize}.webp`);
-
-      if (await exists(filePath)) {
-        const bytes = await readFile(filePath);
-        const blobUrl = URL.createObjectURL(new Blob([bytes], { type: REMOTE_THUMB_MIME }));
-        this.cache.set(key, blobUrl);
-        return blobUrl;
-      }
-
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Failed to fetch remote image: ${response.status}`);
-      const blob = await response.blob();
-
-      const thumbBlob = await downscaleBlob(blob, maxSize, REMOTE_THUMB_MIME, REMOTE_THUMB_QUALITY);
-      const bytes = new Uint8Array(await thumbBlob.arrayBuffer());
-      await writeFile(filePath, bytes);
-
-      const blobUrl = URL.createObjectURL(thumbBlob);
+      const cachePath = await invoke<string>('get_remote_thumbnail', { url, maxSize });
+      const bytes = await readFile(cachePath);
+      const blobUrl = URL.createObjectURL(new Blob([bytes], { type: REMOTE_THUMB_MIME }));
       this.cache.set(key, blobUrl);
       return blobUrl;
     });
   }
-}
-
-function sha256Hex(input: string): Promise<string> {
-  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(input)).then((digest) =>
-    Array.from(new Uint8Array(digest))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
-  );
-}
-
-function downscaleBlob(
-  blob: Blob,
-  maxSize: number,
-  mimeType = 'image/jpeg',
-  quality = 0.8
-): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
-        const w = Math.max(1, Math.round(img.naturalWidth * scale));
-        const h = Math.max(1, Math.round(img.naturalHeight * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('no 2d context');
-        ctx.drawImage(img, 0, 0, w, h);
-        canvas.toBlob(
-          (out) => {
-            if (out) {
-              resolve(out);
-              return;
-            }
-            canvas.toBlob(
-              (out2) => {
-                resolve(out2 ?? blob);
-              },
-              'image/jpeg',
-              quality
-            );
-          },
-          mimeType,
-          quality
-        );
-      } catch (err) {
-        reject(err);
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('remote image decode failed'));
-    };
-    img.src = url;
-  });
 }
 
 export const thumbnailService = new ThumbnailService();
