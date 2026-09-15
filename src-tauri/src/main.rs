@@ -5,6 +5,7 @@ mod devices;
 mod download;
 mod locales;
 mod media;
+mod metadata;
 mod module_runtime;
 mod presentation;
 mod queue;
@@ -688,6 +689,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             media::media_list_themes,
             media::media_insert_theme,
             media::media_delete_theme,
+            metadata::extract_metadata,
             download::check_dependencies,
             download::download_dependencies,
             download::list_dependencies,
