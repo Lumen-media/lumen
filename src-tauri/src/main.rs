@@ -6,6 +6,7 @@ mod download;
 mod locales;
 mod module_runtime;
 mod presentation;
+mod queue;
 mod remote;
 mod streaming;
 mod thumbnail;
@@ -449,6 +450,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             app.manage(streaming_state);
             let chat_state = chat::initialize_chat_state()?;
             app.manage(chat_state.clone());
+            let queue_store = queue::initialize_queue_store()?;
+            app.manage(queue_store);
             let download_state = download::initialize_download_state(&app.handle())?;
             app.manage(download_state);
             let app_handle = app.handle();
@@ -645,6 +648,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             module_runtime::store::store_install,
             module_runtime::themes::module_theme_add,
             presentation::extract_presentation_metadata,
+            queue::queue_load,
+            queue::queue_load_rows,
+            queue::queue_load_trigger_entries,
+            queue::queue_add_trigger_entry,
+            queue::queue_remove_trigger_entry,
+            queue::queue_toggle_trigger_played,
+            queue::queue_exists,
+            queue::queue_add_to_queue,
+            queue::queue_play_next,
+            queue::queue_add_url_to_queue,
+            queue::queue_remove,
+            queue::queue_mark_played,
+            queue::queue_toggle_played,
+            queue::queue_shift,
+            queue::queue_clear,
+            queue::queue_reorder,
+            queue::queue_update_all_positions,
+            queue::queue_shuffle,
+            queue::queue_update_metadata,
             download::check_dependencies,
             download::download_dependencies,
             download::list_dependencies,
