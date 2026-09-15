@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { dirname, join } from '@tauri-apps/api/path';
 import { exists, mkdir, readTextFile, rename, stat, writeTextFile } from '@tauri-apps/plugin-fs';
 import { getNoticesPath, getQuickPresentationPath } from './app-paths';
@@ -27,129 +28,21 @@ export interface LyricData {
   slides: LyricSlide[];
 }
 
-const SLIDE_BG_PREFIX = '<!-- bg:';
-const SLIDE_BG_SUFFIX = '-->';
-
-function serializeLyric(data: LyricData): string {
-  const lines: string[] = [];
-
-  lines.push('---');
-  lines.push(`name: ${data.metadata.name}`);
-  lines.push(`author: ${data.metadata.author}`);
-  lines.push(`notes: ${data.metadata.notes}`);
-  lines.push(`font: ${data.metadata.font}`);
-  lines.push(`fontSize: ${data.metadata.fontSize}`);
-  lines.push(`alignment: ${data.metadata.alignment}`);
-  if (data.metadata.globalBackground) {
-    lines.push(`globalBackground: ${data.metadata.globalBackground}`);
-  }
-  if (data.metadata.autoPlay !== undefined) {
-    lines.push(`autoPlay: ${data.metadata.autoPlay}`);
-  }
-  if (data.metadata.intervalSeconds !== undefined) {
-    lines.push(`intervalSeconds: ${data.metadata.intervalSeconds}`);
-  }
-  if (data.metadata.repeat !== undefined) {
-    lines.push(`repeat: ${data.metadata.repeat}`);
-  }
-  lines.push('---');
-
-  for (const slide of data.slides) {
-    lines.push('');
-    lines.push('');
-    if (slide.background) {
-      lines.push(`${SLIDE_BG_PREFIX} ${slide.background} ${SLIDE_BG_SUFFIX}`);
-    }
-    for (const line of slide.lines) {
-      lines.push(line);
-    }
-  }
-
-  return `${lines.join('\n').trim()}\n`;
+export async function buildLyricSearchContent(data: LyricData): Promise<string> {
+  return invoke<string>('lyric_build_search_content', { data });
 }
 
-function parseFrontmatter(content: string): { metadata: Partial<LyricMetadata>; body: string } {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!match) return { metadata: {}, body: content };
-
-  const raw = match[1];
-  const body = match[2];
-  const metadata: Record<string, string> = {};
-
-  for (const line of raw.split('\n')) {
-    const idx = line.indexOf(':');
-    if (idx === -1) continue;
-    const key = line.slice(0, idx).trim();
-    const value = line.slice(idx + 1).trim();
-    metadata[key] = value;
-  }
-
-  return { metadata: metadata as Partial<LyricMetadata>, body };
-}
-
-function parseSlides(body: string): LyricSlide[] {
-  const normalized = body.replace(/\r\n/g, '\n');
-  if (!normalized.trim()) return [];
-
-  return normalized.split(/\n{3,}/).reduce<LyricSlide[]>((acc, block) => {
-    const trimmed = block.trim();
-    if (!trimmed) return acc;
-
-    const lines = trimmed.split(/\n/);
-    let background: string | undefined;
-
-    if (lines[0]?.startsWith(SLIDE_BG_PREFIX)) {
-      const bgLine = lines.shift()!;
-      const bgMatch = bgLine.match(/<!-- bg:\s*(.*?)\s*-->/);
-      if (bgMatch) background = bgMatch[1];
-    }
-
-    const contentLines = lines.filter(Boolean);
-    if (contentLines.length > 0) {
-      acc.push({ lines: contentLines, background });
-    }
-
-    return acc;
-  }, []);
-}
-
-export function buildLyricSearchContent(data: LyricData): string {
-  const parts: string[] = [];
-  if (data.metadata.notes) parts.push(data.metadata.notes);
-  for (const slide of data.slides) {
-    for (const line of slide.lines) {
-      if (line.trim()) parts.push(line);
-    }
-  }
-  return parts.join('\n');
-}
-
-export function parseLyricFile(content: string): LyricData {
-  const { metadata, body } = parseFrontmatter(content);
-  const slides = parseSlides(body);
-  const raw = metadata as Record<string, string | undefined>;
-
-  return {
-    metadata: {
-      name: raw.name ?? '',
-      author: raw.author ?? '',
-      notes: raw.notes ?? '',
-      font: raw.font ?? '',
-      fontSize: raw.fontSize ?? '48px',
-      alignment: raw.alignment ?? 'center',
-      globalBackground: raw.globalBackground ?? '',
-      autoPlay: raw.autoPlay === undefined ? undefined : raw.autoPlay === 'true',
-      intervalSeconds:
-        raw.intervalSeconds === undefined ? undefined : Number(raw.intervalSeconds) || undefined,
-      repeat: raw.repeat === undefined ? undefined : raw.repeat === 'true',
-    },
-    slides,
-  };
+export async function parseLyricFile(content: string): Promise<LyricData> {
+  return invoke<LyricData>('lyric_parse', { content });
 }
 
 class LyricService {
+  private async serialize(data: LyricData): Promise<string> {
+    return invoke<string>('lyric_serialize', { data });
+  }
+
   async save(data: LyricData, existingPath?: string): Promise<string> {
-    const content = serializeLyric(data);
+    const content = await this.serialize(data);
     const fileName = data.metadata.name
       ? `${data.metadata.name.replace(/[<>:"/\\|?*]/g, '_')}.md`
       : `lyric-${Date.now()}.md`;
@@ -193,7 +86,7 @@ class LyricService {
 
     const meta = await stat(filePath);
     const name = filePath.split(/[\\/]/).pop() || fileName;
-    const indexedContent = buildLyricSearchContent(data);
+    const indexedContent = await buildLyricSearchContent(data);
     await mediaDbService.insertFile(
       {
         name,
@@ -236,7 +129,7 @@ class LyricService {
   }
 
   async saveQuick(data: LyricData): Promise<void> {
-    const content = serializeLyric(data);
+    const content = await this.serialize(data);
     const filePath = await getQuickPresentationPath();
     const folder = await dirname(filePath);
     if (!(await exists(folder))) {
@@ -266,7 +159,7 @@ class LyricService {
   }
 
   async saveNotices(data: LyricData): Promise<void> {
-    const content = serializeLyric(data);
+    const content = await this.serialize(data);
     const filePath = await getNoticesPath();
     const folder = await dirname(filePath);
     if (!(await exists(folder))) {
