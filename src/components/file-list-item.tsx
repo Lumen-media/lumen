@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslation } from '@/lib/i18n';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -53,17 +54,17 @@ function isUrlMedia(file: FileInfo): boolean {
   return file.extension === 'url' || Boolean(file.originalUrl);
 }
 
-function downloadStatusLabel(file: FileInfo): string | null {
+function downloadStatusLabel(file: FileInfo, t: (key: string) => string): string | null {
   if (!isUrlMedia(file)) return null;
   switch (file.downloadStatus) {
     case 'downloaded':
       return '';
     case 'downloading':
-      return 'Downloading';
+      return t('Downloading');
     case 'missing':
-      return 'Missing download';
+      return t('Missing download');
     default:
-      return 'Not downloaded';
+      return t('Not downloaded');
   }
 }
 
@@ -185,11 +186,12 @@ export function FileListItem({
   onAddToQueue,
   isFocused,
 }: FileListItemProps) {
-  const { openDeleteDialog } = useDeleteFileStore();
+    const { t } = useTranslation();
+    const { openDeleteDialog } = useDeleteFileStore();
   const { startDownload, checkDeps, installDeps, dependencyStatus, openCookiesDialog } =
     useDownloadStore();
-  const urlMedia = isUrlMedia(file);
-  const statusLabel = downloadStatusLabel(file);
+const urlMedia = isUrlMedia(file);
+    const statusLabel = downloadStatusLabel(file, t);
   const fileSizeLabel = formatFileSize(file.size);
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({

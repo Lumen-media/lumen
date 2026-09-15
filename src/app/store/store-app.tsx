@@ -1,7 +1,7 @@
 import { ArrowUpDown, Boxes, CornerDownLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { FooterHint, FooterHints } from '@/components/footer-hint';
-import { t } from '@/lib/i18n';
+import { t, useI18nStore, useTranslation } from '@/lib/i18n';
 import { useModuleStore } from '@/modules/store';
 import type { CommanderAppProps, CommandSpec } from '@/modules/types';
 import { compareVersions, type StoreCatalogModule } from '@/services/store-service';
@@ -17,18 +17,24 @@ const IS_MAC = typeof navigator !== 'undefined' && /mac/i.test(navigator.platfor
 let registered = false;
 
 export function registerStoreCommand() {
+  const register = () => {
+    useCommandStore.getState()._register({
+      id: 'store.open',
+      title: t('Module Store'),
+      subtitle: t('Discover and install community modules'),
+      icon: Boxes,
+      keywords: ['store', 'loja', 'modules', 'módulos', 'extensions', 'plugins'],
+      type: 'app',
+      component: StoreApp,
+      commanderSearch: { placeholder: t('Search modules…') },
+    } satisfies CommandSpec);
+  };
   if (registered) return;
   registered = true;
-  useCommandStore.getState()._register({
-    id: 'store.open',
-    title: t('Module Store'),
-    subtitle: t('Discover and install community modules'),
-    icon: Boxes,
-    keywords: ['store', 'loja', 'modules', 'módulos', 'extensions', 'plugins'],
-    type: 'app',
-    component: StoreApp,
-    commanderSearch: { placeholder: t('Search modules…') },
-  } satisfies CommandSpec);
+  register();
+  useI18nStore.subscribe((state, prev) => {
+    if (state.locale !== prev.locale) register();
+  });
 }
 
 type StoreView =
@@ -37,6 +43,7 @@ type StoreView =
   | { kind: 'detail'; module: StoreCatalogModule };
 
 function StoreFooter({ view }: { view: StoreView }) {
+  const { t } = useTranslation();
   const module = view.kind === 'detail' ? view.module : undefined;
   const installed = useModuleStore((s) =>
     module ? s.modules.get(module.id)?.manifest.version : undefined

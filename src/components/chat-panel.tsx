@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { ChatMessage, Reaction } from '@/services/chat-service';
 import { MAX_MESSAGE_LENGTH } from '@/services/chat-service';
@@ -469,6 +469,7 @@ function ChatFileDialog({
   target: ChatFileDialogTarget;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [src, setSrc] = useState<string | null>(null);
   const [ytMeta, setYtMeta] = useState<YouTubeMeta | null>(null);
   const [loading, setLoading] = useState(false);
@@ -676,6 +677,7 @@ function MessageBubble({
   onPresentableClick: (file: { file_name: string; file_path: string }) => void;
   onScrollToMessage?: (messageId: number) => void;
 }) {
+  const { t } = useTranslation();
   const { sendReaction, deleteMessage } = useChatStore();
   const [linkUrl, setLinkUrl] = useState<string | null>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
@@ -973,6 +975,7 @@ async function getPptThumbnail(filePath: string): Promise<string | null> {
 }
 
 function ChatTab() {
+  const { t } = useTranslation();
   const messages = useChatStore((s) => s.messages);
   const config = useChatStore((s) => s.config);
   const init = useChatStore((s) => s.init);

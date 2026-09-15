@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Empty } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { disableModule, enableModule, reloadModule, uninstallModule } from '@/modules/injector';
 import { useModuleStore } from '@/modules/store';
@@ -25,6 +25,7 @@ import { installFromStore } from './store-actions';
 import { useModuleRelease } from './use-store-data';
 
 function StatusBadge({ status }: { status: ModuleStatus }) {
+  const { t } = useTranslation();
   if (status === 'active') {
     return (
       <Badge variant="outline" className="gap-1 text-emerald-400 border-emerald-400/30">
@@ -54,6 +55,7 @@ function StatusBadge({ status }: { status: ModuleStatus }) {
 }
 
 function SourceBadge({ source }: { source: ModuleRecord['source'] }) {
+  const { t } = useTranslation();
   const label =
     source === 'store'
       ? t('Store')
@@ -76,6 +78,7 @@ function UpdateControl({
   module: StoreCatalogModule;
   installedVersion: string;
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data, isFetching } = useModuleRelease(module.repo);
   const [checking, setChecking] = useState(false);
@@ -127,6 +130,7 @@ interface ModuleRowProps {
 }
 
 function ModuleRow({ record, selected, onSelect }: ModuleRowProps) {
+  const { t } = useTranslation();
   const { manifest, status, source } = record;
   const entry = useModulesStore((s) =>
     s.catalog?.modules.find((m) => m.id === manifest.id && m.status === 'approved')
@@ -203,6 +207,7 @@ function ModuleRow({ record, selected, onSelect }: ModuleRowProps) {
 }
 
 export function StoreManage() {
+  const { t } = useTranslation();
   const modules = useModuleStore((s) => s.modules);
   const list = useMemo(() => Array.from(modules.values()), [modules]);
   const queryClient = useQueryClient();
