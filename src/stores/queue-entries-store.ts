@@ -44,23 +44,23 @@ export const useQueueEntriesStore = create<QueueEntriesStore>((set, get) => ({
       const seenPaths = new Set<string>();
       const seenIds = new Set<string>();
       for (const row of rows) {
-        if (seenPaths.has(row.file_path)) continue;
-        if (seenIds.has(String(row.id)) && !row.file_path.startsWith('trigger://')) continue;
-        seenPaths.add(row.file_path);
-        if (row.file_path.startsWith('trigger://')) {
-          const config = row.original_url ? JSON.parse(row.original_url) : {};
+        if (seenPaths.has(row.filePath)) continue;
+        if (seenIds.has(String(row.id)) && !row.filePath.startsWith('trigger://')) continue;
+        seenPaths.add(row.filePath);
+        if (row.filePath.startsWith('trigger://')) {
+          const config = row.originalUrl ? JSON.parse(row.originalUrl) : {};
           entries.push({
             kind: 'trigger' as const,
-            id: row.file_path.slice('trigger://'.length),
+            id: row.filePath.slice('trigger://'.length),
             inst: {
-              id: row.file_path.slice('trigger://'.length),
-              triggerId: row.file_name,
+              id: row.filePath.slice('trigger://'.length),
+              triggerId: row.fileName,
               config,
               showLabel: true,
               played: row.played === 1,
             },
           });
-          seenIds.add(row.file_path);
+          seenIds.add(row.filePath);
         } else {
           const item = rowToItem(row);
           entries.push({
