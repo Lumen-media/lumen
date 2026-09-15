@@ -4,6 +4,7 @@ mod chat;
 mod devices;
 mod download;
 mod locales;
+mod media;
 mod module_runtime;
 mod presentation;
 mod queue;
@@ -452,6 +453,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             app.manage(chat_state.clone());
             let queue_store = queue::initialize_queue_store()?;
             app.manage(queue_store);
+            let media_store = media::initialize_media_store()?;
+            app.manage(media_store);
             let download_state = download::initialize_download_state(&app.handle())?;
             app.manage(download_state);
             let app_handle = app.handle();
@@ -667,6 +670,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             queue::queue_update_all_positions,
             queue::queue_shuffle,
             queue::queue_update_metadata,
+            media::media_initialize,
+            media::media_sync_type,
+            media::media_list,
+            media::media_search_files,
+            media::media_insert,
+            media::media_insert_url,
+            media::media_search,
+            media::media_list_by_type,
+            media::media_get_by_id,
+            media::media_get_by_path,
+            media::media_get_file_info_by_path,
+            media::media_get_file_info_by_original_url,
+            media::media_delete,
+            media::media_update_download_status,
+            media::media_sync_themes,
+            media::media_list_themes,
+            media::media_insert_theme,
+            media::media_delete_theme,
             download::check_dependencies,
             download::download_dependencies,
             download::list_dependencies,
