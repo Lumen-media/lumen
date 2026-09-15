@@ -78,7 +78,6 @@ CREATE INDEX IF NOT EXISTS idx_mf_content ON media_files (content);
 CREATE INDEX IF NOT EXISTS idx_mf_type_content ON media_files (media_type, content);
 ";
 
-/// Serialized `FileInfo` plus optional presentation content, when inserting files.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaFileInput {
@@ -97,7 +96,6 @@ pub struct MediaFileInput {
     pub content: Option<String>,
 }
 
-/// A media file in its final shape (`modified_at` in epoch ms).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaFileInfo {
@@ -116,7 +114,6 @@ pub struct MediaFileInfo {
     pub download_status: String,
 }
 
-/// Search result, mirroring the TS `SearchHit` shape (snake_case fields).
 #[derive(Serialize)]
 pub struct SearchHit {
     pub id: i64,

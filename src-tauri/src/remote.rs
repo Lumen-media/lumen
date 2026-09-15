@@ -12,20 +12,16 @@ pub fn exe_dir() -> Result<PathBuf, String> {
     Ok(parent.to_path_buf())
 }
 
-/// Base directory for all app data (media files + database).
-/// Mirrors the TS `getAppBasePath()`: `<exe_dir>/lumen`.
 pub fn app_base_dir() -> Result<PathBuf, String> {
     Ok(exe_dir()?.join("lumen"))
 }
 
-/// Cache folder for remote thumbnails (`<base>/cache/remote-thumbs`).
 pub fn remote_thumbs_dir() -> Result<PathBuf, String> {
     let dir = app_base_dir()?.join("cache").join("remote-thumbs");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
 }
 
-/// Milliseconds since the UNIX epoch (matches JS `Date.now()`).
 pub fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -33,8 +29,6 @@ pub fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-/// Downloads a remote resource with a size cap so a malicious/unexpected URL
-/// cannot balloon the process memory.
 pub async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
     let client = reqwest::Client::builder()
         .timeout(FETCH_TIMEOUT)

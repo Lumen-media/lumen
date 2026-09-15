@@ -20,7 +20,6 @@ const QUEUE_TABLE: &str = "CREATE TABLE IF NOT EXISTS queue (
         artist           TEXT
       )";
 
-/// Raw queue row (one per DB record), serialized with camelCase field names.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueRow {
@@ -41,7 +40,6 @@ pub struct QueueRow {
     pub download_status: Option<String>,
 }
 
-/// A queue item in its final shape (`modified_at` in epoch ms).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueItem {
@@ -61,7 +59,6 @@ pub struct QueueItem {
     pub download_status: String,
 }
 
-/// Serialized `FileInfo` used when inserting a file into the queue.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueFileInput {
