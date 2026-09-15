@@ -1,13 +1,5 @@
-import { join } from '@tauri-apps/api/path';
-import { exists, mkdir, writeFile } from '@tauri-apps/plugin-fs';
-import { getAppBasePath } from './app-paths';
+import { invoke } from '@tauri-apps/api/core';
 import type { FileInfo } from './types';
-
-type YouTubeOEmbedResponse = {
-  title?: string;
-  author_name?: string;
-  thumbnail_url?: string;
-};
 
 export type UrlMediaMetadata = {
   originalUrl: string;
@@ -64,33 +56,7 @@ class UrlMediaService {
       throw new Error('Only YouTube URLs are supported');
     }
 
-    const fallbackTitle = `YouTube video ${parsed.videoId}`;
-    let metadata: YouTubeOEmbedResponse | null = null;
-
-    try {
-      const res = await fetch(
-        `https://www.youtube.com/oembed?url=${encodeURIComponent(parsed.canonicalUrl)}&format=json`
-      );
-      if (res.ok) {
-        metadata = (await res.json()) as YouTubeOEmbedResponse;
-      }
-    } catch {
-      metadata = null;
-    }
-
-    const remoteThumbnailUrl = metadata?.thumbnail_url;
-    const thumbnailPath = remoteThumbnailUrl
-      ? await this.cacheRemoteThumbnail(parsed.videoId, remoteThumbnailUrl).catch(() => undefined)
-      : undefined;
-
-    return {
-      originalUrl: url,
-      canonicalUrl: parsed.canonicalUrl,
-      title: metadata?.title?.trim() || fallbackTitle,
-      artist: metadata?.author_name?.trim() || undefined,
-      remoteThumbnailUrl,
-      thumbnailPath,
-    };
+    return invoke<UrlMediaMetadata>('resolve_youtube', { url });
   }
 
   async createYouTubeFileInfo(url: string, duration?: number): Promise<FileInfo> {
@@ -109,30 +75,6 @@ class UrlMediaService {
       remoteThumbnailUrl: metadata.remoteThumbnailUrl,
       downloadStatus: 'not_downloaded',
     };
-  }
-
-  private async getRemoteThumbsPath(): Promise<string> {
-    const basePath = await getAppBasePath();
-    const cachePath = await join(basePath, 'cache', 'remote-thumbs');
-    if (!(await exists(cachePath))) {
-      await mkdir(cachePath, { recursive: true });
-    }
-    return cachePath;
-  }
-
-  private async cacheRemoteThumbnail(videoId: string, thumbnailUrl: string): Promise<string> {
-    const cacheDir = await this.getRemoteThumbsPath();
-    const filePath = await join(cacheDir, `youtube_${videoId}.jpg`);
-    if (await exists(filePath)) return filePath;
-
-    const response = await fetch(thumbnailUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download thumbnail: ${response.status}`);
-    }
-
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    await writeFile(filePath, bytes);
-    return filePath;
   }
 }
 
