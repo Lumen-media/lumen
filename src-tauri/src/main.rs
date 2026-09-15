@@ -4,6 +4,7 @@ mod chat;
 mod devices;
 mod download;
 mod locales;
+mod lyrics;
 mod media;
 mod metadata;
 mod module_runtime;
@@ -690,6 +691,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             media::media_insert_theme,
             media::media_delete_theme,
             metadata::extract_metadata,
+            lyrics::lyric_parse,
+            lyrics::lyric_serialize,
+            lyrics::lyric_build_search_content,
             download::check_dependencies,
             download::download_dependencies,
             download::list_dependencies,
