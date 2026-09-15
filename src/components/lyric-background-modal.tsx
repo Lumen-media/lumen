@@ -21,7 +21,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { useDebounceValue } from 'usehooks-ts';
-import { t, useTranslation } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { getThemesPath } from '@/services/app-paths';
 import { lumenUrl } from '@/services/lumen-url';
@@ -156,6 +156,7 @@ interface MediaThumbnailProps {
 }
 
 function MediaThumbnail({ file, selected, onClick, onDelete }: MediaThumbnailProps) {
+  const { t } = useTranslation();
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -476,10 +477,10 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
               className="w-fit justify-start px-6 rounded-none h-auto py-0 gap-4"
             >
               <TabsTrigger value="themes" className="pb-3 px-0 after:hidden">
-                Themes
+                {t('Themes')}
               </TabsTrigger>
               <TabsTrigger value="images" className="pb-3 px-0 after:hidden">
-                Images
+                {t('Images')}
               </TabsTrigger>
               <TabsIndicator className="bg-primary" />
             </TabsList>
@@ -494,7 +495,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
               disabled={loading}
             >
               <RefreshCw className={`size-3 ${loading ? 'animate-spin' : ''}`} />
-              Sync folder
+              {t('Sync folder')}
             </Button>
           </div>
 
@@ -714,10 +715,10 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
 
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-border/50">
           <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button className="font-semibold" disabled={!selected} onClick={handleConfirm}>
-            Set Background
+            {t('Set Background')}
           </Button>
         </div>
       </DialogContent>

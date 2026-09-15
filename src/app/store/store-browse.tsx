@@ -8,7 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
 import { compareVersions, type StoreCatalogModule } from '@/services/store-service';
@@ -26,6 +26,7 @@ interface StoreBrowseProps {
 type BrowseRow = { kind: 'installed' } | { kind: 'module'; module: StoreCatalogModule };
 
 function AuthorAvatar({ module }: { module: StoreCatalogModule }) {
+  const { t } = useTranslation();
   const src = `${module.author.url.replace(/\/+$/, '')}.png`;
   return (
     <TooltipProvider delay={400}>
@@ -48,6 +49,7 @@ function AuthorAvatar({ module }: { module: StoreCatalogModule }) {
 }
 
 function UpdateBadge({ module }: { module: StoreCatalogModule }) {
+  const { t } = useTranslation();
   const { data } = useModuleRelease(module.repo);
   const installed = useModuleStore((s) => s.modules.get(module.id)?.manifest.version);
 
@@ -63,6 +65,7 @@ function UpdateBadge({ module }: { module: StoreCatalogModule }) {
 }
 
 function RowActions({ module }: { module: StoreCatalogModule }) {
+  const { t } = useTranslation();
   const installed = useModuleStore((s) => s.modules.get(module.id)?.manifest.version);
   const progress = useModulesStore((s) => s.progress[module.id]);
 
@@ -87,6 +90,7 @@ function RowActions({ module }: { module: StoreCatalogModule }) {
 }
 
 export function StoreBrowse({ query, onOpenModule, onManage }: StoreBrowseProps) {
+  const { t } = useTranslation();
   const { catalog, loading, error, stale, refresh } = useStoreCatalog();
   const installedCount = useModuleStore((s) => s.modules.size);
   const releaseDates = useCachedReleases();

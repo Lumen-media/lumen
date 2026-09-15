@@ -79,7 +79,7 @@ import {
 } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
 import type { QueueTriggerSpec } from '@/modules/types';
@@ -103,36 +103,34 @@ type TriggerDialog = {
 
 type TabValue = 'queue' | 'notes' | 'themes' | 'chat';
 
-function getDownloadStatusLabel(item: QueueItem): string | null {
+function getDownloadStatusLabel(item: QueueItem, t: (key: string) => string): string | null {
   if (item.file.extension !== 'url' && !item.file.originalUrl) return null;
   switch (item.file.downloadStatus) {
     case 'downloaded':
       return '';
     case 'missing':
-      return 'Missing download';
+      return t('Missing download');
     default:
-      return 'Not downloaded';
+      return t('Not downloaded');
   }
 }
 
-const BASE_TABS: { value: TabValue; label: string }[] = [
-  { value: 'queue', label: t('Queue') },
-  { value: 'notes', label: t('Notes') },
-];
-
-function getChameleonTab(activeTab: TabValue): { value: TabValue; label: string } {
-  return activeTab === 'chat'
-    ? { value: 'chat', label: t('Chat') }
-    : { value: 'themes', label: t('Themes') };
-}
-
 export function AsidePanel() {
+  const { t } = useTranslation();
   const { queue, removeFromQueue, markPlayed, togglePlayed, loadFromDb, clearQueue, shuffleQueue } =
     useQueueStore();
   const loadFile = usePlayerStore((s) => s.loadFile);
 
   const activeTab = useAsideStore((s) => s.activeTab);
   const setActiveTab = useAsideStore((s) => s.setActiveTab);
+
+  const tabs: { value: TabValue; label: string }[] = [
+    { value: 'queue', label: t('Queue') },
+    { value: 'notes', label: t('Notes') },
+    activeTab === 'chat'
+      ? { value: 'chat', label: t('Chat') }
+      : { value: 'themes', label: t('Themes') },
+  ];
 
   useEffect(() => {
     loadFromDb();
@@ -156,7 +154,7 @@ export function AsidePanel() {
             variant="line"
             className="w-full justify-between rounded-none border-none px-2 h-10"
           >
-            {BASE_TABS.concat(getChameleonTab(activeTab)).map((tab) => (
+            {tabs.map((tab) => (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
@@ -221,6 +219,7 @@ function QueueTab({
   onShuffle: () => Promise<void>;
   onPlay: (item: QueueItem) => void;
 }) {
+  const { t } = useTranslation();
   const currentFilePath = usePlayerStore((s) => s.currentFilePath);
   const triggerSpecsMap = useModuleStore((s) => s.queueTriggerSpecs);
   const triggerSpecs = Array.from(triggerSpecsMap.values());
@@ -534,10 +533,10 @@ function QueueTab({
 
           <div className="border-t border-border p-3 shrink-0 flex gap-2">
             <Button variant="secondary" size="sm" className="flex-1 rounded-md" onClick={onClear}>
-              Clear
+              {t('Clear')}
             </Button>
             <Button variant="secondary" size="sm" className="flex-1 rounded-md" onClick={onShuffle}>
-              Shuffle
+              {t('Shuffle')}
             </Button>
           </div>
         </ContextMenuTrigger>
@@ -568,7 +567,7 @@ function QueueTab({
                     }}
                   >
                     <CheckCircle2 className="h-4 w-4" />
-                    {contextTargetItem.played ? 'Mark as unplayed' : 'Mark as played'}
+                    {contextTargetItem.played ? t('Mark as unplayed') : t('Mark as played')}
                   </ContextMenuItem>
                   <ContextMenuItem
                     onClick={() => {
@@ -581,7 +580,7 @@ function QueueTab({
                     variant="destructive"
                   >
                     <ListX className="h-4 w-4" />
-                    Remove from queue
+                    {t('Remove from queue')}
                   </ContextMenuItem>
                 </>
               );
@@ -603,7 +602,7 @@ function QueueTab({
               <ContextMenuSub>
                 <ContextMenuSubTrigger>
                   <Zap className="h-4 w-4" />
-                  Add Queue Trigger
+                  {t('Add Queue Trigger')}
                 </ContextMenuSubTrigger>
                 <ContextMenuSubContent>
                   {triggerSpecs.map((spec) => (
@@ -622,7 +621,7 @@ function QueueTab({
       <Dialog open={!!triggerDialog} onOpenChange={(open) => !open && setTriggerDialog(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{dialogSpec?.label ?? 'Configure Trigger'}</DialogTitle>
+            <DialogTitle>{dialogSpec?.label ?? t('Configure Trigger')}</DialogTitle>
           </DialogHeader>
           <div className="py-2">
             {ConfigComp && triggerDialog && (
@@ -634,10 +633,10 @@ function QueueTab({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setTriggerDialog(null)}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button onClick={saveTrigger}>
-              {triggerDialog?.instanceId ? 'Save' : 'Add Trigger'}
+              {triggerDialog?.instanceId ? t('Save') : t('Add Trigger')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -666,7 +665,8 @@ function SortableQueueItem({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sortableId,
   });
-  const downloadStatus = getDownloadStatusLabel(item);
+  const { t } = useTranslation();
+  const downloadStatus = getDownloadStatusLabel(item, t);
 
   return (
     <div
@@ -759,6 +759,7 @@ function useEditorState(editorRef: RefObject<TextEditorRef | null>) {
 }
 
 function NotesTab() {
+  const { t } = useTranslation();
   const editorRef = useRef<TextEditorRef | null>(null);
   useEditorState(editorRef);
   const editor = editorRef.current?.editor;
@@ -851,6 +852,7 @@ function NotesTab() {
 }
 
 function ThemesTab() {
+  const { t } = useTranslation();
   const profiles = useProfileStore((s) => s.profiles);
   const activeProfileId = useProfileStore((s) => s.activeProfileId);
   const updateProfile = useProfileStore((s) => s.updateProfile);

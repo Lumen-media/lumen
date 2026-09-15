@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle, Package, RefreshCw, Trash2, XCircle } from 'lucide-react';
-import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n';
 import { disableModule, reloadModule, uninstallModule } from '@/modules/injector';
 import { useModuleStore } from '@/modules/store';
 import type { ModuleRecord, ModuleStatus } from '@/modules/types';
@@ -8,6 +8,7 @@ import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 
 function StatusBadge({ status }: { status: ModuleStatus }) {
+  const { t } = useTranslation();
   if (status === 'active') {
     return (
       <Badge variant="outline" className="gap-1 text-emerald-400 border-emerald-400/30">
@@ -37,6 +38,7 @@ function StatusBadge({ status }: { status: ModuleStatus }) {
 }
 
 function ModuleRow({ record }: { record: ModuleRecord }) {
+  const { t } = useTranslation();
   const { manifest, status, error, source } = record;
 
   return (
@@ -99,6 +101,7 @@ function ModuleRow({ record }: { record: ModuleRecord }) {
 }
 
 export function ModulesSection() {
+  const { t } = useTranslation();
   const modules = useModuleStore((s) => s.modules);
   const list = Array.from(modules.values());
 

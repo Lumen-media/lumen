@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
 import type { ModuleManifest } from '@/modules/types';
@@ -154,6 +154,7 @@ function ReadmeSkeleton({ seed }: { seed: string }) {
 }
 
 export function StoreModuleDetail({ module }: { module: StoreCatalogModule }) {
+  const { t } = useTranslation();
   const release = useModuleRelease(module.repo);
   const manifestQ = useModuleManifest(module.repo);
   const readmeQ = useModuleReadme(module.repo);
@@ -330,6 +331,7 @@ function Permissions({
   manifest: ModuleManifest | null;
   isLoading: boolean;
 }) {
+  const { t } = useTranslation();
   const networks = manifest?.permissions?.network ?? [];
   return (
     <div className="flex flex-col rounded-lg border border-border p-3">
