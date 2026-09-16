@@ -26,7 +26,6 @@ import { cn } from '@/lib/utils';
 import { getThemesPath } from '@/services/app-paths';
 import { lumenUrl } from '@/services/lumen-url';
 import { mediaDbService } from '@/services/media-db-service';
-import { thumbnailService } from '@/services/thumbnail-service';
 import type { FileInfo } from '@/services/types';
 import { ImageLoader } from './image-loader';
 import { Button } from './ui/button';
@@ -158,20 +157,11 @@ interface MediaThumbnailProps {
 function MediaThumbnail({ file, selected, onClick, onDelete }: MediaThumbnailProps) {
   const { t } = useTranslation();
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-
-    thumbnailService
-      .getThumbnail(file.path)
-      .then((url) => {
-        if (!cancelled) setDisplaySrc(url);
-      })
-      .catch(() => { });
-
-    return () => {
-      cancelled = true;
-    };
+    setDisplaySrc(lumenUrl(file.path, { w: 200 }));
+    setFailed(false);
   }, [file.path]);
 
   return (
@@ -187,8 +177,13 @@ function MediaThumbnail({ file, selected, onClick, onDelete }: MediaThumbnailPro
         selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'hover:opacity-90'
       )}
     >
-      {displaySrc ? (
-        <img src={displaySrc} alt={file.name} className="w-full h-full object-cover" />
+      {displaySrc && !failed ? (
+        <img
+          src={displaySrc}
+          alt={file.name}
+          className="w-full h-full object-cover"
+          onError={() => setFailed(true)}
+        />
       ) : (
         <div className="w-full h-full bg-card animate-pulse opacity-70 flex items-center justify-center">
           <Loader2 className="size-4 text-muted-foreground animate-spin" />
