@@ -3,6 +3,7 @@
 mod chat;
 mod devices;
 mod download;
+mod filescan;
 mod locales;
 mod lyrics;
 mod media;
@@ -592,6 +593,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             save_window_position,
             get_system_fonts,
             get_system_info,
+            filescan::scan_media_files,
             devices::get_local_ip,
             devices::gen_reg_token,
             devices::get_devices,
