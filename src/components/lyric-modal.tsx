@@ -9,6 +9,7 @@ import { useTranslation } from '@/lib/i18n';
 import { getQuickPresentationPath } from '@/services/app-paths';
 import { type LyricData, type LyricMetadata, lyricService } from '@/services/lyric-service';
 import { lumenUrl } from '@/services/lumen-url';
+import { useLyricEditStore } from '@/stores/lyric-edit-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { useProfileStore } from '@/stores/profile-store';
@@ -366,6 +367,9 @@ export const LyricModal = () => {
       toast.success(t('Lyrics saved successfully.'));
       form.reset();
       editorRef.current?.setMarkdown('');
+      if (filePath) {
+        useLyricEditStore.getState().reload();
+      }
       close();
     } catch (err) {
       console.error(err);
