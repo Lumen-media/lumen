@@ -594,6 +594,190 @@ pub async fn media_search_multi(
     Ok(hits)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadOutput {
+    pub path: String,
+    pub file: Option<MediaFileInfo>,
+    pub error: Option<String>,
+}
+
+fn extension_allowed(media_type: &str, extension: &str) -> bool {
+    if media_type == "files" {
+        return true;
+    }
+    const EXTENSION_MAP: &[(&str, &[&str])] = &[
+        ("video", &[".mp4", ".avi", ".mov", ".mkv", ".webm"]),
+        ("audio", &[".mp3", ".wav", ".ogg", ".flac", ".m4a"]),
+        ("image", &[".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"]),
+        ("text", &[".txt", ".md", ".doc", ".docx", ".pdf"]),
+        ("lyrics", &[".txt", ".lrc", ".srt", ".md"]),
+        (
+            "themes",
+            &[".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".mp4", ".webm"],
+        ),
+        ("presentation", &[".ppt", ".pptx"]),
+        ("files", &[]),
+    ];
+    EXTENSION_MAP
+        .iter()
+        .find(|(t, _)| *t == media_type)
+        .map(|(_, extensions)| extensions.contains(&extension))
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+pub async fn media_upload_files(
+    store: State<'_, MediaStore>,
+    media_type: String,
+    file_paths: Vec<String>,
+) -> Result<Vec<UploadOutput>, String> {
+    let dest_dir = remote::app_base_dir()?
+        .join("files")
+        .join("media")
+        .join(&media_type);
+    std::fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+
+    let mut pending: Vec<(String, MediaFileInput)> = Vec::new();
+    let mut errors: Vec<UploadOutput> = Vec::new();
+
+    for source in &file_paths {
+        let source_path = std::path::Path::new(source);
+        let file_name = source_path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| source.clone());
+
+        let ext = source_path
+            .extension()
+            .map(|e| format!(".{}", e.to_string_lossy().to_lowercase()))
+            .unwrap_or_default();
+
+        if !extension_allowed(&media_type, &ext) {
+            errors.push(UploadOutput {
+                path: source.clone(),
+                file: None,
+                error: Some(format!(
+                    "File \"{}\" has an invalid type for {} category",
+                    file_name, media_type
+                )),
+            });
+            continue;
+        }
+
+        let mut dest_name = file_name.clone();
+        let mut counter = 1;
+        let (base, named_ext) = match file_name.rsplit_once('.') {
+            Some((b, e)) => (b.to_string(), format!(".{e}")),
+            None => (file_name.clone(), String::new()),
+        };
+        while dest_dir.join(&dest_name).exists() {
+            dest_name = format!("{} ({}){}", base, counter, named_ext);
+            counter += 1;
+        }
+        let dest = dest_dir.join(&dest_name);
+
+        if let Err(copy_err) = std::fs::copy(source, &dest) {
+            errors.push(UploadOutput {
+                path: source.clone(),
+                file: None,
+                error: Some(format!("Failed to copy \"{}\": {}", file_name, copy_err)),
+            });
+            continue;
+        }
+
+        let dest_metadata = match std::fs::metadata(&dest) {
+            Ok(m) => m,
+            Err(stat_err) => {
+                errors.push(UploadOutput {
+                    path: source.clone(),
+                    file: None,
+                    error: Some(format!("Failed to read file stat \"{}\": {}", file_name, stat_err)),
+                });
+                continue;
+            }
+        };
+
+        let modified_at = dest_metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+
+        let dest_str = dest.to_string_lossy().into_owned();
+
+        let mut duration: Option<f64> = None;
+        if let Ok(meta) = crate::metadata::extract_metadata(dest_str.clone()).await {
+            duration = meta.duration;
+        }
+
+        let mut content: Option<String> = None;
+        if media_type == "presentation" {
+            if let Ok(meta) = crate::presentation::extract_presentation_metadata(dest_str.clone()) {
+                let parts: Vec<String> = meta
+                    .slides
+                    .into_iter()
+                    .filter(|s| !s.text.trim().is_empty())
+                    .map(|s| s.text.trim().to_string())
+                    .collect();
+                content = if parts.is_empty() {
+                    None
+                } else {
+                    Some(parts.join("\n\n"))
+                };
+            }
+        }
+
+        pending.push((
+            source.clone(),
+            MediaFileInput {
+                name: dest_name,
+                path: dest_str,
+                size: dest_metadata.len() as i64,
+                modified_at,
+                extension: named_ext.trim_start_matches('.').to_string(),
+                duration,
+                artist: None,
+                original_url: None,
+                thumbnail_path: None,
+                remote_thumbnail_url: None,
+                download_status: Some("downloaded".to_string()),
+                content,
+            },
+        ));
+    }
+
+    let conn = store.conn.lock().await;
+    let mut outputs: Vec<UploadOutput> = Vec::new();
+    for (source, file) in pending {
+        match insert_media_file(&conn, &file, &media_type) {
+            Ok(()) => {
+                let rows = query_rows(
+                    &conn,
+                    "SELECT * FROM media_files WHERE path = ?1 LIMIT 1",
+                    &[&file.path],
+                )?;
+                let info = rows.first().map(file_info_from_row);
+                outputs.push(UploadOutput {
+                    path: source,
+                    file: info,
+                    error: None,
+                });
+            }
+            Err(insert_err) => {
+                outputs.push(UploadOutput {
+                    path: source,
+                    file: None,
+                    error: Some(format!("Failed to index \"{}\": {}", file.name, insert_err)),
+                });
+            }
+        }
+    }
+    outputs.extend(errors);
+    Ok(outputs)
+}
+
 #[tauri::command]
 pub async fn media_list_by_type(
     store: State<'_, MediaStore>,
