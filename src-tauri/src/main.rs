@@ -238,7 +238,7 @@ async fn create_surface_window(
         }
     };
 
-    let maximized = options.maximized.unwrap_or(false);
+    let maximized = options.maximized.unwrap_or(false) || options.fullscreen.unwrap_or(false);
 
     let _ = tauri::WebviewWindowBuilder::new(
         &app_handle,
@@ -248,7 +248,6 @@ async fn create_surface_window(
     .title(&title)
     .decorations(options.decorations.unwrap_or(true))
     .resizable(options.resizable.unwrap_or(true))
-    .fullscreen(options.fullscreen.unwrap_or(false))
     .inner_size(width, height)
     .min_inner_size(min_width, min_height)
     .maximized(maximized)
@@ -426,8 +425,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with_state_flags(
                     StateFlags::all()
                         & !StateFlags::DECORATIONS
-                        & !StateFlags::VISIBLE
-                        & !StateFlags::MAXIMIZED,
+                        & !StateFlags::VISIBLE,
                 )
                 .build(),
         )
