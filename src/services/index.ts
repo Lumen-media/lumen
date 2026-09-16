@@ -19,7 +19,6 @@ export { remoteSyncService } from './remote-sync-service';
 export type { PlayerSyncPayload } from './remote-sync-service';
 export type { StreamingConfig, StreamingStatus } from './streaming-service';
 export { streamingService } from './streaming-service';
-export { thumbnailService } from './thumbnail-service';
 export { presentationPreviewsCache } from './presentation-previews';
 export type { CachedPresentationPreviews } from './presentation-previews';
 export { urlMediaService } from './url-media-service';

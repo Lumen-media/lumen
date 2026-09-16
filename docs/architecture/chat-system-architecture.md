@@ -601,7 +601,7 @@ Props: `message`, `showHeader`, `onReply`, `onLinkClick`, `onPresentableClick`, 
 
 Handles three target types via discriminated union:
 - `{ type: 'youtube'; url }` — fetches oEmbed metadata (title, artist, thumb), looks up duration from media DB. Buttons: Play Now (loadFile), Add to Queue.
-- `{ type: 'file'; file_name; file_path }` — generates thumbnail via `thumbnailService` (images) or `getPptThumbnail` (PPT). Button: Present (loadFile with auto-detect).
+- `{ type: 'file'; file_name; file_path }` — generates thumbnail via `lumenUrl(file_path, { w })` for images (served by the `lumen-thumb://` protocol) or `getPptThumbnail` (PPT). Button: Present (loadFile with auto-detect).
 
 **PPT thumbnail generation:** `getPptThumbnail` reads file bytes → opens hidden PptxViewer → renders slide 0 to 320px → captures as JPEG via `html-to-image` → caches result. Expensive operation, hence the module-level cache.
 

@@ -247,18 +247,14 @@ a placeholder.
 
 The previous system (`thumbnail-cache-architecture.md`) used a Tauri command
 `get_thumbnail` plus `thumbnail-service.ts` which read a cached JPEG and
-converted it to a blob URL for `<img>` tags. That pipeline still exists and is
-used by consumers that have not migrated yet. The `lumen://` protocol is the
-centralized replacement: no blob URLs, no per-consumer resizing, size
-tolerance, remote + Unsplash support, all in Rust.
+converted it to a blob URL for `<img>` tags. That pipeline has been fully
+removed: all UI consumers now build `http://lumen-thumb.localhost?src=...&w=...`
+URLs via `lumenUrl()`/`lumenThumbUrl()` (see `src/services/lumen-url.ts`) and
+hand the resolution to the Rust protocol, which centralizes caching, size
+tolerance and remote fetch/downscale. No blob URLs, no per-consumer resize
+logic in JS.
 
-Migration target consumers (may still use the old service):
-
-| Component | Thumb size | Status |
-|-----------|-----------|--------|
-| `lyric-background-modal.tsx` — `MediaThumbnail` | 200 | not migrated |
-| `lyric-modal.tsx` — `SlidePreview` | 800 | not migrated |
-| `app/_layout/edit.tsx` — `SequenceThumbnail` | 200 | not migrated |
-| `components/file-list-item.tsx` — `FileThumbnail` | 200 | not migrated |
-| `components/chat-panel.tsx`, `aside-panel.tsx`, `presenter-controls.tsx` | various | not migrated |
-| bible module (`PreviewPane`, `SlidePreview`) | — | migrated via SDK (auto) |
+`thumbnail-service.ts` was deleted along with its blob-URL pipeline. The
+`get_thumbnail` / `get_remote_thumbnail` Tauri commands remain registered as a
+stable module/SDK API (`src-tauri/src/thumbnail/mod.rs`), and the protocol's
+image/video generators live in the same module.

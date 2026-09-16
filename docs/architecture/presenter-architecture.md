@@ -190,7 +190,7 @@ interface RevealPresentationProps {
 
 ## Considerations
 
-- **thumbnails vs icons**: the existing `thumbnailService` doesn't support PPTX (falls back to icon). Visual slide thumbnails are generated exclusively by pptx-browser on the frontend, converting a reduced canvas (320px) to a blob URL.
+- **thumbnails vs icons**: the `lumen-thumb://` protocol supports images and videos, but not PPTX (falls back to icon). Visual slide thumbnails are generated exclusively by pptx-browser on the frontend, converting a reduced canvas (320px) to a blob URL.
 - **stale search data**: extracted text is only updated at import time. If the PPTX is modified externally, the indexed search data becomes stale. Acceptable for v1.
 - **minimal Rust**: only text extraction + metadata. Visual rendering is 100% JS (pptx-browser).
 - **no disk cache for slides**: rendered slides exist only as blob URLs in memory. Lost on app close, which is acceptable.
