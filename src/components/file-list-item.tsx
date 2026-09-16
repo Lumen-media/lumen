@@ -28,7 +28,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import type { FileInfo, MediaType } from '@/services';
-import { thumbnailService } from '@/services/thumbnail-service';
+import { lumenUrl } from '@/services/lumen-url';
 import { useDeleteFileStore } from '@/stores/delete-file-store';
 import { useDownloadStore } from '@/stores/download-store';
 
@@ -125,18 +125,22 @@ function FileThumbnail({ file, mediaType }: { file: FileInfo; mediaType: MediaTy
 
   useEffect(() => {
     if (!THUMBNAIL_TYPES.has(mediaType)) return;
-    let cancelled = false;
-    thumbnailService
-      .getMediaThumbnail(file)
-      .then((url) => {
-        if (!cancelled) setThumbSrc(url);
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
+    if (file.extension !== 'url' && !file.originalUrl) {
+      setFailed(false);
+      setThumbSrc(lumenUrl(file.path, { w: 200 }));
+      return;
+    }
+    if (file.thumbnailPath) {
+      setFailed(false);
+      setThumbSrc(lumenUrl(file.thumbnailPath, { w: 200 }));
+      return;
+    }
+    if (file.remoteThumbnailUrl) {
+      setFailed(false);
+      setThumbSrc(file.remoteThumbnailUrl);
+      return;
+    }
+    setFailed(true);
   }, [file, mediaType]);
 
   const Icon = iconForMedia(mediaType, file.extension);
@@ -148,7 +152,13 @@ function FileThumbnail({ file, mediaType }: { file: FileInfo; mediaType: MediaTy
   return (
     <div className="h-10 aspect-video rounded overflow-hidden bg-muted shrink-0">
       {thumbSrc ? (
-        <img src={thumbSrc} alt="" className="w-full h-full object-cover" aria-hidden="true" />
+        <img
+          src={thumbSrc}
+          alt=""
+          className="w-full h-full object-cover"
+          aria-hidden="true"
+          onError={() => setFailed(true)}
+        />
       ) : (
         <div className="w-full h-full flex items-center justify-center">
           <Icon className="size-3 text-muted-foreground" aria-hidden="true" />
