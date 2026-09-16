@@ -346,6 +346,56 @@ fn escape_like(input: &str) -> String {
     out
 }
 
+fn search_media_rows(
+    conn: &Connection,
+    trimmed: &str,
+    full_content: bool,
+    media_type: Option<&str>,
+    limit: i64,
+) -> Result<Vec<MediaRow>, String> {
+    let mut conditions: Vec<String> = Vec::new();
+    let mut params: Vec<rusqlite::types::Value> = Vec::new();
+
+    for term in trimmed.split_whitespace() {
+        let like = format!("%{}%", escape_like(term));
+        let next = params.len();
+        if full_content {
+            conditions.push(format!(
+                "(name LIKE ?{} ESCAPE '#' OR COALESCE(artist, '') LIKE ?{} ESCAPE '#' OR COALESCE(content, '') LIKE ?{} ESCAPE '#')",
+                next + 1,
+                next + 2,
+                next + 3
+            ));
+            params.push(rusqlite::types::Value::Text(like.clone()));
+            params.push(rusqlite::types::Value::Text(like.clone()));
+            params.push(rusqlite::types::Value::Text(like));
+        } else {
+            conditions.push(format!(
+                "(name LIKE ?{} ESCAPE '#' OR COALESCE(artist, '') LIKE ?{} ESCAPE '#')",
+                next + 1,
+                next + 2
+            ));
+            params.push(rusqlite::types::Value::Text(like.clone()));
+            params.push(rusqlite::types::Value::Text(like));
+        }
+    }
+
+    if let Some(media_type) = media_type {
+        conditions.push(format!("media_type = ?{}", params.len() + 1));
+        params.push(rusqlite::types::Value::Text(media_type.to_string()));
+    }
+
+    let sql = format!(
+        "SELECT * FROM media_files WHERE {} ORDER BY name COLLATE NOCASE LIMIT ?{}",
+        conditions.join(" AND "),
+        params.len() + 1
+    );
+    params.push(rusqlite::types::Value::Integer(limit));
+
+    let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+    query_rows(conn, &sql, refs.as_slice())
+}
+
 #[tauri::command]
 pub async fn media_initialize(store: State<'_, MediaStore>) -> Result<(), String> {
     let _conn = store.conn.lock().await;
@@ -512,53 +562,36 @@ pub async fn media_search(
     let limit = limit.unwrap_or(50);
     let full_content = full_content.unwrap_or(false);
 
-    let mut conditions: Vec<String> = Vec::new();
-    let mut params: Vec<rusqlite::types::Value> = Vec::new();
+    let conn = store.conn.lock().await;
+    let rows = search_media_rows(&conn, trimmed, full_content, media_type.as_deref(), limit)?;
+    Ok(rows.iter().map(search_hit_from_row).collect())
+}
 
-    for term in trimmed.split_whitespace() {
-        let like = format!("%{}%", escape_like(term));
-        let next = params.len();
-        if full_content {
-            conditions.push(format!(
-                "(name LIKE ?{} ESCAPE '#' OR COALESCE(artist, '') LIKE ?{} ESCAPE '#' OR COALESCE(content, '') LIKE ?{} ESCAPE '#')",
-                next + 1,
-                next + 2,
-                next + 3
-            ));
-            params.push(rusqlite::types::Value::Text(like.clone()));
-            params.push(rusqlite::types::Value::Text(like.clone()));
-            params.push(rusqlite::types::Value::Text(like));
-        } else {
-            conditions.push(format!(
-                "(name LIKE ?{} ESCAPE '#' OR COALESCE(artist, '') LIKE ?{} ESCAPE '#')",
-                next + 1,
-                next + 2
-            ));
-            params.push(rusqlite::types::Value::Text(like.clone()));
-            params.push(rusqlite::types::Value::Text(like));
-        }
-    }
-
-    if let Some(media_type) = &media_type {
-        conditions.push(format!("media_type = ?{}", params.len() + 1));
-        params.push(rusqlite::types::Value::Text(media_type.clone()));
-    }
-
-    let sql = format!(
-        "SELECT * FROM media_files WHERE {} ORDER BY name COLLATE NOCASE LIMIT ?{}",
-        conditions.join(" AND "),
-        params.len() + 1
-    );
-    params.push(rusqlite::types::Value::Integer(limit));
+#[tauri::command]
+pub async fn media_search_multi(
+    store: State<'_, MediaStore>,
+    query: String,
+    full_content: Option<bool>,
+    media_types: Vec<String>,
+    limit_per_group: Option<i64>,
+) -> Result<Vec<SearchHit>, String> {
+    let trimmed = query.trim();
+    let full_content = full_content.unwrap_or(false);
+    let limit_per_group = limit_per_group.unwrap_or(50);
 
     let conn = store.conn.lock().await;
-    let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
-    let rows = query_rows(
-        &conn,
-        &sql,
-        refs.as_slice(),
-    )?;
-    Ok(rows.iter().map(search_hit_from_row).collect())
+    let mut hits: Vec<SearchHit> = Vec::new();
+    for media_type in &media_types {
+        let rows = if trimmed.is_empty() {
+            let sql =
+                "SELECT * FROM media_files WHERE media_type = ?1 ORDER BY name COLLATE NOCASE LIMIT ?2";
+            query_rows(&conn, sql, &[media_type, &limit_per_group])?
+        } else {
+            search_media_rows(&conn, trimmed, full_content, Some(media_type), limit_per_group)?
+        };
+        hits.extend(rows.iter().map(search_hit_from_row));
+    }
+    Ok(hits)
 }
 
 #[tauri::command]
