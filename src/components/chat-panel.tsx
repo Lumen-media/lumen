@@ -16,7 +16,8 @@ import {
   X,
 } from 'lucide-react';
 import * as React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Markdown, type MarkdownComponents } from '@/components/markdown';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { ChatMessage, Reaction } from '@/services/chat-service';
@@ -311,42 +312,14 @@ function FilePreview({
   );
 }
 
-const markdownCache = new Map<string, React.ReactNode[]>();
-const MAX_MARKDOWN_CACHE_SIZE = 1000;
-
-function cacheMarkdown(text: string, result: React.ReactNode[]) {
-  if (markdownCache.size >= MAX_MARKDOWN_CACHE_SIZE) {
-    const oldest = markdownCache.keys().next().value;
-    if (oldest !== undefined) markdownCache.delete(oldest);
-  }
-  markdownCache.set(text, result);
-}
-
-function renderMarkdown(text: string, onYouTubeLink?: (url: string) => void): React.ReactNode[] {
-  const cached = markdownCache.get(text);
-  if (cached) return cached;
-  const lines = text.split('\n');
-  const result = lines.map((line, lineIdx) => {
-    const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g);
-    const rendered = parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return (
-          <strong key={i} className="font-semibold">
-            {part.slice(2, -2)}
-          </strong>
-        );
-      }
-      if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
-        return <em key={i}>{part.slice(1, -1)}</em>;
-      }
-      const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-      if (link) {
-        const href = link[2];
-        const safe = /^https?:\/\//i.test(href);
-        if (safe && onYouTubeLink && urlMediaService.parseYouTubeUrl(href)) {
+function ChatMarkdown({ text, onYouTubeLink }: { text: string; onYouTubeLink?: (url: string) => void }) {
+  const components = useMemo<MarkdownComponents>(
+    () => ({
+      a: ({ href, children, ...props }: { href?: string; children?: React.ReactNode }) => {
+        const safe = /^https?:\/\//i.test(href ?? '');
+        if (safe && onYouTubeLink && href && urlMediaService.parseYouTubeUrl(href)) {
           return (
             <a
-              key={i}
               href={href}
               className="text-blue-400 underline underline-offset-4 hover:text-blue-300"
               onClick={(e) => {
@@ -354,41 +327,31 @@ function renderMarkdown(text: string, onYouTubeLink?: (url: string) => void): Re
                 onYouTubeLink(href);
               }}
             >
-              {link[1]}
+              {children}
             </a>
           );
         }
         return (
           <a
-            key={i}
-            href={safe ? href : '#'}
+            href={safe ? href : undefined}
             target="_blank"
             rel="noreferrer"
             className={cn(
               'underline underline-offset-4',
-              safe
-                ? 'text-blue-400 hover:text-blue-300'
-                : 'text-muted-foreground cursor-not-allowed'
+              safe ? 'text-blue-400 hover:text-blue-300' : 'text-muted-foreground cursor-not-allowed'
             )}
             onClick={safe ? undefined : (e) => e.preventDefault()}
+            {...props}
           >
-            {link[1]}
+            {children}
           </a>
         );
-      }
-      return <span key={i}>{part}</span>;
-    });
-    return lineIdx > 0 ? (
-      <React.Fragment key={lineIdx}>
-        {'\n'}
-        {rendered}
-      </React.Fragment>
-    ) : (
-      rendered
-    );
-  });
-  cacheMarkdown(text, result);
-  return result;
+      },
+    }),
+    [onYouTubeLink]
+  );
+
+  return <Markdown source={text} components={components} />;
 }
 
 const formatTimeCache = new Map<number, string>();
@@ -812,7 +775,7 @@ function MessageBubble({
               )}
               {message.text && (
                 <div className="wrap-break-word whitespace-pre-wrap select-text">
-                  {renderMarkdown(message.text, onLinkClick)}
+                  <ChatMarkdown text={message.text} onYouTubeLink={onLinkClick} />
                 </div>
               )}
 

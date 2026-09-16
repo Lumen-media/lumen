@@ -85,12 +85,14 @@
   margin-bottom: 0.25em;
 }
 
-.store-readme a {
+.store-readme a,
+.store-readme-link {
   color: var(--primary);
   text-decoration: none;
 }
 
-.store-readme a:hover {
+.store-readme a:hover,
+.store-readme-link:hover {
   text-decoration: underline;
 }
 
