@@ -38,15 +38,17 @@ export const useLyricEditStore = create<LyricEditStore>((set, get) => ({
   },
 
   reload: async () => {
-    const { filePath } = get();
+    const { filePath, slideIds: prevIds } = get();
     if (!filePath) return;
-    set({ isLoading: true });
     try {
       const data = await lyricService.load(filePath);
-      const slideIds = data.slides.map(() => crypto.randomUUID());
-      set({ lyricData: data, slideIds, isLoading: false });
+      const slideIds =
+        data.slides.length === prevIds.length
+          ? prevIds
+          : data.slides.map(() => crypto.randomUUID());
+      set({ lyricData: data, slideIds });
     } catch {
-      set({ isLoading: false });
+      // keep current state
     }
   },
 
