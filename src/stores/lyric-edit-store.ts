@@ -10,6 +10,7 @@ interface LyricEditStore {
   selectedSlideIndex: number | null;
   isLoading: boolean;
   loadLyric: (filePath: string) => Promise<void>;
+  reload: () => Promise<void>;
   restore: () => Promise<void>;
   selectSlide: (index: number | null) => void;
   clear: () => void;
@@ -33,6 +34,19 @@ export const useLyricEditStore = create<LyricEditStore>((set, get) => ({
     } catch {
       localStorage.removeItem(STORAGE_KEY);
       set({ filePath: null, lyricData: null, slideIds: [], isLoading: false });
+    }
+  },
+
+  reload: async () => {
+    const { filePath } = get();
+    if (!filePath) return;
+    set({ isLoading: true });
+    try {
+      const data = await lyricService.load(filePath);
+      const slideIds = data.slides.map(() => crypto.randomUUID());
+      set({ lyricData: data, slideIds, isLoading: false });
+    } catch {
+      set({ isLoading: false });
     }
   },
 
