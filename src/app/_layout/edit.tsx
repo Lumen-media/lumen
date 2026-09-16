@@ -12,7 +12,7 @@ import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useScopedShortcuts } from '@/lib/shortcuts';
 import type { LyricData, LyricSlide } from '@/services/lyric-service';
-import { thumbnailService } from '@/services/thumbnail-service';
+import { lumenThumbUrl, lumenUrl } from '@/services/lumen-url';
 import { useLyricEditStore } from '@/stores/lyric-edit-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { usePlayerStore } from '@/stores/player-store';
@@ -328,18 +328,7 @@ function useBackgroundSrc(path?: string) {
       setSrc(path);
       return;
     }
-    let cancelled = false;
-    const loader = path.startsWith('http')
-      ? thumbnailService.getRemoteThumbnail(path)
-      : thumbnailService.getThumbnail(path);
-    loader
-      .then((url) => {
-        if (!cancelled) setSrc(url);
-      })
-      .catch(() => setSrc(undefined));
-    return () => {
-      cancelled = true;
-    };
+    setSrc(path.startsWith('http') ? lumenThumbUrl(path, { w: 480 }) : lumenUrl(path, { w: 200 }));
   }, [path]);
 
   return src;
