@@ -74,8 +74,8 @@ export function MarkdownPresentation({
   useEffect(() => {
     if (!filePath) return;
     readTextFile(filePath)
-      .then((content) => {
-        const data = parseLyricFile(content);
+      .then(async (content) => {
+        const data = await parseLyricFile(content);
         setLyricData(data);
         setCurrentSlide(startIndexRef.current);
       })
