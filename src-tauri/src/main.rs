@@ -681,6 +681,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             media::media_insert,
             media::media_insert_url,
             media::media_search,
+            media::media_search_multi,
             media::media_list_by_type,
             media::media_get_by_id,
             media::media_get_by_path,
