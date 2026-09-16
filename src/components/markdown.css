@@ -148,14 +148,18 @@
 .store-readme-table {
   max-width: 100%;
   border-collapse: collapse;
+  border: 1px solid var(--border);
 }
 
 .store-readme-table th,
 .store-readme-table td {
+  padding: 0.5em 0.75em;
   white-space: normal;
   overflow-wrap: anywhere;
+  border: 1px solid var(--border);
 }
 
 .store-readme-table thead th {
   background: var(--card);
+  font-weight: 600;
 }
