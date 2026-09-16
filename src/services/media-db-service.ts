@@ -19,6 +19,12 @@ export interface SearchHit {
   download_status?: string | null;
 }
 
+export interface UploadResult {
+  sourcePath: string;
+  file: FileInfo | null;
+  error: string | null;
+}
+
 interface MediaFileInput {
   name: string;
   path: string;
@@ -189,6 +195,33 @@ class MediaDbService {
       mediaType: opts.mediaType ?? null,
       limit: opts.limit ?? 50,
     });
+  }
+
+  async searchMulti(
+    query: string,
+    opts: {
+      mediaTypes?: MediaType[];
+      fullContent?: boolean;
+      limitPerGroup?: number;
+    } = {}
+  ): Promise<SearchHit[]> {
+    return invoke<SearchHit[]>('media_search_multi', {
+      query,
+      fullContent: opts.fullContent ?? false,
+      mediaTypes: opts.mediaTypes ?? [],
+      limitPerGroup: opts.limitPerGroup ?? 50,
+    });
+  }
+
+  async uploadFiles(mediaType: MediaType, filePaths: string[]): Promise<UploadResult[]> {
+    const results = await invoke<
+      Array<{ path: string; file: RawFileInfo | null; error: string | null }>
+    >('media_upload_files', { mediaType, filePaths });
+    return results.map((r) => ({
+      sourcePath: r.path,
+      file: r.file ? toFileInfo(r.file) : null,
+      error: r.error,
+    }));
   }
 
   async listByType(mediaType: MediaType, limit = 50): Promise<SearchHit[]> {
