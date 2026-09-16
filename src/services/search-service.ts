@@ -144,15 +144,13 @@ export async function search(opts: SearchOpts): Promise<SearchResults> {
     : Promise.resolve([]);
 
   const mediaPromise: Promise<SearchHit[]> = wantMedia
-    ? trimmed
-      ? Promise.all(
-          SEARCHABLE_MEDIA.map((t) =>
-            mediaDbService.search(trimmed, { mediaType: t, fullContent: opts.fullContent, limit })
-          )
-        ).then((arrs) => arrs.flat().slice(0, limit))
-      : Promise.all(SEARCHABLE_MEDIA.map((t) => mediaDbService.listByType(t, Math.ceil(limit / 3)))).then(
-          (arrs) => arrs.flat().slice(0, limit)
-        )
+    ? mediaDbService
+        .searchMulti(trimmed, {
+          mediaTypes: SEARCHABLE_MEDIA,
+          fullContent: opts.fullContent,
+          limitPerGroup: trimmed ? limit : Math.ceil(limit / 3),
+        })
+        .then((hits) => hits.slice(0, limit))
     : Promise.resolve([]);
 
   const [lyricsHits, mediaHits] = await Promise.all([lyricsPromise, mediaPromise]);
