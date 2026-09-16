@@ -84,9 +84,9 @@ import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
 import type { QueueTriggerSpec } from '@/modules/types';
 import { mediaDbService } from '@/services/media-db-service';
+import { lumenUrl } from '@/services/lumen-url';
 import { notesService } from '@/services/notes-service';
 import { queueDbService } from '@/services/queue-db-service';
-import { thumbnailService } from '@/services/thumbnail-service';
 import type { FileInfo } from '@/services/types';
 import { useAsideStore } from '@/stores/aside-store';
 import { useChatStore } from '@/stores/chat-store';
@@ -922,18 +922,11 @@ function ThemeThumbnail({
   onClick: () => void;
 }) {
   const [displaySrc, setDisplaySrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    thumbnailService
-      .getThumbnail(file.path)
-      .then((url) => {
-        if (!cancelled) setDisplaySrc(url);
-      })
-      .catch(() => { });
-    return () => {
-      cancelled = true;
-    };
+    setDisplaySrc(lumenUrl(file.path, { w: 200 }));
+    setFailed(false);
   }, [file.path]);
 
   return (
@@ -946,8 +939,13 @@ function ThemeThumbnail({
         isActive ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'hover:opacity-90'
       )}
     >
-      {displaySrc ? (
-        <img src={displaySrc} alt={file.name} className="size-full object-cover" />
+      {displaySrc && !failed ? (
+        <img
+          src={displaySrc}
+          alt={file.name}
+          className="size-full object-cover"
+          onError={() => setFailed(true)}
+        />
       ) : (
         <div className="size-full bg-card animate-pulse opacity-70 flex items-center justify-center">
           <Loader2 className="size-4 text-muted-foreground animate-spin" />
