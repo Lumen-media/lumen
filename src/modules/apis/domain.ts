@@ -174,13 +174,10 @@ export function createLibraryHostAPI(): LibraryHostAPI {
         ? await mediaDbService.search(query.trim(), { mediaType, limit: 200 })
         : mediaType
           ? await mediaDbService.listByType(mediaType, 500)
-          : (
-              await Promise.all([
-                mediaDbService.listByType('audio', 200),
-                mediaDbService.listByType('video', 200),
-                mediaDbService.listByType('image', 200),
-              ])
-            ).flat();
+          : await mediaDbService.searchMulti('', {
+              mediaTypes: ['audio', 'video', 'image'],
+              limitPerGroup: 200,
+            });
       return hits.map<MediaRef>((h) => ({
         id: String(h.id),
         path: h.path,
