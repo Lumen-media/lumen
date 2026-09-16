@@ -10,6 +10,7 @@ mod media;
 mod metadata;
 mod module_runtime;
 mod presentation;
+mod profiles;
 mod queue;
 mod remote;
 mod streaming;
@@ -695,6 +696,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lyrics::lyric_parse,
             lyrics::lyric_serialize,
             lyrics::lyric_build_search_content,
+            profiles::profile_list,
+            profiles::profile_save,
+            profiles::profile_delete,
             download::check_dependencies,
             download::download_dependencies,
             download::list_dependencies,
