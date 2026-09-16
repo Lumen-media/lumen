@@ -1,5 +1,4 @@
-import { basename, extname, join } from '@tauri-apps/api/path';
-import { copyFile, exists, remove, stat } from '@tauri-apps/plugin-fs';
+import { remove } from '@tauri-apps/plugin-fs';
 import { downloadService } from './download-service';
 import { fileInitService } from './file-init-service';
 import { mediaDbService } from './media-db-service';
@@ -103,51 +102,13 @@ class FileManagementServiceImpl implements FileManagementService {
   }
 
   async uploadFiles(mediaType: MediaType, filePaths: string[]): Promise<FileInfo[]> {
-    const destFolder = await fileInitService.getMediaTypePath(mediaType);
-    const uploadedFiles: FileInfo[] = [];
-    const errors: Array<{ path: string; error: string }> = [];
-
-    for (const filePath of filePaths) {
-      try {
-        if (!this.validateFileType(filePath, mediaType)) {
-          const fileName = await basename(filePath);
-          const error = `File "${fileName}" has an invalid type for ${mediaType} category`;
-          errors.push({ path: filePath, error });
-          continue;
-        }
-
-        const fileName = await basename(filePath);
-        let destPath = await join(destFolder, fileName);
-
-        if (await exists(destPath)) {
-          destPath = await this.generateUniqueFilename(destFolder, fileName);
-        }
-
-        await copyFile(filePath, destPath);
-
-        const fileMetadata = await stat(destPath);
-        const fileExtension = await extname(destPath);
-
-        const fileInfo: FileInfo = {
-          name: await basename(destPath),
-          path: destPath,
-          size: fileMetadata.size,
-          modifiedAt: fileMetadata.mtime || new Date(),
-          extension: fileExtension,
-        };
-
-        uploadedFiles.push(fileInfo);
-        await mediaDbService.insertFile(fileInfo, mediaType);
-      } catch (error) {
-        const fileName = await basename(filePath);
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`Failed to upload file "${fileName}":`, error);
-        errors.push({
-          path: filePath,
-          error: `Failed to copy "${fileName}": ${errorMessage}`,
-        });
-      }
-    }
+    const results = await mediaDbService.uploadFiles(mediaType, filePaths);
+    const uploadedFiles = results.filter((r): r is { file: FileInfo } & typeof r => r.file !== null).map(
+      (r) => r.file
+    );
+    const errors = results
+      .filter((r) => r.error !== null)
+      .map((r) => ({ path: r.sourcePath, error: r.error as string }));
 
     if (uploadedFiles.length === 0 && errors.length > 0) {
       const errorMessages = errors.map((e) => e.error).join('; ');
@@ -170,25 +131,6 @@ class FileManagementServiceImpl implements FileManagementService {
     const fsFiles = await fileInitService.getFolderFiles(mediaType);
     await mediaDbService.syncMediaType(mediaType, fsFiles);
     return mediaDbService.listFiles(mediaType);
-  }
-
-  private async generateUniqueFilename(folder: string, fileName: string): Promise<string> {
-    const lastDotIndex = fileName.lastIndexOf('.');
-    const baseName = lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
-    const extension = lastDotIndex > 0 ? fileName.substring(lastDotIndex) : '';
-
-    let counter = 1;
-
-    while (true) {
-      const newName = `${baseName} (${counter})${extension}`;
-      const newPath = await join(folder, newName);
-
-      if (!(await exists(newPath))) {
-        return newPath;
-      }
-
-      counter++;
-    }
   }
 
   async openFilePicker(mediaType: MediaType): Promise<string[] | null> {
