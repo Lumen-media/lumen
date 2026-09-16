@@ -225,32 +225,17 @@ md5 = "0.7"
 
 ---
 
-## Frontend Service
+## Frontend
 
-`src/services/thumbnail-service.ts` wraps the Tauri command and maintains an in-memory blob URL cache keyed by `filePath:size`.
+Consumers no longer call Tauri commands or touch the filesystem. They build a `http://lumen-thumb.localhost?src=<path>&w=<size>` URL via `lumenUrl()` from `src/services/lumen-url.ts` and pass it straight to `<img>`; the Rust protocol server reads/generates the cached thumbnail and serves it with an immutable cache header. Errors are surfaced as non-2xx responses and handled via `onError` on the `<img>`.
 
 ```ts
-class ThumbnailService {
-  private cache = new Map<string, string>();
+import { lumenUrl } from '@/services/lumen-url';
 
-  async getThumbnail(filePath: string, size = 200): Promise<string> {
-    const key = `${filePath}:${size}`;
-    const cached = this.cache.get(key);
-    if (cached) return cached;
-
-    const cachePath = await invoke<string>('get_thumbnail', { path: filePath, size });
-    const bytes = await readFile(cachePath);
-    const blobUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
-
-    this.cache.set(key, blobUrl);
-    return blobUrl;
-  }
-}
-
-export const thumbnailService = new ThumbnailService();
+const src = lumenUrl(filePath, { w: 200 }); // -> http://lumen-thumb.localhost?src=...&w=200
 ```
 
-The service follows the project's standard blob URL pattern — `readFile` + `URL.createObjectURL` — consistent with how all local media files are displayed.
+Remote (http/https) sources are also supported: `lumenThumbUrl(url, { w })` routes them through the protocol too, so they are fetched, downscaled and cached once instead of a full-size fetch per `<img>`.
 
 ---
 
@@ -261,8 +246,10 @@ The service follows the project's standard blob URL pattern — `readFile` + `UR
 | `lyric-background-modal.tsx` — `MediaThumbnail` | `200` | Media library grid (images + videos) |
 | `lyric-modal.tsx` — `SlidePreview` | `800` | Slide background preview |
 | `app/_layout/edit.tsx` — `SequenceThumbnail` | `200` | Horizontal slide strip |
-| `components/ui/videoplayer.tsx` | `200` | Metadata thumbnail sent over WebSocket |
+| `components/ui/videoplayer.tsx` | `480` | Metadata thumbnail sent over WebSocket |
 | `components/file-list-item.tsx` — `FileThumbnail` | `200` | Media panel file list (video + image types only) |
+| `components/aside-panel.tsx` — `ThemeThumbnail` | `200` | Theme thumbnails |
+| `components/chat-panel.tsx` | `300` / `600` | Chat image/file previews |
 
 For `file-list-item.tsx`, thumbnail is only attempted for `video` and `image` media types. All other types (`lyrics`, `audio`, `text`, `files`) continue to display their Lucide icon.
 
@@ -278,7 +265,7 @@ For the current use case (media library files that do not change in place) this 
 
 ## Error Handling
 
-All errors are surfaced to the frontend as `Err(String)` from the Tauri command. The frontend should always handle the error case and fall back to a placeholder icon.
+Errors are surfaced as non-2xx responses from the protocol server (`src-tauri/src/thumbnail/protocol.rs`). The frontend falls back to a placeholder icon via the `onError` handler on the `<img>`.
 
 | Scenario | Behavior |
 |----------|----------|
