@@ -24,9 +24,9 @@ import type { ChatMessage, Reaction } from '@/services/chat-service';
 import { MAX_MESSAGE_LENGTH } from '@/services/chat-service';
 import { fileManagementService } from '@/services/file-management-service';
 import { mediaDbService } from '@/services/media-db-service';
-import { thumbnailService } from '@/services/thumbnail-service';
 import type { FileInfo } from '@/services/types';
 import { urlMediaService } from '@/services/url-media-service';
+import { lumenUrl } from '@/services/lumen-url';
 import { useChatStore } from '@/stores/chat-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { useQueueStore } from '@/stores/queue-store';
@@ -152,23 +152,9 @@ function FilePreview({
 
   useEffect(() => {
     if (isImage(file.file_name)) {
-      let cancelled = false;
-      setLoading(true);
-      thumbnailService
-        .getThumbnail(file.file_path, 300)
-        .then((url) => {
-          if (!cancelled) {
-            setThumbnail(url);
-            setLoading(false);
-          }
-        })
-        .catch((err) => {
-          console.error('[chat] thumbnail load failed:', err);
-          if (!cancelled) setLoading(false);
-        });
-      return () => {
-        cancelled = true;
-      };
+      setThumbnail(lumenUrl(file.file_path, { w: 300 }));
+      setLoading(false);
+      return;
     }
 
     if (isPdf(file.file_name)) {
@@ -469,7 +455,9 @@ function ChatFileDialog({
             thumbnailPath: metadata.thumbnailPath,
             remoteThumbnailUrl: metadata.remoteThumbnailUrl,
           };
-          const thumb = await thumbnailService.getMediaThumbnail(fileInfo).catch(() => null);
+          const thumb = fileInfo.thumbnailPath
+            ? lumenUrl(fileInfo.thumbnailPath, { w: 200 })
+            : (fileInfo.remoteThumbnailUrl ?? null);
           if (cancelled) return;
           setYtMeta({
             title: metadata.title,
@@ -489,21 +477,7 @@ function ChatFileDialog({
     }
 
     if (target.type === 'file' && isImage) {
-      thumbnailService
-        .getThumbnail(target.file_path, 600)
-        .then((url) => {
-          if (!cancelled) setSrc(url);
-        })
-        .catch(() => {
-          if (cancelled) return;
-          invoke<string>('get_thumbnail', { path: target.file_path, size: 600 })
-            .then((cachePath) => readFile(cachePath))
-            .then((bytes) => {
-              if (!cancelled)
-                setSrc(URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' })));
-            })
-            .catch(() => { });
-        });
+      setSrc(lumenUrl(target.file_path, { w: 600 }));
       return () => {
         cancelled = true;
       };
