@@ -1,5 +1,5 @@
 import { basename, extname, join } from '@tauri-apps/api/path';
-import { copyFile, exists, readDir, remove, stat } from '@tauri-apps/plugin-fs';
+import { copyFile, exists, remove, stat } from '@tauri-apps/plugin-fs';
 import { downloadService } from './download-service';
 import { fileInitService } from './file-init-service';
 import { mediaDbService } from './media-db-service';
@@ -167,23 +167,7 @@ class FileManagementServiceImpl implements FileManagementService {
   }
 
   async refreshFiles(mediaType: MediaType): Promise<FileInfo[]> {
-    const folderPath = await fileInitService.getMediaTypePath(mediaType);
-    const entries = await readDir(folderPath);
-    const fsFiles: FileInfo[] = [];
-
-    for (const entry of entries) {
-      if (!entry.isFile) continue;
-      const fullPath = await join(folderPath, entry.name);
-      const meta = await stat(fullPath);
-      fsFiles.push({
-        name: entry.name,
-        path: fullPath,
-        size: meta.size,
-        modifiedAt: meta.mtime ?? new Date(),
-        extension: await extname(entry.name),
-      });
-    }
-
+    const fsFiles = await fileInitService.getFolderFiles(mediaType);
     await mediaDbService.syncMediaType(mediaType, fsFiles);
     return mediaDbService.listFiles(mediaType);
   }

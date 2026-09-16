@@ -1,8 +1,27 @@
-import { extname, join } from '@tauri-apps/api/path';
-import { exists, mkdir, readDir, stat } from '@tauri-apps/plugin-fs';
+import { join } from '@tauri-apps/api/path';
+import { exists, mkdir } from '@tauri-apps/plugin-fs';
+import { invoke } from '@tauri-apps/api/core';
 import { getAppBasePath, getMediaBasePath } from './app-paths';
 import { mediaDbService } from './media-db-service';
 import type { FileInfo, MediaType } from './types';
+
+interface ScannedFile {
+  name: string;
+  path: string;
+  size: number;
+  modifiedAt: number;
+  extension: string;
+}
+
+function toFileInfo(scanned: ScannedFile): FileInfo {
+  return {
+    name: scanned.name,
+    path: scanned.path,
+    size: scanned.size,
+    modifiedAt: new Date(scanned.modifiedAt),
+    extension: scanned.extension,
+  };
+}
 
 export interface FileInitService {
   /**
@@ -25,6 +44,13 @@ export interface FileInitService {
    * @returns Promise resolving to the media type folder path
    */
   getMediaTypePath(mediaType: MediaType): Promise<string>;
+
+  /**
+   * Scan a media type folder and return its files in a single IPC call
+   * @param mediaType - The media type
+   * @returns Promise resolving to scanned file info entries
+   */
+  getFolderFiles(mediaType: MediaType): Promise<FileInfo[]>;
 }
 
 class FileInitServiceImpl implements FileInitService {
@@ -81,22 +107,8 @@ class FileInitServiceImpl implements FileInitService {
   }
 
   private async readFolderFiles(mediaType: MediaType): Promise<FileInfo[]> {
-    const folderPath = await this.getMediaTypePath(mediaType);
-    const entries = await readDir(folderPath);
-    const results: FileInfo[] = [];
-    for (const entry of entries) {
-      if (!entry.isFile) continue;
-      const fullPath = await join(folderPath, entry.name);
-      const meta = await stat(fullPath);
-      results.push({
-        name: entry.name,
-        path: fullPath,
-        size: meta.size,
-        modifiedAt: meta.mtime ?? new Date(),
-        extension: await extname(entry.name),
-      });
-    }
-    return results;
+    const scanned = await invoke<ScannedFile[]>('scan_media_files', { mediaType });
+    return scanned.map(toFileInfo);
   }
 
   async getMediaBasePath(): Promise<string> {
@@ -119,6 +131,11 @@ class FileInitServiceImpl implements FileInitService {
         `Failed to get path for media type ${mediaType}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  async getFolderFiles(mediaType: MediaType): Promise<FileInfo[]> {
+    const scanned = await invoke<ScannedFile[]>('scan_media_files', { mediaType });
+    return scanned.map(toFileInfo);
   }
 }
 
