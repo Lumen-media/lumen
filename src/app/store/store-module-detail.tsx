@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo } from 'react';
+import { Markdown } from '@/components/markdown';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -24,7 +25,6 @@ import {
   type StoreCatalogModule,
 } from '@/services/store-service';
 import { useModulesStore } from '@/stores/modules-store';
-import { Markdown } from './markdown';
 import { ModuleIcon } from './module-icon';
 import { installFromStore } from './store-actions';
 import { useModuleManifest, useModuleReadme, useModuleRelease } from './use-store-data';
