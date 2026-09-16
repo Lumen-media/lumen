@@ -407,7 +407,8 @@ async function applySurfaceWindowOptions(win: WebviewWindow, options?: SurfaceWi
   if (options?.title) await win.setTitle(options.title).catch(() => {});
   if (options?.decorations !== undefined) await win.setDecorations(options.decorations).catch(() => {});
   if (options?.resizable !== undefined) await win.setResizable(options.resizable).catch(() => {});
-  if (options?.maximized || options?.fullscreen) await win.maximize().catch(() => {});
+  if (options?.maximized) await win.maximize().catch(() => {});
+  if (options?.fullscreen) await win.setFullscreen(true).catch(() => {});
 }
 
 async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOptions) {
@@ -450,7 +451,7 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
 
       win = await WebviewWindow.getByLabel(label).catch(() => null);
       if (win) {
-        if (options?.maximized || options?.fullscreen) await win.maximize().catch(() => {});
+        if (options?.maximized) await win.maximize().catch(() => {});
         await win.show().catch(() => {});
         await win.setFocus().catch(() => {});
       }

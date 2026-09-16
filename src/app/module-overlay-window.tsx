@@ -39,7 +39,8 @@ async function applyWindowConfig(config?: WindowConfig) {
         ),
       );
     }
-    if (config.maximized || config.fullscreen) await w.maximize();
+    if (config.maximized) await w.maximize();
+    if (config.fullscreen) await w.setFullscreen(true);
   } catch (error) {
     console.error('Failed to apply overlay window config:', error);
   }
