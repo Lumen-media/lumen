@@ -5,7 +5,7 @@ import { LucidePause, LucidePlay, LucideVolume2, LucideVolumeOff } from 'lucide-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
 import { cn } from '@/lib/utils';
-import { thumbnailService } from '@/services/thumbnail-service';
+import { lumenUrl } from '@/services/lumen-url';
 import { urlMediaService } from '@/services/url-media-service';
 import { Slider } from './slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
@@ -200,7 +200,7 @@ export const Videoplayer = ({
         if (loadSeqRef.current !== seq) return;
         currentFilePath.current = filePath;
         pendingSeekTime.current = seekTime > 0 ? seekTime : null;
-        pendingThumbnail.current = await thumbnailService.getThumbnail(filePath).catch(() => null);
+        pendingThumbnail.current = lumenUrl(filePath, { w: 480 });
         if (loadSeqRef.current !== seq) return;
         switchingUrlRef.current = true;
         setPlayed(0);
