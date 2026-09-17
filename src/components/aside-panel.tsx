@@ -80,6 +80,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTranslation } from '@/lib/i18n';
+import { formatDuration } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
 import type { QueueTriggerSpec } from '@/modules/types';
@@ -195,13 +196,6 @@ export function AsidePanel() {
       </Tabs>
     </Card>
   );
-}
-
-function formatDuration(seconds?: number) {
-  if (!seconds) return '';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
 function QueueTab({

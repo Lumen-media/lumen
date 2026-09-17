@@ -4,17 +4,12 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { LucidePause, LucidePlay, LucideVolume2, LucideVolumeOff } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
+import { formatTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { lumenUrl } from '@/services/lumen-url';
 import { urlMediaService } from '@/services/url-media-service';
 import { Slider } from './slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
-
-const formatTime = (time: number) => {
-  const minutes = Math.floor(time / 60);
-  const seconds = Math.floor(time % 60);
-  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-};
 
 export type VideoplayerProps = {
   className?: string;
