@@ -1,7 +1,4 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
   ArrowLeft,
   FileText,
@@ -22,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAnnounce } from '@/hooks/use-announce';
+import { ensureMediaWindow } from '@/lib/present-window';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { type FileInfo, fileInitService, fileManagementService, type MediaType } from '@/services';
@@ -40,24 +38,6 @@ function selectPresentationPreview(filePath: string) {
   window.dispatchEvent(
     new CustomEvent(PRESENTATION_PREVIEW_EVENT, { detail: { filePath } })
   );
-}
-
-async function ensureMediaWindow(): Promise<WebviewWindow | null> {
-  const existing = await WebviewWindow.getByLabel('media-window');
-  if (existing) return existing;
-
-  const readyPromise = new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Timed out')), 3000);
-    listen('media-window-ready', () => {
-      clearTimeout(timeout);
-      resolve();
-    }).catch(() => { });
-  });
-
-  await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-  await readyPromise;
-
-  return WebviewWindow.getByLabel('media-window');
 }
 
 const mediaItems = [

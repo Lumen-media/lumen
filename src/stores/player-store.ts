@@ -1,8 +1,8 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { emit, listen } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import { toast } from 'sonner';
+import { ensureMediaWindow, getMediaWindow } from '@/lib/present-window';
 import { useModuleStore } from '@/modules/store';
 import { getSetting, saveSetting } from '@/services/db';
 import { mediaDbService } from '@/services/media-db-service';
@@ -104,52 +104,6 @@ async function playAudio(source: string, seekTime: number): Promise<void> {
   }
 
   await audio.play();
-}
-
-async function getMediaWindow() {
-  return WebviewWindow.getByLabel('media-window');
-}
-
-async function waitForMediaWindowReady(timeoutMs = 3000): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    let done = false;
-    let timeoutId: number | undefined;
-    let cleanupPromise: Promise<UnlistenFn> | null = null;
-
-    const finish = (callback: () => void) => {
-      if (done) return;
-      done = true;
-      if (timeoutId) {
-        window.clearTimeout(timeoutId);
-      }
-      if (cleanupPromise) {
-        cleanupPromise.then((unlisten) => unlisten()).catch(() => {});
-      }
-      callback();
-    };
-
-    cleanupPromise = listen('media-window-ready', () => {
-      finish(resolve);
-    });
-
-    timeoutId = window.setTimeout(() => {
-      finish(() => reject(new Error('Timed out waiting for media window readiness')));
-    }, timeoutMs);
-  });
-}
-
-async function ensureMediaWindow(): Promise<WebviewWindow | null> {
-  const existing = await getMediaWindow();
-  if (existing) return existing;
-
-  try {
-    const readyPromise = waitForMediaWindowReady();
-    await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-    await readyPromise;
-    return await getMediaWindow();
-  } catch {
-    return null;
-  }
 }
 
 async function waitForWsOpen(get: () => PlayerStore, timeoutMs = 3000): Promise<boolean> {

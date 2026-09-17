@@ -1,8 +1,6 @@
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from '@aiden0z/pptx-renderer';
 import { createFileRoute } from '@tanstack/react-router';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { toJpeg } from 'html-to-image';
 import { Loader2, Plus, PresentationIcon, X } from 'lucide-react';
@@ -18,6 +16,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { ensureMediaWindow } from '@/lib/present-window';
 import { cn } from '@/lib/utils';
 import { type FileInfo, fileManagementService, presentationPreviewsCache } from '@/services';
 import { type PresentationSlide, usePresentationStore } from '@/stores/presentation-store';
@@ -46,24 +45,6 @@ function fileNameFromPath(filePath: string) {
 export function selectPresentationPreview(filePath: string) {
   localStorage.setItem(PRESENTATION_PREVIEW_STORAGE_KEY, filePath);
   window.dispatchEvent(new CustomEvent(PRESENTATION_PREVIEW_EVENT, { detail: { filePath } }));
-}
-
-async function ensureMediaWindow(): Promise<WebviewWindow | null> {
-  const existing = await WebviewWindow.getByLabel('media-window');
-  if (existing) return existing;
-
-  const readyPromise = new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Timed out')), 3000);
-    listen('media-window-ready', () => {
-      clearTimeout(timeout);
-      resolve();
-    }).catch(() => { });
-  });
-
-  await invoke('create_window', { label: 'media-window', title: 'Media Player' });
-  await readyPromise;
-
-  return WebviewWindow.getByLabel('media-window');
 }
 
 function PresentationPreviewRenderer({
