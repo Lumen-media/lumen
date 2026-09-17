@@ -3,6 +3,7 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { ensureMediaWindow, getMediaWindow } from '@/lib/present-window';
+import { createStreamSocket } from '@/lib/stream-socket';
 import { useModuleStore } from '@/modules/store';
 import { getSetting, saveSetting } from '@/services/db';
 import { mediaDbService } from '@/services/media-db-service';
@@ -163,7 +164,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   currentImagePath: null,
 
   initWs: () => {
-    const socket = new WebSocket('ws://localhost:8080');
+    const socket = createStreamSocket();
     socket.onopen = () => set({ ws: socket });
     socket.onclose = () => set({ ws: null });
     socket.onerror = () => set({ ws: null });

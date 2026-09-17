@@ -34,6 +34,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Slider } from '@/components/ui/slider';
 import { useDeviceAudioMixer } from '@/hooks/use-device-audio-mixer';
+import { useStreamPreview } from '@/hooks/use-stream-preview';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useStreamingStore } from '@/stores/streaming-store';
@@ -72,10 +73,7 @@ function RouteComponent() {
   const [deviceDrag, setDeviceDrag] = useState<Record<string, number>>({});
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const previewVideoStreamRef = useRef<MediaStream | null>(null);
   const videoOrientationRef = useRef<VideoOrientation | null>(null);
-  const signalingModeRef = useRef<'mobile_preview' | 'mobile'>('mobile_preview');
-  const previewSubscriptionRef = useRef(false);
 
   useEffect(() => {
     init().catch(() => { });
@@ -121,6 +119,24 @@ function RouteComponent() {
     videoOrientationRef.current = videoOrientation;
   }, [videoOrientation]);
 
+  useStreamPreview({
+    videoRef,
+    enabled: !streamOverlayActive && hasDevices,
+    onOpen: () => setPreviewConnected(true),
+    onClose: () => {
+      setPreviewConnected(false);
+      setVideoTrackActive(false);
+      setVideoOrientation(null);
+    },
+    onVideoTrack: () => setVideoTrackActive(true),
+    onTrackActiveChange: setVideoTrackActive,
+    onMessage: (payload) => {
+      const orientation = normalizeVideoOrientation(payload.video_orientation);
+      if (orientation) setVideoOrientation(orientation);
+    },
+    iceCandidateExtra: () => ({ video_orientation: videoOrientationRef.current }),
+  });
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) {
@@ -141,144 +157,6 @@ function RouteComponent() {
       video.removeEventListener('resize', syncOrientationFromVideo);
     };
   }, []);
-
-  useEffect(() => {
-    if (streamOverlayActive) return;
-    if (!hasDevices) return;
-
-    const pc = new RTCPeerConnection();
-    const ws = new WebSocket('ws://localhost:8080');
-    let closed = false;
-
-    const attachVideoElement = (stream: MediaStream, retries = 10) => {
-      if (closed) return;
-      const video = videoRef.current;
-      if (!video) {
-        if (retries > 0) window.setTimeout(() => attachVideoElement(stream, retries - 1), 30);
-        return;
-      }
-      if (video.srcObject !== stream) video.srcObject = stream;
-      video.play().catch(() => { });
-    };
-
-    const send = (payload: Record<string, unknown>) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(payload));
-      }
-    };
-
-    pc.ontrack = (event) => {
-      if (event.track.kind !== 'video') {
-        return;
-      }
-      if (!previewVideoStreamRef.current) previewVideoStreamRef.current = new MediaStream();
-      const previewVideoStream = previewVideoStreamRef.current;
-      previewVideoStream
-        .getVideoTracks()
-        .forEach((track) => { previewVideoStream.removeTrack(track); });
-      previewVideoStream.addTrack(event.track);
-
-      const attachVideoTrack = () => {
-        setVideoTrackActive(true);
-        attachVideoElement(previewVideoStream);
-      };
-
-      attachVideoTrack();
-      if (event.track.muted) event.track.onunmute = attachVideoTrack;
-      event.track.onmute = () => setVideoTrackActive(false);
-      event.track.onended = () => setVideoTrackActive(false);
-    };
-
-    pc.onicecandidate = (event) => {
-      if (!event.candidate) return;
-      send({
-        event: 'webrtc_ice_candidate',
-        stream_type: signalingModeRef.current,
-        video_orientation: videoOrientationRef.current,
-        candidate: event.candidate,
-      });
-    };
-
-    ws.onopen = () => {
-      if (closed) return;
-      setPreviewConnected(true);
-      previewSubscriptionRef.current = true;
-      send({ event: 'subscribe_stream', stream_type: 'mobile_preview' });
-    };
-
-    ws.onmessage = async (event) => {
-      try {
-        const payload = JSON.parse(event.data as string);
-        const payloadOrientation = normalizeVideoOrientation(payload.video_orientation);
-
-        if (payloadOrientation) {
-          setVideoOrientation(payloadOrientation);
-        }
-
-        if (payload.event === 'mobile_offer') {
-          signalingModeRef.current = 'mobile';
-
-          if (previewSubscriptionRef.current) {
-            send({ event: 'unsubscribe_stream', stream_type: 'mobile_preview' });
-            previewSubscriptionRef.current = false;
-          }
-
-          await pc.setRemoteDescription({ type: 'offer', sdp: payload.sdp });
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          send({
-            event: 'mobile_answer',
-            sdp: answer.sdp,
-          });
-          return;
-        }
-
-        if (payload.event === 'stream_offer' && payload.stream_type === 'mobile_preview') {
-          signalingModeRef.current = 'mobile_preview';
-          await pc.setRemoteDescription({ type: 'offer', sdp: payload.sdp });
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          send({
-            event: 'webrtc_answer',
-            stream_type: 'mobile_preview',
-            sdp: answer.sdp,
-          });
-          return;
-        }
-
-        if (
-          payload.event === 'stream_ice_candidate' &&
-          (payload.stream_type === 'mobile_preview' || payload.stream_type === 'mobile')
-        ) {
-          await pc.addIceCandidate(payload.candidate);
-        }
-      } catch {
-        // ignore malformed preview signaling payloads
-      }
-    };
-
-    ws.onclose = () => {
-      setPreviewConnected(false);
-    };
-
-    return () => {
-      closed = true;
-      setPreviewConnected(false);
-
-      if (previewSubscriptionRef.current) {
-        send({ event: 'unsubscribe_stream', stream_type: 'mobile_preview' });
-      }
-
-      previewSubscriptionRef.current = false;
-      ws.close();
-      pc.close();
-      if (videoRef.current) videoRef.current.srcObject = null;
-      previewVideoStreamRef.current = null;
-      signalingModeRef.current = 'mobile_preview';
-      setVideoTrackActive(false);
-      setVideoOrientation(null);
-    };
-  }, [streamOverlayActive, hasDevices]);
 
   const previewLabel = selectedDevice
     ? selectedDevice.device_name
