@@ -20,6 +20,7 @@ import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAnnounce } from '@/hooks/use-announce';
 import { ensureMediaWindow } from '@/lib/present-window';
+import { selectPresentationPreview } from '@/lib/presentation-preview';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { type FileInfo, fileInitService, fileManagementService, type MediaType } from '@/services';
@@ -29,16 +30,6 @@ import { usePlayerStore } from '@/stores/player-store';
 import { usePresentationStore } from '@/stores/presentation-store';
 import { useQueueStore } from '@/stores/queue-store';
 import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
-
-const PRESENTATION_PREVIEW_STORAGE_KEY = 'lumen:presentation-preview-file';
-const PRESENTATION_PREVIEW_EVENT = 'lumen:presentation-preview-selected';
-
-function selectPresentationPreview(filePath: string) {
-  localStorage.setItem(PRESENTATION_PREVIEW_STORAGE_KEY, filePath);
-  window.dispatchEvent(
-    new CustomEvent(PRESENTATION_PREVIEW_EVENT, { detail: { filePath } })
-  );
-}
 
 const mediaItems = [
   { id: 'lyrics' as MediaType, label: 'Lyrics', icon: Music },
