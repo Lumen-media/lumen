@@ -15,7 +15,7 @@ pub struct LyricMetadata {
     pub auto_play: Option<bool>,
     pub interval_seconds: Option<f64>,
     pub repeat: Option<bool>,
-    pub animation: String,
+    pub animation: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -121,7 +121,7 @@ pub fn lyric_parse(content: String) -> Result<LyricData, String> {
         .and_then(|v| v.parse::<f64>().ok())
         .filter(|n| *n != 0.0);
     let repeat = value("repeat").map(|v| v == "true");
-    let animation = value("animation").unwrap_or_default();
+    let animation = value("animation");
 
     Ok(LyricData {
         metadata: LyricMetadata {
@@ -166,8 +166,10 @@ pub fn lyric_serialize(data: LyricData) -> Result<String, String> {
     if let Some(v) = metadata.repeat {
         lines.push(format!("repeat: {}", v));
     }
-    if !metadata.animation.is_empty() {
-        lines.push(format!("animation: {}", metadata.animation));
+    if let Some(v) = &metadata.animation {
+        if !v.is_empty() {
+            lines.push(format!("animation: {}", v));
+        }
     }
     lines.push("---".to_string());
 
