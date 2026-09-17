@@ -5,6 +5,7 @@ import { LucidePause, LucidePlay, LucideVolume2, LucideVolumeOff } from 'lucide-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
 import { formatTime } from '@/lib/format';
+import { createStreamSocket } from '@/lib/stream-socket';
 import { cn } from '@/lib/utils';
 import { lumenUrl } from '@/services/lumen-url';
 import { urlMediaService } from '@/services/url-media-service';
@@ -112,7 +113,7 @@ export const Videoplayer = ({
   };
 
   useEffect(() => {
-    const socket = new WebSocket('ws://localhost:8080');
+    const socket = createStreamSocket();
 
     socket.onopen = () => {
       setWs(socket);

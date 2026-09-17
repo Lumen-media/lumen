@@ -7,6 +7,7 @@ import { MarkdownPresentation } from '@/components/markdown-presentation';
 import { PptxPresentation } from '@/components/reveal-presentation';
 import { Videoplayer } from '@/components/ui/videoplayer';
 import { useProfiles } from '@/hooks/use-profiles';
+import { useStreamPreview } from '@/hooks/use-stream-preview';
 import { useScopedShortcuts } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
 import { lumenUrl } from '@/services/lumen-url';
@@ -19,98 +20,7 @@ import { useProfileStore } from '@/stores/profile-store';
 function StreamOverlay() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  useEffect(() => {
-    const pc = new RTCPeerConnection();
-    const ws = new WebSocket('ws://localhost:8080');
-    let closed = false;
-    let signalingMode: 'mobile_preview' | 'mobile' = 'mobile_preview';
-    let subscribed = false;
-    const videoStream = new MediaStream();
-
-    const attachVideo = (retries = 10) => {
-      if (closed) return;
-      const video = videoRef.current;
-      if (!video) {
-        if (retries > 0) window.setTimeout(() => attachVideo(retries - 1), 30);
-        return;
-      }
-      if (video.srcObject !== videoStream) video.srcObject = videoStream;
-      video.play().catch(() => { });
-    };
-
-    const send = (payload: Record<string, unknown>) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
-    };
-
-    pc.ontrack = (event) => {
-      if (event.track.kind === 'video') {
-        videoStream.getVideoTracks().forEach((t) => {
-          videoStream.removeTrack(t);
-        });
-        videoStream.addTrack(event.track);
-        attachVideo();
-        if (event.track.muted) event.track.onunmute = () => attachVideo();
-      }
-    };
-
-    pc.onicecandidate = (event) => {
-      if (!event.candidate) return;
-      send({
-        event: 'webrtc_ice_candidate',
-        stream_type: signalingMode,
-        candidate: event.candidate,
-      });
-    };
-
-    ws.onopen = () => {
-      if (closed) return;
-      subscribed = true;
-      send({ event: 'subscribe_stream', stream_type: 'mobile_preview' });
-    };
-
-    ws.onmessage = async (event) => {
-      try {
-        const payload = JSON.parse(event.data as string);
-
-        if (payload.event === 'mobile_offer') {
-          signalingMode = 'mobile';
-          if (subscribed) {
-            send({ event: 'unsubscribe_stream', stream_type: 'mobile_preview' });
-            subscribed = false;
-          }
-          await pc.setRemoteDescription({ type: 'offer', sdp: payload.sdp });
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          send({ event: 'mobile_answer', sdp: answer.sdp });
-          return;
-        }
-
-        if (payload.event === 'stream_offer' && payload.stream_type === 'mobile_preview') {
-          signalingMode = 'mobile_preview';
-          await pc.setRemoteDescription({ type: 'offer', sdp: payload.sdp });
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          send({ event: 'webrtc_answer', stream_type: 'mobile_preview', sdp: answer.sdp });
-          return;
-        }
-
-        if (
-          payload.event === 'stream_ice_candidate' &&
-          (payload.stream_type === 'mobile_preview' || payload.stream_type === 'mobile')
-        ) {
-          await pc.addIceCandidate(payload.candidate);
-        }
-      } catch { }
-    };
-
-    return () => {
-      closed = true;
-      if (subscribed) send({ event: 'unsubscribe_stream', stream_type: 'mobile_preview' });
-      ws.close();
-      pc.close();
-      if (videoRef.current) videoRef.current.srcObject = null;
-    };
-  }, []);
+  useStreamPreview({ videoRef });
 
   return (
     <video
