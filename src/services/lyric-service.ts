@@ -16,6 +16,7 @@ export interface LyricMetadata {
   autoPlay?: boolean;
   intervalSeconds?: number;
   repeat?: boolean;
+  animation?: string;
 }
 
 export interface LyricSlide {
