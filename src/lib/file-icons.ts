@@ -32,10 +32,17 @@ const EXTENSION_ICONS: Record<string, typeof File> = {
   '.pdf': FileText,
   '.ppt': Presentation,
   '.pptx': Presentation,
+  '.pptm': Presentation,
+  '.potx': Presentation,
+  '.ppsx': Presentation,
+  '.odp': Presentation,
+  '.key': Presentation,
   '.lrc': Music,
   '.srt': Music,
 };
 
-export function getFileIcon(extension: string) {
-  return EXTENSION_ICONS[extension?.toLowerCase()] ?? File;
+export function getFileIcon(extension?: string) {
+  const ext = extension?.toLowerCase();
+  const extWithDot = ext?.startsWith('.') ? ext : `.${ext}`;
+  return EXTENSION_ICONS[extWithDot] ?? File;
 }
