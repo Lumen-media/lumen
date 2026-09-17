@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { readTextFile } from '@tauri-apps/plugin-fs';
+import { animate, stagger } from 'animejs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
 import { useProfiles } from '@/hooks/use-profiles';
@@ -64,6 +65,7 @@ export function MarkdownPresentation({
   const [currentSlide, setCurrentSlide] = useState(startIndex);
   const [exiting, setExiting] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
+  const animRef = useRef<ReturnType<typeof animate> | null>(null);
   const startIndexRef = useRef(startIndex);
   startIndexRef.current = startIndex;
   const lyricDataRef = useRef(lyricData);
@@ -231,6 +233,45 @@ export function MarkdownPresentation({
     }
   });
 
+  const animation = lyricData?.metadata.animation || 'fade';
+
+  useIsomorphicLayoutEffect(() => {
+    const text = textRef.current;
+    if (!text || !slide) return;
+
+    if (exiting) {
+      animRef.current?.revert();
+      animRef.current = null;
+      return;
+    }
+
+    animRef.current?.revert();
+    const chars = text.querySelectorAll('.md-char');
+
+    if (animation === 'typewriter' && chars.length > 0) {
+      animRef.current = animate(chars, {
+        opacity: [0, 1],
+        translateY: [8, 0],
+        duration: 300,
+        delay: stagger(16, { start: 150 }),
+        easing: 'easeOutQuad',
+      });
+    } else if (animation === 'slide') {
+      animRef.current = animate(text, {
+        opacity: [0, 1],
+        translateY: ['2.5rem', '0rem'],
+        duration: 600,
+        easing: 'easeOutCubic',
+      });
+    } else {
+      animRef.current = animate(text, {
+        opacity: [0, 1],
+        duration: 500,
+        easing: 'easeOutCubic',
+      });
+    }
+  }, [animation, exiting, slide]);
+
   const globalBgSrc = useBackgroundSrc(
     useProfileWallpaper ? profileBackground : lyricData?.metadata.globalBackground || profileBackground
   );
@@ -273,7 +314,7 @@ export function MarkdownPresentation({
             ref={textRef}
             className={cn(
               'w-full text-white uppercase leading-relaxed font-semibold',
-              exiting ? 'md-verse-exit' : 'md-verse-enter'
+              exiting && 'md-verse-exit'
             )}
             style={{
               textAlign,
@@ -281,7 +322,15 @@ export function MarkdownPresentation({
             }}
           >
             {slide.lines.map((line, i) => (
-              <div key={`${currentSlide}-${i}`}>{line}</div>
+              <div key={`${currentSlide}-${i}`}>
+                {animation === 'typewriter'
+                  ? line.split('').map((ch, j) => (
+                      <span key={`${currentSlide}-${i}-${j}`} className="md-char">
+                        {ch}
+                      </span>
+                    ))
+                  : line}
+              </div>
             ))}
           </div>
         </div>
