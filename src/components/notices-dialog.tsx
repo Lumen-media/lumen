@@ -27,6 +27,13 @@ import { Dialog, DialogClose, DialogContent } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import { Separator } from './ui/separator';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 
@@ -170,6 +177,7 @@ const defaultValues = {
   alignment: ['center'],
   markdown: '',
   globalBackground: '',
+  animation: 'fade',
 };
 
 function buildLyricData(values: typeof defaultValues): LyricData {
@@ -183,6 +191,7 @@ function buildLyricData(values: typeof defaultValues): LyricData {
       fontSize: values.fontSize,
       alignment: values.alignment[0] || 'center',
       globalBackground: values.globalBackground,
+      animation: values.animation,
     },
     slides: slides.map((s) => ({
       lines: s.lines,
@@ -208,6 +217,7 @@ export const NoticesDialog = () => {
   const [alignment, setAlignment] = useState(['center']);
   const [markdown, setMarkdown] = useState('');
   const [globalBackground, setGlobalBackground] = useState('');
+  const [animation, setAnimation] = useState('fade');
 
   useEffect(() => {
     if (!isOpen) {
@@ -226,6 +236,7 @@ export const NoticesDialog = () => {
         setFontSize(data.metadata.fontSize);
         setAlignment([data.metadata.alignment || 'center']);
         setGlobalBackground(data.metadata.globalBackground);
+        setAnimation(data.metadata.animation || 'fade');
 
         const html = data.slides
           .map((s) => s.lines.map((l) => `<p>${l}</p>`).join(''))
@@ -247,8 +258,8 @@ export const NoticesDialog = () => {
   const fontOptions = fonts.map((f) => ({ label: f, value: f }));
 
   const persist = useCallback(
-    () => lyricService.saveNotices(buildLyricData({ font, fontSize, alignment, markdown, globalBackground })),
-    [font, fontSize, alignment, markdown, globalBackground]
+    () => lyricService.saveNotices(buildLyricData({ font, fontSize, alignment, markdown, globalBackground, animation })),
+    [font, fontSize, alignment, markdown, globalBackground, animation]
   );
 
   useEffect(() => {
@@ -348,6 +359,17 @@ export const NoticesDialog = () => {
               >
                 {t('Global Background')}
               </Button>
+
+              <Select value={animation} onValueChange={(val) => setAnimation(val ?? 'fade')}>
+                <SelectTrigger className="w-32 h-8 bg-background border-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="p-1">
+                  <SelectItem value="fade">{t('Fade')}</SelectItem>
+                  <SelectItem value="slide">{t('Slide')}</SelectItem>
+                  <SelectItem value="typewriter">{t('Typewriter')}</SelectItem>
+                </SelectContent>
+              </Select>
             </CardHeader>
             <Separator />
             <CardContent className="flex-1 overflow-hidden p-0">
