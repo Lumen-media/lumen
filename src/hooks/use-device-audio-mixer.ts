@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createStreamSocket } from '@/lib/stream-socket';
 
 interface AudioMixerDevice {
   device_id: string;
@@ -10,8 +11,6 @@ interface AudioConnection {
   stream: MediaStream;
   gain: GainNode;
 }
-
-const WS_URL = 'ws://localhost:8080';
 
 export function useDeviceAudioMixer(
   devices: AudioMixerDevice[],
@@ -95,7 +94,7 @@ export function useDeviceAudioMixer(
       gain.connect(masterGainRef.current);
 
       const pc = new RTCPeerConnection();
-      const ws = new WebSocket(WS_URL);
+      const ws = createStreamSocket();
       let closed = false;
 
       const send = (payload: Record<string, unknown>) => {
