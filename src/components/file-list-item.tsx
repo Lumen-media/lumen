@@ -18,6 +18,7 @@ import {
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { formatDate, formatFileSize } from '@/lib/format';
+import { getFileIcon } from '@/lib/file-icons';
 import { useTranslation } from '@/lib/i18n';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -69,46 +70,8 @@ function downloadStatusLabel(file: FileInfo, t: (key: string) => string): string
   }
 }
 
-const ICON_BY_EXT: Record<string, typeof File> = {
-  '.mp3': Headphones,
-  '.wav': Headphones,
-  '.ogg': Headphones,
-  '.flac': Headphones,
-  '.m4a': Headphones,
-  '.mp4': Video,
-  '.avi': Video,
-  '.mov': Video,
-  '.mkv': Video,
-  '.webm': Video,
-  '.jpg': ImageIcon,
-  '.jpeg': ImageIcon,
-  '.png': ImageIcon,
-  '.gif': ImageIcon,
-  '.webp': ImageIcon,
-  '.svg': ImageIcon,
-  '.txt': FileText,
-  '.md': FileText,
-  '.doc': FileText,
-  '.docx': FileText,
-  '.pdf': FileText,
-  '.ppt': Presentation,
-  '.pptx': Presentation,
-  '.pptm': Presentation,
-  '.potx': Presentation,
-  '.ppsx': Presentation,
-  '.odp': Presentation,
-  '.key': Presentation,
-  '.lrc': Music,
-  '.srt': Music,
-};
-
 function iconForMedia(mediaType: MediaType, extension?: string): typeof File {
-  if (mediaType === 'files' && extension) {
-    const ext = extension.toLowerCase();
-    const extWithDot = ext.startsWith('.') ? ext : `.${ext}`;
-    const found = ICON_BY_EXT[extWithDot];
-    if (found) return found;
-  }
+  if (mediaType === 'files' && extension) return getFileIcon(extension);
 
   if (mediaType === 'lyrics') return Music;
   if (mediaType === 'video') return Video;
