@@ -16,6 +16,13 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  clearPresentationPreview,
+  getPresentationPreviewPath,
+  PRESENTATION_PREVIEW_EVENT,
+  type PresentationPreviewEvent,
+  selectPresentationPreview,
+} from '@/lib/presentation-preview';
 import { ensureMediaWindow } from '@/lib/present-window';
 import { cn } from '@/lib/utils';
 import { type FileInfo, fileManagementService, presentationPreviewsCache } from '@/services';
@@ -25,9 +32,6 @@ export const Route = createFileRoute('/_layout/presentation')({
   component: RouteComponent,
 });
 
-const PRESENTATION_PREVIEW_STORAGE_KEY = 'lumen:presentation-preview-file';
-const PRESENTATION_PREVIEW_EVENT = 'lumen:presentation-preview-selected';
-
 type PreviewState = {
   filePath: string;
   fileName: string;
@@ -36,15 +40,8 @@ type PreviewState = {
   slides: PresentationSlide[];
 };
 
-type PresentationPreviewEvent = CustomEvent<{ filePath: string }>;
-
 function fileNameFromPath(filePath: string) {
   return filePath.split(/[\\/]/).pop() ?? filePath;
-}
-
-export function selectPresentationPreview(filePath: string) {
-  localStorage.setItem(PRESENTATION_PREVIEW_STORAGE_KEY, filePath);
-  window.dispatchEvent(new CustomEvent(PRESENTATION_PREVIEW_EVENT, { detail: { filePath } }));
 }
 
 function PresentationPreviewRenderer({
@@ -177,7 +174,7 @@ function RouteComponent() {
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<PreviewState | null>(() => {
-    const storedPath = localStorage.getItem(PRESENTATION_PREVIEW_STORAGE_KEY);
+    const storedPath = getPresentationPreviewPath();
     return storedPath
       ? {
         filePath: storedPath,
@@ -300,7 +297,7 @@ function RouteComponent() {
       return;
     }
 
-    localStorage.removeItem(PRESENTATION_PREVIEW_STORAGE_KEY);
+    clearPresentationPreview();
     setPreview(null);
   };
 
