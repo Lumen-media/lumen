@@ -1,4 +1,5 @@
 import { emit } from '@tauri-apps/api/event';
+import { getPresentationPreviewPath } from '@/lib/presentation-preview';
 import { router } from '@/lib/router';
 import { openPresentation } from '@/lib/present-window';
 import { fileManagementService } from '@/services';
@@ -9,8 +10,6 @@ import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { usePresentationStore } from '@/stores/presentation-store';
 import { useShortcutsSheetStore } from '@/stores/shortcuts-sheet-store';
 import type { ShortcutDefinition } from './types';
-
-const PRESENTATION_PREVIEW_STORAGE_KEY = 'lumen:presentation-preview-file';
 
 function goToLyricEditor(): void {
   useLyricModalStore.getState().open();
@@ -32,7 +31,7 @@ async function openPresentationFile(): Promise<void> {
 
 async function startPresentation(): Promise<void> {
   const { filePath } = usePresentationStore.getState();
-  const target = filePath ?? localStorage.getItem(PRESENTATION_PREVIEW_STORAGE_KEY);
+  const target = filePath ?? getPresentationPreviewPath();
   if (!target) return;
   await openPresentation(target);
 }
