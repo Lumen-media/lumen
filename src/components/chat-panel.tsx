@@ -18,6 +18,7 @@ import {
 import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown, type MarkdownComponents } from '@/components/markdown';
+import { formatDuration, formatFileSize } from '@/lib/format';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { ChatMessage, Reaction } from '@/services/chat-service';
@@ -387,16 +388,6 @@ function ReadIndicator({ read }: { read: boolean }) {
   ) : (
     <Check className="size-3 text-muted-foreground/50 shrink-0" />
   );
-}
-
-function formatDuration(seconds?: number): string {
-  if (!seconds || seconds <= 0) return '';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  return h > 0
-    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-    : `${m}:${String(s).padStart(2, '0')}`;
 }
 
 interface YouTubeMeta {
@@ -868,12 +859,6 @@ function groupReactions(reactions: Reaction[]): [string, number][] {
   const result = Array.from(counts.entries());
   groupReactionsCache.set(reactions, result);
   return result;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const pptThumbnailCache = new Map<string, string>();

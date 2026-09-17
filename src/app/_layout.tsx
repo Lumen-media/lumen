@@ -19,17 +19,11 @@ import { COOKIE_VALIDATION_CACHE_KEY, useDownloadStore } from '@/stores/download
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 import { useQueueStore } from '@/stores/queue-store';
 import { registerStoreCommand } from '@/app/store/store-app';
+import { formatDuration } from '@/lib/format';
 
 export const Route = createFileRoute('/_layout')({
   component: LayoutComponent,
 });
-
-function formatDuration(seconds?: number) {
-  if (!seconds) return '';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 function LayoutComponent() {
   const [savedLayout, setSavedLayout] = React.useState<Record<string, number> | undefined>(() => {

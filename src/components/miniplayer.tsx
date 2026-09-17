@@ -14,6 +14,7 @@ import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Slider } from '@/components/ui/slider';
+import { formatTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { mediaDbService } from '@/services/media-db-service';
 import { usePlayerStore } from '@/stores/player-store';
@@ -21,19 +22,6 @@ import { useQueueStore } from '@/stores/queue-store';
 
 interface MiniPlayerProps {
   className?: string;
-}
-
-function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
-  const totalSeconds = Math.floor(seconds);
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60)
-    .toString()
-    .padStart(2, '0');
-  const s = Math.floor(totalSeconds % 60)
-    .toString()
-    .padStart(2, '0');
-  return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
 }
 
 export function MiniPlayer({ className }: MiniPlayerProps) {
