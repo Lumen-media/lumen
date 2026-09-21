@@ -96,7 +96,7 @@ fn resolve_theme_path(file_path: &str) -> Result<PathBuf, (u16, String)> {
         .parse::<i64>()
         .map_err(|_| (400, "Bad Request: invalid theme id".to_string()))?;
 
-    let db_path = super::app_base_dir().map_err(|e| (500, e))?.join("lumen.db");
+    let db_path = crate::paths::db_path().map_err(|e| (500, e))?;
     let connection = Connection::open(db_path).map_err(|e| (500, e.to_string()))?;
     let path: String = connection
         .query_row(
@@ -110,11 +110,8 @@ fn resolve_theme_path(file_path: &str) -> Result<PathBuf, (u16, String)> {
     let canonical_theme_path = theme_path
         .canonicalize()
         .map_err(|e| (404, format!("Not Found: {e}")))?;
-let canonical_themes_dir = super::app_base_dir()
+    let canonical_themes_dir = crate::paths::media_dir("themes")
         .map_err(|e| (500, e))?
-        .join("files")
-        .join("media")
-        .join("themes")
         .canonicalize()
         .map_err(|e| (404, format!("Themes directory not found: {e}")))?;
 

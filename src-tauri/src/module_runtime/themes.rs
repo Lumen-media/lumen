@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager};
 
 use super::manifest::load_manifest;
 use super::net::check_url_allowed;
-use super::{app_base_dir, scoped_module_path, ModuleRuntime};
+use super::{scoped_module_path, ModuleRuntime};
 
 const IMAGE_EXTS: &[&str] = &["gif", "jpg", "jpeg", "png", "webp", "svg", "bmp", "avif"];
 const MAX_IMAGE_BYTES: usize = 50_000_000;
@@ -107,7 +107,7 @@ pub async fn module_theme_add(
         return Err(format!("unsupported image type: {ext}"));
     }
 
-    let db_path = app_base_dir()?.join("lumen.db");
+    let db_path = crate::paths::db_path()?;
     let connection = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
     let content_hash = blake3::hash(&bytes).to_hex().to_string();
@@ -133,8 +133,7 @@ pub async fn module_theme_add(
         return Ok(result);
     }
 
-    let base = app_base_dir()?;
-    let themes_dir = base.join("files").join("media").join("themes");
+    let themes_dir = crate::paths::media_dir("themes")?;
     std::fs::create_dir_all(&themes_dir).map_err(|e| e.to_string())?;
 
     let mut desired = sanitize_filename(input.name.as_deref().unwrap_or(&stem));
