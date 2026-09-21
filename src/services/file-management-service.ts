@@ -2,7 +2,13 @@ import { remove } from '@tauri-apps/plugin-fs';
 import { downloadService } from './download-service';
 import { fileInitService } from './file-init-service';
 import { mediaDbService } from './media-db-service';
-import type { DownloadProvider, DownloadQuality, FileInfo, MediaType } from './types';
+import type {
+  DownloadProvider,
+  DownloadQuality,
+  FileInfo,
+  MediaPoolListing,
+  MediaType,
+} from './types';
 import { urlMediaService } from './url-media-service';
 
 export interface FileManagementService {
@@ -14,13 +20,21 @@ export interface FileManagementService {
   listFiles(mediaType: MediaType): Promise<FileInfo[]>;
 
   /**
+   * List the folders and files of a specific subfolder (1 level) of a media type
+   * @param mediaType - The media type folder
+   * @param folder - Relative subfolder path ('' = root), '/' separated
+   */
+  listFolder(mediaType: MediaType, folder: string): Promise<MediaPoolListing>;
+
+  /**
    * Upload files to a specific media type folder
    * @param mediaType - The media type destination
    * @param filePaths - Array of source file paths to copy
+   * @param folder - Relative destination subfolder ('' = root)
    * @returns Promise resolving to array of successfully copied files
    * @throws Error if validation or copy fails
    */
-  uploadFiles(mediaType: MediaType, filePaths: string[]): Promise<FileInfo[]>;
+  uploadFiles(mediaType: MediaType, filePaths: string[], folder?: string): Promise<FileInfo[]>;
 
   /**
    * Open file picker dialog for selecting files
@@ -44,10 +58,24 @@ export interface FileManagementService {
   deleteFile(file: FileInfo): Promise<void>;
 
   /**
+   * Delete a subfolder recursively (files on disk + DB rows)
+   * @param mediaType - The media type folder
+   * @param folder - Relative subfolder path to delete
+   */
+  deleteFolder(mediaType: MediaType, folder: string): Promise<void>;
+
+  /**
    * Sync the DB with the actual filesystem for a media type, then return the updated list
    * @param mediaType - The media type folder to refresh
    */
   refreshFiles(mediaType: MediaType): Promise<FileInfo[]>;
+
+  /**
+   * Sync the DB with the actual filesystem for a media type, then return the listing of a subfolder
+   * @param mediaType - The media type folder to refresh
+   * @param folder - Relative subfolder path to return ('' = root)
+   */
+  refreshFolder(mediaType: MediaType, folder: string): Promise<MediaPoolListing>;
 
   /**
    * Add a supported URL as media without copying a local file.
@@ -101,8 +129,23 @@ class FileManagementServiceImpl implements FileManagementService {
     }
   }
 
-  async uploadFiles(mediaType: MediaType, filePaths: string[]): Promise<FileInfo[]> {
-    const results = await mediaDbService.uploadFiles(mediaType, filePaths);
+  async listFolder(mediaType: MediaType, folder: string): Promise<MediaPoolListing> {
+    try {
+      return await mediaDbService.listFolder(mediaType, folder);
+    } catch (error) {
+      console.error(`Failed to list folder "${folder}" for media type ${mediaType}:`, error);
+      throw new Error(
+        `Failed to list folder: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  async uploadFiles(
+    mediaType: MediaType,
+    filePaths: string[],
+    folder: string = ''
+  ): Promise<FileInfo[]> {
+    const results = await mediaDbService.uploadFiles(mediaType, filePaths, folder);
     const uploadedFiles = results.filter((r): r is { file: FileInfo } & typeof r => r.file !== null).map(
       (r) => r.file
     );
@@ -127,10 +170,20 @@ class FileManagementServiceImpl implements FileManagementService {
     await mediaDbService.deleteFile(file.path);
   }
 
+  async deleteFolder(mediaType: MediaType, folder: string): Promise<void> {
+    await mediaDbService.deleteFolder(mediaType, folder);
+  }
+
   async refreshFiles(mediaType: MediaType): Promise<FileInfo[]> {
     const fsFiles = await fileInitService.getFolderFiles(mediaType);
     await mediaDbService.syncMediaType(mediaType, fsFiles);
     return mediaDbService.listFiles(mediaType);
+  }
+
+  async refreshFolder(mediaType: MediaType, folder: string): Promise<MediaPoolListing> {
+    const fsFiles = await fileInitService.getFolderFiles(mediaType);
+    await mediaDbService.syncMediaType(mediaType, fsFiles);
+    return mediaDbService.listFolder(mediaType, folder);
   }
 
   async openFilePicker(mediaType: MediaType): Promise<string[] | null> {
