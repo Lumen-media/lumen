@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { ExternalLink, FolderOpen, FolderPlus, Trash2 } from 'lucide-react';
+import { ExternalLink, FolderOpen, FolderPlus, ListPlus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -16,9 +16,10 @@ interface FolderListItemProps {
   folder: MediaFolder;
   isFocused?: boolean;
   onClick: (folder: MediaFolder) => void;
+  onAddToQueue?: (folder: MediaFolder) => void;
 }
 
-export function FolderListItem({ folder, isFocused, onClick }: FolderListItemProps) {
+export function FolderListItem({ folder, isFocused, onClick, onAddToQueue }: FolderListItemProps) {
   const openDeleteDialog = useDeleteFolderStore((s) => s.openDeleteDialog);
 
   const handleDeleteClick = (e: React.MouseEvent) => {
@@ -70,6 +71,15 @@ export function FolderListItem({ folder, isFocused, onClick }: FolderListItemPro
           <ExternalLink className="h-4 w-4" aria-hidden="true" />
           Open folder
         </ContextMenuItem>
+        {onAddToQueue && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => onAddToQueue(folder)}>
+              <ListPlus className="h-4 w-4" aria-hidden="true" />
+              Add to queue
+            </ContextMenuItem>
+          </>
+        )}
         <ContextMenuSeparator />
         <ContextMenuItem onClick={handleDeleteClick} variant="destructive">
           <Trash2 className="h-4 w-4" aria-hidden="true" />
