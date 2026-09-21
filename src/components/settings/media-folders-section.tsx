@@ -107,6 +107,10 @@ export function MediaFoldersSection() {
 
   const confirmMigrate = async (mode: 'move' | 'copy' | 'none') => {
     if (!pendingType || !pendingPath) return;
+    if (mode === 'none') {
+      setDialogOpen(false);
+      return;
+    }
     await setMediaFolder({ mediaType: pendingType, path: pendingPath, migrate: mode });
     invalidateAppPathsCache();
     await load();
