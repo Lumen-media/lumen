@@ -9,6 +9,7 @@ mod lyrics;
 mod media;
 mod metadata;
 mod module_runtime;
+mod paths;
 mod presentation;
 mod profiles;
 mod queue;
@@ -439,6 +440,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            paths::init(app.handle()).expect("failed to resolve app paths");
+
             let runtime = ModuleRuntime::init(app.handle())
                 .expect("failed to initialize module runtime");
             app.manage(runtime);
@@ -585,6 +588,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .invoke_handler(tauri::generate_handler![
             get_exe_dir,
+            paths::get_app_paths,
+            paths::set_media_folder,
+            paths::restart_app,
             open_folder,
             create_window,
             create_overlay_window,
