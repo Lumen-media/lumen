@@ -503,6 +503,7 @@ pub async fn media_list(
 pub struct MediaFolderEntry {
     pub name: String,
     pub folder: String,
+    pub absolute_path: String,
 }
 
 #[derive(Serialize)]
@@ -564,9 +565,12 @@ pub async fn media_list_folder(
             format!("{folder}/{child}")
         };
         if seen.insert(child_folder.clone()) {
+            let absolute_path = media_folder_dir(&media_type, &child_folder)
+                .map_or_else(|_| String::new(), |p| p.to_string_lossy().to_string());
             folders.push(MediaFolderEntry {
                 name: child.to_string(),
                 folder: child_folder,
+                absolute_path,
             });
         }
     }
