@@ -1,8 +1,8 @@
-import { Folder, Trash2 } from 'lucide-react';
+import { FolderOpen, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { MediaFolder } from '@/services';
 import { useDeleteFolderStore } from '@/stores/delete-folder-store';
-import { cn } from '@/lib/utils';
 
 interface FolderListItemProps {
   folder: MediaFolder;
@@ -27,7 +27,7 @@ export function FolderListItem({ folder, isFocused, onClick }: FolderListItemPro
         aria-label={`Open folder ${folder.name}`}
       >
         <div className="flex items-center gap-3 w-full min-w-0">
-          <Folder className="size-5 text-muted-foreground shrink-0" aria-hidden="true" />
+          <FolderOpen className="size-5 text-muted-foreground shrink-0" aria-hidden="true" />
           <span className="font-medium truncate">{folder.name}</span>
         </div>
       </Button>
