@@ -1,7 +1,6 @@
-import { join } from '@tauri-apps/api/path';
 import { exists, mkdir } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
-import { getAppBasePath, getMediaBasePath } from './app-paths';
+import { getAppBasePath, getMediaTypePath as getResolvedMediaTypePath } from './app-paths';
 import { mediaDbService } from './media-db-service';
 import type { FileInfo, MediaType } from './types';
 
@@ -26,32 +25,8 @@ function toFileInfo(scanned: ScannedFile): FileInfo {
 }
 
 export interface FileInitService {
-  /**
-   * Initialize the media folder structure
-   * Creates files/media/ and all media type subdirectories
-   * @returns Promise resolving to success status
-   * @throws Error if folder creation fails
-   */
   initializeMediaFolders(): Promise<void>;
-
-  /**
-   * Get the base media directory path
-   * @returns Promise resolving to the media directory path
-   */
-  getMediaBasePath(): Promise<string>;
-
-  /**
-   * Get the path for a specific media type folder
-   * @param mediaType - The media type
-   * @returns Promise resolving to the media type folder path
-   */
   getMediaTypePath(mediaType: MediaType): Promise<string>;
-
-  /**
-   * Scan a media type folder and return its files in a single IPC call
-   * @param mediaType - The media type
-   * @returns Promise resolving to scanned file info entries
-   */
   getFolderFiles(mediaType: MediaType): Promise<FileInfo[]>;
 }
 
@@ -70,20 +45,14 @@ class FileInitServiceImpl implements FileInitService {
   async initializeMediaFolders(): Promise<void> {
     try {
       const basePath = await getAppBasePath();
-      const mediaPath = await getMediaBasePath();
-
       if (!(await exists(basePath))) {
         await mkdir(basePath, { recursive: true });
       }
 
-      if (!(await exists(mediaPath))) {
-        await mkdir(mediaPath, { recursive: true });
-      }
-
       for (const mediaType of this.MEDIA_TYPES) {
-        const mediaTypePath = await join(mediaPath, mediaType);
+        const mediaTypePath = await getResolvedMediaTypePath(mediaType);
         if (!(await exists(mediaTypePath))) {
-          await mkdir(mediaTypePath);
+          await mkdir(mediaTypePath, { recursive: true });
         }
       }
 
@@ -113,19 +82,12 @@ class FileInitServiceImpl implements FileInitService {
     return scanned.map(toFileInfo);
   }
 
-  async getMediaBasePath(): Promise<string> {
-    return getMediaBasePath();
-  }
-
   async getMediaTypePath(mediaType: MediaType): Promise<string> {
     try {
-      const mediaPath = await getMediaBasePath();
-      const mediaTypePath = await join(mediaPath, mediaType);
-
+      const mediaTypePath = await getResolvedMediaTypePath(mediaType);
       if (!(await exists(mediaTypePath))) {
         await mkdir(mediaTypePath, { recursive: true });
       }
-
       return mediaTypePath;
     } catch (error) {
       console.error(`Failed to get path for media type ${mediaType}:`, error);
