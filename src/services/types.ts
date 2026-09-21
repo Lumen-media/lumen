@@ -31,6 +31,7 @@ export interface FileInfo {
 export interface MediaFolder {
   name: string;
   folder: string;
+  absolutePath: string;
 }
 
 export interface MediaPoolListing {
