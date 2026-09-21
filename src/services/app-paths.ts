@@ -1,56 +1,55 @@
 import { invoke } from '@tauri-apps/api/core';
 import { join } from '@tauri-apps/api/path';
+import type { MediaType } from './types';
 
-let _basePath: string | null = null;
-
-/**
- * Base directory for all app data (media files + database).
- * Derived from the executable's directory so data always lives
- * alongside the app, regardless of drive or OS:
- *   Windows (installed at C:\lumen\): C:\lumen\lumen\
- *   Dev mode:                         src-tauri\target\debug\lumen\
- *
- * Centralised here so changing one value moves everything together.
- */
-export async function getAppBasePath(): Promise<string> {
-  if (!_basePath) {
-    const exeDir = await invoke<string>('get_exe_dir');
-    _basePath = await join(exeDir, 'lumen');
-  }
-  return _basePath;
+export interface AppPaths {
+  base: string;
+  db: string;
+  media: Record<MediaType, string>;
 }
 
-export async function getMediaBasePath(): Promise<string> {
-  const base = await getAppBasePath();
-  return join(base, 'files', 'media');
+let _paths: AppPaths | null = null;
+
+export async function getAppPaths(): Promise<AppPaths> {
+  if (!_paths) {
+    _paths = await invoke<AppPaths>('get_app_paths');
+  }
+  return _paths;
+}
+
+export function invalidateAppPathsCache(): void {
+  _paths = null;
+}
+
+export async function getAppBasePath(): Promise<string> {
+  return (await getAppPaths()).base;
+}
+
+export async function getMediaTypePath(mediaType: MediaType): Promise<string> {
+  return (await getAppPaths()).media[mediaType];
 }
 
 export async function getThemesPath(): Promise<string> {
-  return join(await getMediaBasePath(), 'themes');
+  return (await getAppPaths()).media.themes;
 }
 
 export async function getProfilesPath(): Promise<string> {
-  const base = await getAppBasePath();
-  return join(base, 'config', 'profiles');
+  return join(await getAppBasePath(), 'config', 'profiles');
 }
 
 export async function getQuickPresentationPath(): Promise<string> {
-  const base = await getAppBasePath();
-  return join(base, 'config', 'quick-presentation.md');
+  return join(await getAppBasePath(), 'config', 'quick-presentation.md');
 }
 
 export async function getNoticesPath(): Promise<string> {
-  const base = await getAppBasePath();
-  return join(base, 'config', 'notices.md');
+  return join(await getAppBasePath(), 'config', 'notices.md');
 }
 
 export async function getNotesPath(): Promise<string> {
-  const base = await getAppBasePath();
-  return join(base, 'files', 'notes');
+  return join(await getAppBasePath(), 'files', 'notes');
 }
 
 export async function getDbPath(): Promise<string> {
-  const base = await getAppBasePath();
-  const dbFile = await join(base, 'lumen.db');
-  return `sqlite:${dbFile.replace(/\\/g, '/')}`;
+  const db = (await getAppPaths()).db;
+  return `sqlite:${db.replace(/\\/g, '/')}`;
 }
