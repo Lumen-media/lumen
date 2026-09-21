@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { useAppSettingsStore } from '@/stores/app-settings-store';
 import { useChatStore } from '@/stores/chat-store';
 import { useStreamingStore } from '@/stores/streaming-store';
+import { MediaFoldersSection } from './media-folders-section';
 import { CardContent } from '../ui/card';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -277,7 +278,10 @@ export function AdvancedSection() {
             </SelectContent>
           </Select>
         </CardContent>
-      </CardContent>
-    </div>
-  );
-}
+        </CardContent>
+        <CardContent variant="muted" className="gap-3 p-4 rounded-xl">
+          <MediaFoldersSection />
+        </CardContent>
+      </div>
+    );
+  }
