@@ -221,11 +221,11 @@ fn row_from_media(row: &Row<'_>) -> rusqlite::Result<MediaRow> {
         duration: row.get(7)?,
         artist: row.get(8)?,
         content: row.get(9)?,
-        original_url: row.get(11)?,
-        thumbnail_path: row.get(12)?,
-        remote_thumbnail_url: row.get(13)?,
-        download_status: row.get(14)?,
-        folder: row.get(15)?,
+        original_url: row.get(10)?,
+        thumbnail_path: row.get(11)?,
+        remote_thumbnail_url: row.get(12)?,
+        download_status: row.get(13)?,
+        folder: row.get(14)?,
     })
 }
 
@@ -289,6 +289,20 @@ fn query_rows(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
     Ok(rows)
+}
+
+fn query_folder_names(
+    conn: &Connection,
+    sql: &str,
+    params: &[&dyn rusqlite::ToSql],
+) -> Result<Vec<String>, String> {
+    let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+    let names = stmt
+        .query_map(params, |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(names)
 }
 
 fn default_download_status(file: &MediaFileInput) -> String {
@@ -404,7 +418,7 @@ fn search_media_rows(
     }
 
     let sql = format!(
-        "SELECT * FROM media_files WHERE {} ORDER BY name COLLATE NOCASE LIMIT ?{}",
+        "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE {} ORDER BY name COLLATE NOCASE LIMIT ?{}",
         conditions.join(" AND "),
         params.len() + 1
     );
@@ -430,7 +444,7 @@ pub async fn media_sync_type(
 
     let existing = query_rows(
         &conn,
-        "SELECT * FROM media_files WHERE media_type = ?1 AND extension != 'url'",
+        "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE media_type = ?1 AND extension != 'url'",
         &[&media_type],
     )?;
     let mut existing_paths: Vec<String> = existing.iter().map(|r| r.path.clone()).collect();
@@ -467,12 +481,12 @@ pub async fn media_list(
 
     let (sql, rows) = if media_type == "files" {
         (
-            "SELECT * FROM media_files WHERE media_type IN ('files', 'presentation') ORDER BY name COLLATE NOCASE",
+            "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE media_type IN ('files', 'presentation') ORDER BY name COLLATE NOCASE",
             None,
         )
     } else {
         (
-            "SELECT * FROM media_files WHERE media_type = ?1 ORDER BY name COLLATE NOCASE",
+            "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE media_type = ?1 ORDER BY name COLLATE NOCASE",
             Some(&media_type),
         )
     };
@@ -509,7 +523,9 @@ pub async fn media_list_folder(
 
     let file_rows = query_rows(
         &conn,
-        "SELECT * FROM media_files WHERE media_type = ?1 AND folder = ?2 ORDER BY name COLLATE NOCASE",
+        &format!(
+            "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE media_type = ?1 AND folder = ?2 ORDER BY name COLLATE NOCASE"
+        ),
         &[&media_type, &folder],
     )?;
     let files = file_rows.iter().map(file_info_from_row).collect();
@@ -532,12 +548,12 @@ pub async fn media_list_folder(
         params.push(rusqlite::types::Value::Text(pattern.clone()));
     }
     let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
-    let folder_rows = query_rows(&conn, sql, refs.as_slice())?;
+    let folder_names = query_folder_names(&conn, sql, refs.as_slice())?;
 
     let mut folders: Vec<MediaFolderEntry> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-    for row in folder_rows {
-        let rest = row.folder.strip_prefix(&folder).unwrap_or(&row.folder);
+    for name in folder_names {
+        let rest = name.strip_prefix(&folder).unwrap_or(&name);
         let child = rest.trim_start_matches('/').split('/').next().unwrap_or("");
         if child.is_empty() {
             continue;
@@ -567,7 +583,7 @@ pub async fn media_search_files(
 ) -> Result<Vec<MediaFileInfo>, String> {
     let conn = store.conn.lock().await;
     let like = format!("%{}%", escape_like(&query));
-    let sql = "SELECT * FROM media_files WHERE media_type = ?1 AND name LIKE ?2 ESCAPE '#' ORDER BY name COLLATE NOCASE";
+    let sql = "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE media_type = ?1 AND name LIKE ?2 ESCAPE '#' ORDER BY name COLLATE NOCASE";
     let rows = query_rows(&conn, sql, &[&media_type, &like])?;
     Ok(rows.iter().map(file_info_from_row).collect())
 }
@@ -602,7 +618,7 @@ pub async fn media_insert_url(
         let canonical = parsed.canonical_url.clone();
         let rows = query_rows(
             &conn,
-            "SELECT * FROM media_files WHERE original_url = ?1 OR original_url = ?2 OR path = ?2 LIMIT 1",
+            "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE original_url = ?1 OR original_url = ?2 OR path = ?2 LIMIT 1",
             &[&url, &canonical],
         )?;
         if let Some(row) = rows.first() {
@@ -632,7 +648,7 @@ pub async fn media_insert_url(
 
     let rows = query_rows(
         &conn,
-        "SELECT * FROM media_files WHERE path = ?1 LIMIT 1",
+        "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE path = ?1 LIMIT 1",
         &[&file.path],
     )?;
     rows.first()
@@ -678,7 +694,7 @@ pub async fn media_search_multi(
     for media_type in &media_types {
         let rows = if trimmed.is_empty() {
             let sql =
-                "SELECT * FROM media_files WHERE media_type = ?1 ORDER BY name COLLATE NOCASE LIMIT ?2";
+                "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE media_type = ?1 ORDER BY name COLLATE NOCASE LIMIT ?2";
             query_rows(&conn, sql, &[media_type, &limit_per_group])?
         } else {
             search_media_rows(&conn, trimmed, full_content, Some(media_type), limit_per_group)?
@@ -871,7 +887,7 @@ pub async fn media_upload_files(
             Ok(()) => {
                 let rows = query_rows(
                     &conn,
-                    "SELECT * FROM media_files WHERE path = ?1 LIMIT 1",
+                    "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE path = ?1 LIMIT 1",
                     &[&file.path],
                 )?;
                 let info = rows.first().map(file_info_from_row);
@@ -902,7 +918,7 @@ pub async fn media_list_by_type(
 ) -> Result<Vec<SearchHit>, String> {
     let conn = store.conn.lock().await;
     let limit = limit.unwrap_or(50);
-    let sql = "SELECT * FROM media_files WHERE media_type = ?1 ORDER BY name COLLATE NOCASE LIMIT ?2";
+    let sql = "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE media_type = ?1 ORDER BY name COLLATE NOCASE LIMIT ?2";
     let rows = query_rows(&conn, sql, &[&media_type, &limit])?;
     Ok(rows.iter().map(search_hit_from_row).collect())
 }
@@ -913,7 +929,7 @@ pub async fn media_get_by_id(
     id: i64,
 ) -> Result<Option<SearchHit>, String> {
     let conn = store.conn.lock().await;
-    let rows = query_rows(&conn, "SELECT * FROM media_files WHERE id = ?1", &[&id])?;
+    let rows = query_rows(&conn, "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE id = ?1", &[&id])?;
     Ok(rows.first().map(search_hit_from_row))
 }
 
@@ -923,7 +939,7 @@ pub async fn media_get_by_path(
     path: String,
 ) -> Result<Option<SearchHit>, String> {
     let conn = store.conn.lock().await;
-    let rows = query_rows(&conn, "SELECT * FROM media_files WHERE path = ?1", &[&path])?;
+    let rows = query_rows(&conn, "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE path = ?1", &[&path])?;
     Ok(rows.first().map(search_hit_from_row))
 }
 
@@ -933,7 +949,7 @@ pub async fn media_get_file_info_by_path(
     path: String,
 ) -> Result<Option<MediaFileInfo>, String> {
     let conn = store.conn.lock().await;
-    let rows = query_rows(&conn, "SELECT * FROM media_files WHERE path = ?1", &[&path])?;
+    let rows = query_rows(&conn, "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE path = ?1", &[&path])?;
     Ok(rows.first().map(file_info_from_row))
 }
 
@@ -947,7 +963,7 @@ pub async fn media_get_file_info_by_original_url(
     let canonical = canonical_url.unwrap_or_else(|| canonicalize_youtube_url(&original_url));
     let rows = query_rows(
         &conn,
-        "SELECT * FROM media_files WHERE original_url = ?1 OR original_url = ?2 OR path = ?2 LIMIT 1",
+        "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE original_url = ?1 OR original_url = ?2 OR path = ?2 LIMIT 1",
         &[&original_url, &canonical],
     )?;
     Ok(rows.first().map(file_info_from_row))
