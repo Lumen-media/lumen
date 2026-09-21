@@ -8,6 +8,7 @@ import type { FileInfo, MediaType } from './types';
 interface ScannedFile {
   name: string;
   path: string;
+  folder: string;
   size: number;
   modifiedAt: number;
   extension: string;
@@ -20,6 +21,7 @@ function toFileInfo(scanned: ScannedFile): FileInfo {
     size: scanned.size,
     modifiedAt: new Date(scanned.modifiedAt),
     extension: scanned.extension,
+    folder: scanned.folder,
   };
 }
 

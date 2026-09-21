@@ -18,6 +18,7 @@ export interface FileInfo {
   size: number;
   modifiedAt: Date;
   extension: string;
+  folder?: string;
   duration?: number;
   title?: string;
   artist?: string;
@@ -25,6 +26,16 @@ export interface FileInfo {
   thumbnailPath?: string;
   remoteThumbnailUrl?: string;
   downloadStatus?: DownloadStatus;
+}
+
+export interface MediaFolder {
+  name: string;
+  folder: string;
+}
+
+export interface MediaPoolListing {
+  folders: MediaFolder[];
+  files: FileInfo[];
 }
 
 export interface FileUploadResult {
