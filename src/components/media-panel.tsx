@@ -128,6 +128,27 @@ export function MediaPanel() {
     [addToQueue]
   );
 
+  const handleFolderAddToQueue = useCallback(
+    async (folder: MediaFolder) => {
+      if (!activeMedia) return;
+      try {
+        const listing = await fileManagementService.listFolder(activeMedia, folder.folder);
+        if (listing.files.length === 0) {
+          toast.info('Folder has no files to queue');
+          return;
+        }
+        for (const file of listing.files) {
+          await addToQueue(file);
+        }
+        toast.success(`Added ${listing.files.length} file(s) to queue`);
+      } catch (error) {
+        console.error('Failed to add folder to queue:', error);
+        toast.error('Failed to add folder to queue');
+      }
+    },
+    [activeMedia, addToQueue]
+  );
+
   const [searchQuery, setSearchQuery] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [folders, setFolders] = useState<MediaFolder[]>([]);
@@ -579,6 +600,7 @@ export function MediaPanel() {
                                 folder={item.folder}
                                 isFocused={virtualItem.index === focusedIndex}
                                 onClick={handleEnterFolder}
+                                onAddToQueue={handleFolderAddToQueue}
                               />
                             ) : (
                               <FileListItem
