@@ -4,6 +4,8 @@ export type { FileManagementService } from './file-management-service';
 export { fileManagementService } from './file-management-service';
 
 export { mediaDbService } from './media-db-service';
+export type { MigrationMode } from './media-folder-settings';
+export { getMediaFolders, setMediaFolder, restartApp } from './media-folder-settings';
 export type { QueueDbItem } from './queue-db-service';
 export { queueDbService } from './queue-db-service';
 export type {
