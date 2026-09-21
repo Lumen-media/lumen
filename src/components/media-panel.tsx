@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   ArrowLeft,
+  ChevronRight,
   FileText,
   FolderOpen,
   Headphones,
@@ -11,10 +12,12 @@ import {
   Search,
   Video,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DeleteFileAlert } from '@/components/delete-file-alert';
+import { DeleteFolderAlert } from '@/components/delete-folder-alert';
 import { FileListItem } from '@/components/file-list-item';
+import { FolderListItem } from '@/components/folder-list-item';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -23,9 +26,17 @@ import { ensureMediaWindow } from '@/lib/present-window';
 import { selectPresentationPreview } from '@/lib/presentation-preview';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { type FileInfo, fileInitService, fileManagementService, type MediaType } from '@/services';
+import {
+  type FileInfo,
+  fileInitService,
+  fileManagementService,
+  type MediaFolder,
+  mediaDbService,
+  type MediaType,
+} from '@/services';
 import { useLyricEditStore } from '@/stores/lyric-edit-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
+import { useDeleteFolderStore } from '@/stores/delete-folder-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { usePresentationStore } from '@/stores/presentation-store';
 import { useQueueStore } from '@/stores/queue-store';
@@ -79,8 +90,12 @@ export function MediaPanel() {
       const ext = file.extension?.toLowerCase() ?? '';
       const extWithDot = ext.startsWith('.') ? ext : `.${ext}`;
       const isPpt = extWithDot === '.ppt' || extWithDot === '.pptx';
-      const isUnsupportedPres = extWithDot === '.odp' || extWithDot === '.pptm' ||
-        extWithDot === '.ppsx' || extWithDot === '.potx' || extWithDot === '.key';
+      const isUnsupportedPres =
+        extWithDot === '.odp' ||
+        extWithDot === '.pptm' ||
+        extWithDot === '.ppsx' ||
+        extWithDot === '.potx' ||
+        extWithDot === '.key';
       if (activeMedia === 'presentation' || (activeMedia === 'files' && isPpt)) {
         openPresentation(file.path);
       } else if (activeMedia === 'files' && isUnsupportedPres) {
@@ -115,12 +130,39 @@ export function MediaPanel() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [files, setFiles] = useState<FileInfo[]>([]);
+  const [folders, setFolders] = useState<MediaFolder[]>([]);
+  const [currentFolder, setCurrentFolder] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const [isInitialized, setIsInitialized] = useState(false);
   const announce = useAnnounce();
   const parentRef = useRef<HTMLDivElement>(null);
+
+  const searching = searchQuery.trim().length > 0;
+
+  const items = useMemo(() => {
+    if (searching) {
+      return files.map((file) => ({ kind: 'file', key: `file:${file.path}`, file }) as const);
+    }
+    return [
+      ...folders.map(
+        (folder) => ({ kind: 'folder', key: `folder:${folder.folder}`, folder }) as const
+      ),
+      ...files.map((file) => ({ kind: 'file', key: `file:${file.path}`, file }) as const),
+    ];
+  }, [searching, folders, files]);
+
+  const handleEnterFolder = useCallback((folder: MediaFolder) => {
+    setSearchQuery('');
+    setCurrentFolder(folder.folder);
+    setFocusedIndex(-1);
+  }, []);
+
+  const handleFolderDeleted = useCallback((folder: MediaFolder) => {
+    setFolders((prevFolders) => prevFolders.filter((f) => f.folder !== folder.folder));
+    setFocusedIndex(-1);
+  }, []);
 
   useEffect(() => {
     const initializeFolders = async () => {
@@ -142,51 +184,58 @@ export function MediaPanel() {
   }, []);
 
   const virtualizer = useVirtualizer({
-    count: files.length,
+    count: items.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 80,
     overscan: 6,
     measureElement: (el) => el.getBoundingClientRect().height,
-    getItemKey: (index) => files[index]?.path ?? index,
+    getItemKey: (index) => items[index]?.key ?? index,
   });
 
   useEffect(() => {
     virtualizer.measure();
   }, [virtualizer]);
 
-  const loadFiles = useCallback(
-    async (mediaType: MediaType) => {
-      setIsLoading(true);
-      setError(null);
-      announce('Loading files...');
+  const loadFiles = useCallback(async () => {
+    if (!activeMedia) return;
+    setIsLoading(true);
+    setError(null);
+    const query = searchQuery.trim();
+    announce(query ? 'Searching...' : 'Loading files...');
 
-      try {
-        const loadedFiles = await fileManagementService.listFiles(mediaType);
-        setFiles(loadedFiles);
-        announce(`Loaded ${loadedFiles.length} file${loadedFiles.length !== 1 ? 's' : ''}`);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load files';
-        setError(errorMessage);
-        console.error('Error loading files:', err);
-        toast.error('Failed to load files. Click retry to try again.');
-        announce('Failed to load files');
-      } finally {
-        setIsLoading(false);
+    try {
+      if (query) {
+        const hits = await mediaDbService.searchFiles(activeMedia, query);
+        setFiles(hits);
+        setFolders([]);
+        announce(`Found ${hits.length} result${hits.length !== 1 ? 's' : ''}`);
+      } else {
+        const listing = await fileManagementService.listFolder(activeMedia, currentFolder);
+        setFolders(listing.folders);
+        setFiles(listing.files);
+        announce(`Loaded ${listing.files.length} file${listing.files.length !== 1 ? 's' : ''}`);
       }
-    },
-    [announce]
-  );
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load files';
+      setError(errorMessage);
+      console.error('Error loading files:', err);
+      toast.error('Failed to load files. Click retry to try again.');
+      announce('Failed to load files');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeMedia, currentFolder, searchQuery, announce]);
 
   useEffect(() => {
     if (activeMedia && isInitialized) {
-      loadFiles(activeMedia);
+      loadFiles();
     }
   }, [activeMedia, isInitialized, loadFiles]);
 
   useEffect(() => {
     const onFilesChanged = () => {
       if (activeMedia) {
-        loadFiles(activeMedia);
+        loadFiles();
       }
     };
     window.addEventListener('lumen:media-files-changed', onFilesChanged);
@@ -194,22 +243,39 @@ export function MediaPanel() {
   }, [activeMedia, loadFiles]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!activeMedia || files.length === 0) return;
+    if (!activeMedia || items.length === 0) return;
 
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setFocusedIndex((prev) => (prev < files.length - 1 ? prev + 1 : prev));
+        setFocusedIndex((prev) => (prev < items.length - 1 ? prev + 1 : prev));
         break;
       case 'ArrowUp':
         e.preventDefault();
         setFocusedIndex((prev) => (prev > 0 ? prev - 1 : -1));
         break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        handleBack();
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (focusedIndex >= 0) {
+          const focused = items[focusedIndex];
+          if (focused.kind === 'folder') {
+            handleEnterFolder(focused.folder);
+          }
+        }
+        break;
       case 'Delete':
         e.preventDefault();
         if (focusedIndex >= 0) {
-          const fileToDelete = files[focusedIndex];
-          handleDeleteFile(fileToDelete);
+          const focused = items[focusedIndex];
+          if (focused.kind === 'folder') {
+            useDeleteFolderStore.getState().openDeleteDialog(focused.folder);
+          } else {
+            handleDeleteFile(focused.file);
+          }
         }
         break;
     }
@@ -221,7 +287,7 @@ export function MediaPanel() {
       await remove(file.path);
       toast.success(`${file.name} removed`);
       if (activeMedia) {
-        loadFiles(activeMedia);
+        loadFiles();
       }
     } catch (error) {
       console.error('Failed to delete file:', error);
@@ -235,7 +301,7 @@ export function MediaPanel() {
 
   const handleRetry = () => {
     if (activeMedia) {
-      loadFiles(activeMedia);
+      loadFiles();
     }
   };
 
@@ -243,8 +309,9 @@ export function MediaPanel() {
     if (!activeMedia) return;
     setIsLoading(true);
     try {
-      const refreshed = await fileManagementService.refreshFiles(activeMedia);
-      setFiles(refreshed);
+      const listing = await fileManagementService.refreshFolder(activeMedia, currentFolder);
+      setFolders(listing.folders);
+      setFiles(listing.files);
       toast.success('Folder synced', {
         id: 'sync',
       });
@@ -259,7 +326,20 @@ export function MediaPanel() {
   };
 
   const handleBack = () => {
+    if (searching) {
+      setSearchQuery('');
+      return;
+    }
+    if (currentFolder) {
+      const segments = currentFolder.split('/');
+      segments.pop();
+      setCurrentFolder(segments.join('/'));
+      setFocusedIndex(-1);
+      return;
+    }
     setActiveMedia(null);
+    setCurrentFolder('');
+    setFocusedIndex(-1);
   };
 
   const handleAddFiles = async () => {
@@ -275,9 +355,13 @@ export function MediaPanel() {
       setIsLoading(true);
       announce(`Uploading ${selectedPaths.length} file${selectedPaths.length !== 1 ? 's' : ''}...`);
 
-      const uploadedFiles = await fileManagementService.uploadFiles(activeMedia, selectedPaths);
+      const uploadedFiles = await fileManagementService.uploadFiles(
+        activeMedia,
+        selectedPaths,
+        currentFolder
+      );
 
-      await loadFiles(activeMedia);
+      await loadFiles();
 
       const successMessage = `${uploadedFiles.length} file(s) added successfully`;
       toast.success(successMessage);
@@ -294,6 +378,8 @@ export function MediaPanel() {
   };
 
   const currentItem = mediaItems.find((item) => item.id === activeMedia);
+
+  const folderSegments = currentFolder ? currentFolder.split('/') : [];
 
   return (
     <>
@@ -345,19 +431,61 @@ export function MediaPanel() {
         {activeMedia && currentItem ? (
           <>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={handleBack}
                   className="shrink-0"
-                  aria-label="Go back to media categories"
+                  aria-label={t('Go back')}
                 >
                   <ArrowLeft className="size-5" aria-hidden="true" />
                 </Button>
-                <h2 className="font-semibold text-base" id="media-type-heading">
+                <h2 id="media-type-heading" className="sr-only">
                   {currentItem.label}
                 </h2>
+                <nav
+                  className="flex items-center gap-1 min-w-0 overflow-hidden text-sm"
+                  aria-label={t('Folder path')}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setCurrentFolder('');
+                      setFocusedIndex(-1);
+                    }}
+                    className="font-semibold whitespace-nowrap hover:underline"
+                  >
+                    {currentItem.label}
+                  </button>
+                  {folderSegments.map((segment, index) => {
+                    const path = folderSegments.slice(0, index + 1).join('/');
+                    const isCurrent = index === folderSegments.length - 1;
+                    return (
+                      <Fragment key={path}>
+                        <ChevronRight
+                          className="size-3.5 text-muted-foreground shrink-0"
+                          aria-hidden="true"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setCurrentFolder(path);
+                            setFocusedIndex(-1);
+                          }}
+                          className={cn(
+                            'truncate max-w-44 whitespace-nowrap',
+                            isCurrent ? 'font-semibold' : 'text-muted-foreground hover:underline'
+                          )}
+                        >
+                          {segment}
+                        </button>
+                      </Fragment>
+                    );
+                  })}
+                </nav>
               </div>
               <Button
                 size="icon"
@@ -406,7 +534,7 @@ export function MediaPanel() {
                     {t('Retry')}
                   </Button>
                 </div>
-              ) : files.length === 0 ? (
+              ) : folders.length === 0 && files.length === 0 ? (
                 <div className="flex items-center justify-center h-32" role="status">
                   <p className="text-muted-foreground">
                     {searchQuery ? t('No files match your search') : t('No files in this folder')}
@@ -430,44 +558,58 @@ export function MediaPanel() {
                       position: 'relative',
                     }}
                   >
-                    {virtualizer.getVirtualItems().map((virtualItem) => (
-                      <div
-                        key={virtualItem.key}
-                        ref={virtualizer.measureElement}
-                        data-index={virtualItem.index}
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          transform: `translateY(${virtualItem.start}px)`,
-                        }}
-                      >
-                        <div className="px-2 py-1">
-                          <FileListItem
-                            file={files[virtualItem.index]}
-                            mediaType={activeMedia}
-                            isFocused={virtualItem.index === focusedIndex}
-                            onClick={(file) => {
-                              if (activeMedia === 'lyrics') {
-                                useLyricEditStore.getState().loadLyric(file.path);
-                              }
+                    {virtualizer.getVirtualItems().map((virtualItem) => {
+                      const item = items[virtualItem.index];
+                      return (
+                        <div
+                          key={virtualItem.key}
+                          ref={virtualizer.measureElement}
+                          data-index={virtualItem.index}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            transform: `translateY(${virtualItem.start}px)`,
+                          }}
+                        >
+                          <div className="px-2 py-1">
+                            {item.kind === 'folder' ? (
+                              <FolderListItem
+                                folder={item.folder}
+                                isFocused={virtualItem.index === focusedIndex}
+                                onClick={handleEnterFolder}
+                              />
+                            ) : (
+                              <FileListItem
+                                file={item.file}
+                                mediaType={activeMedia}
+                                isFocused={virtualItem.index === focusedIndex}
+                                onClick={(file) => {
+                                  if (activeMedia === 'lyrics') {
+                                    useLyricEditStore.getState().loadLyric(file.path);
+                                  }
 
-                              const ext = file.extension?.toLowerCase() ?? '';
-                              const extWithDot = ext.startsWith('.') ? ext : `.${ext}`;
-                              const isPpt = extWithDot === '.ppt' || extWithDot === '.pptx';
-                              if (activeMedia === 'presentation' || (activeMedia === 'files' && isPpt)) {
-                                activatePresentation(file.path);
-                              }
-                            }}
-                            onDoubleClick={handleFileDoubleClick}
-                            onEdit={activeMedia === 'lyrics' ? handleFileEdit : undefined}
-                            onPlayNext={handlePlayNext}
-                            onAddToQueue={handleAddToQueue}
-                          />
+                                  const ext = file.extension?.toLowerCase() ?? '';
+                                  const extWithDot = ext.startsWith('.') ? ext : `.${ext}`;
+                                  const isPpt = extWithDot === '.ppt' || extWithDot === '.pptx';
+                                  if (
+                                    activeMedia === 'presentation' ||
+                                    (activeMedia === 'files' && isPpt)
+                                  ) {
+                                    activatePresentation(file.path);
+                                  }
+                                }}
+                                onDoubleClick={handleFileDoubleClick}
+                                onEdit={activeMedia === 'lyrics' ? handleFileEdit : undefined}
+                                onPlayNext={handlePlayNext}
+                                onAddToQueue={handleAddToQueue}
+                              />
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               )}
@@ -496,6 +638,7 @@ export function MediaPanel() {
         )}
       </Card>
       <DeleteFileAlert onDelete={handleFileDeleted} />
+      <DeleteFolderAlert mediaType={activeMedia} onDelete={handleFolderDeleted} />
     </>
   );
 }
