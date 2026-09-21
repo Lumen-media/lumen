@@ -24,20 +24,12 @@ pub struct ChatStateInner {
     db_path: PathBuf,
 }
 
-fn app_base_dir() -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let parent = exe
-        .parent()
-        .ok_or_else(|| "Could not resolve executable directory".to_string())?;
-    Ok(parent.join("lumen"))
-}
-
 fn chat_db_path() -> Result<PathBuf, String> {
-    Ok(app_base_dir()?.join("lumen.db"))
+    crate::paths::db_path()
 }
 
 fn chat_files_dir() -> Result<PathBuf, String> {
-    Ok(app_base_dir()?.join("files").join("media").join("files"))
+    crate::paths::media_dir("files")
 }
 
 fn desktop_name(app: &AppHandle) -> String {

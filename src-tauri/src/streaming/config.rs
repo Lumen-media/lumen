@@ -117,11 +117,7 @@ pub fn save_streaming_config(config: &StreamingConfig) -> Result<(), String> {
 }
 
 fn app_base_dir() -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|error| error.to_string())?;
-    let parent = exe
-        .parent()
-        .ok_or_else(|| "Could not resolve executable directory".to_string())?;
-    Ok(parent.join("lumen"))
+    crate::paths::app_base_dir()
 }
 
 fn streaming_config_path() -> Result<PathBuf, String> {

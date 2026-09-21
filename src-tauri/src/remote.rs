@@ -4,16 +4,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const MAX_REMOTE_BYTES: u64 = 25 * 1024 * 1024;
 const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
 
-pub fn exe_dir() -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let parent = exe
-        .parent()
-        .ok_or_else(|| "Could not resolve executable directory".to_string())?;
-    Ok(parent.to_path_buf())
-}
-
 pub fn app_base_dir() -> Result<PathBuf, String> {
-    Ok(exe_dir()?.join("lumen"))
+    crate::paths::app_base_dir()
 }
 
 pub fn remote_thumbs_dir() -> Result<PathBuf, String> {

@@ -591,11 +591,3 @@ fn scoped_module_path(
 
     Ok(full)
 }
-
-pub(crate) fn app_base_dir() -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let parent = exe
-        .parent()
-        .ok_or_else(|| "could not resolve executable directory".to_string())?;
-    Ok(parent.join("lumen"))
-}
