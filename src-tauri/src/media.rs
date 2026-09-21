@@ -155,7 +155,7 @@ pub struct MediaStore {
 }
 
 pub fn initialize_media_store() -> Result<MediaStore, String> {
-    let db_path = remote::app_base_dir()?.join("lumen.db");
+    let db_path = crate::paths::db_path()?;
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
     conn.execute_batch(MEDIA_BOOTSTRAP).map_err(|e| e.to_string())?;
 
@@ -717,10 +717,7 @@ pub struct UploadOutput {
 }
 
 fn media_type_root(media_type: &str) -> Result<std::path::PathBuf, String> {
-    Ok(remote::app_base_dir()?
-        .join("files")
-        .join("media")
-        .join(media_type))
+    crate::paths::media_dir(media_type)
 }
 
 fn media_folder_dir(media_type: &str, folder: &str) -> Result<std::path::PathBuf, String> {

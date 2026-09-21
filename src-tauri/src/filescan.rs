@@ -1,8 +1,6 @@
 use serde::Serialize;
 use std::path::Path;
 
-use crate::remote;
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScannedFile {
@@ -15,10 +13,7 @@ pub struct ScannedFile {
 }
 
 fn media_type_dir(media_type: &str) -> Result<std::path::PathBuf, String> {
-    Ok(remote::app_base_dir()?
-        .join("files")
-        .join("media")
-        .join(media_type))
+    crate::paths::media_dir(media_type)
 }
 
 fn ext_from_name(name: &str) -> String {

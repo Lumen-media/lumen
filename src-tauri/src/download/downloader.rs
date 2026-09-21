@@ -94,19 +94,11 @@ fn downloads_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn video_media_dir(_app: &AppHandle) -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let parent = exe
-        .parent()
-        .ok_or_else(|| "Could not resolve executable directory".to_string())?;
-    Ok(parent.join("lumen").join("files").join("media").join("video"))
+    crate::paths::media_dir("video")
 }
 
 fn audio_media_dir(_app: &AppHandle) -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let parent = exe
-        .parent()
-        .ok_or_else(|| "Could not resolve executable directory".to_string())?;
-    Ok(parent.join("lumen").join("files").join("media").join("audio"))
+    crate::paths::media_dir("audio")
 }
 
 fn browser_cache_file(tools_dir: &Path) -> PathBuf {
