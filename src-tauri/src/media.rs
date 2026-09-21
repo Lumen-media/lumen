@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS media_files (
   duration    REAL,
   artist      TEXT,
   content     TEXT,
-  created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+  created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+  folder      TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_mf_type ON media_files (media_type);
 CREATE INDEX IF NOT EXISTS idx_mf_name ON media_files (name COLLATE NOCASE);
@@ -61,6 +62,10 @@ const MEDIA_ALREADY_CREATED_TABLES: &[(&str, &[(&str, &str)])] = &[
                 "download_status",
                 "ALTER TABLE media_files ADD COLUMN download_status TEXT NOT NULL DEFAULT 'downloaded'",
             ),
+            (
+                "folder",
+                "ALTER TABLE media_files ADD COLUMN folder TEXT NOT NULL DEFAULT ''",
+            ),
         ],
     ),
     (
@@ -94,6 +99,8 @@ pub struct MediaFileInput {
     pub download_status: Option<String>,
     #[serde(default)]
     pub content: Option<String>,
+    #[serde(default)]
+    pub folder: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -105,6 +112,7 @@ pub struct MediaFileInfo {
     pub size: i64,
     pub modified_at: i64,
     pub extension: String,
+    pub folder: String,
     pub duration: Option<f64>,
     pub title: String,
     pub artist: Option<String>,
@@ -198,6 +206,7 @@ struct MediaRow {
     thumbnail_path: Option<String>,
     remote_thumbnail_url: Option<String>,
     download_status: Option<String>,
+    folder: String,
 }
 
 fn row_from_media(row: &Row<'_>) -> rusqlite::Result<MediaRow> {
@@ -216,6 +225,7 @@ fn row_from_media(row: &Row<'_>) -> rusqlite::Result<MediaRow> {
         thumbnail_path: row.get(12)?,
         remote_thumbnail_url: row.get(13)?,
         download_status: row.get(14)?,
+        folder: row.get(15)?,
     })
 }
 
@@ -238,6 +248,7 @@ fn file_info_from_row(row: &MediaRow) -> MediaFileInfo {
         size: row.size,
         modified_at: row.modified_at,
         extension: row.extension.clone(),
+        folder: row.folder.clone(),
         duration: row.duration,
         title: row.name.clone(),
         artist: row.artist.clone(),
@@ -290,11 +301,16 @@ fn default_download_status(file: &MediaFileInput) -> String {
     })
 }
 
+fn folder_of(file: &MediaFileInput) -> String {
+    file.folder.clone().unwrap_or_default()
+}
+
 fn insert_media_file(conn: &Connection, file: &MediaFileInput, media_type: &str) -> Result<(), String> {
     let download_status = default_download_status(file);
+    let folder = folder_of(file);
     conn.execute(
-        "INSERT INTO media_files (name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+        "INSERT INTO media_files (name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
          ON CONFLICT(path) DO UPDATE SET
            name                 = excluded.name,
            size                 = excluded.size,
@@ -306,7 +322,8 @@ fn insert_media_file(conn: &Connection, file: &MediaFileInput, media_type: &str)
            original_url         = excluded.original_url,
            thumbnail_path       = COALESCE(excluded.thumbnail_path, media_files.thumbnail_path),
            remote_thumbnail_url = COALESCE(excluded.remote_thumbnail_url, media_files.remote_thumbnail_url),
-           download_status      = excluded.download_status",
+           download_status      = excluded.download_status,
+           folder               = excluded.folder",
         params![
             file.name,
             file.path,
@@ -320,7 +337,8 @@ fn insert_media_file(conn: &Connection, file: &MediaFileInput, media_type: &str)
             file.original_url,
             file.thumbnail_path,
             file.remote_thumbnail_url,
-            download_status
+            download_status,
+            folder
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -466,6 +484,81 @@ pub async fn media_list(
     Ok(rows.iter().map(file_info_from_row).collect())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaFolderEntry {
+    pub name: String,
+    pub folder: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaPoolListing {
+    pub folders: Vec<MediaFolderEntry>,
+    pub files: Vec<MediaFileInfo>,
+}
+
+#[tauri::command]
+pub async fn media_list_folder(
+    store: State<'_, MediaStore>,
+    media_type: String,
+    folder: Option<String>,
+) -> Result<MediaPoolListing, String> {
+    let folder = folder.unwrap_or_default();
+    let conn = store.conn.lock().await;
+
+    let file_rows = query_rows(
+        &conn,
+        "SELECT * FROM media_files WHERE media_type = ?1 AND folder = ?2 ORDER BY name COLLATE NOCASE",
+        &[&media_type, &folder],
+    )?;
+    let files = file_rows.iter().map(file_info_from_row).collect();
+
+    let (sql, pattern) = if folder.is_empty() {
+        (
+            "SELECT DISTINCT folder FROM media_files WHERE media_type = ?1 AND folder <> '' AND folder NOT LIKE '%/%' ORDER BY folder COLLATE NOCASE",
+            None,
+        )
+    } else {
+        (
+            "SELECT DISTINCT folder FROM media_files WHERE media_type = ?1 AND folder LIKE ?2 ESCAPE '#' ORDER BY folder COLLATE NOCASE",
+            Some(format!("{}/%", escape_like(&folder))),
+        )
+    };
+
+    let mut params: Vec<rusqlite::types::Value> =
+        vec![rusqlite::types::Value::Text(media_type.clone())];
+    if let Some(pattern) = &pattern {
+        params.push(rusqlite::types::Value::Text(pattern.clone()));
+    }
+    let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+    let folder_rows = query_rows(&conn, sql, refs.as_slice())?;
+
+    let mut folders: Vec<MediaFolderEntry> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for row in folder_rows {
+        let rest = row.folder.strip_prefix(&folder).unwrap_or(&row.folder);
+        let child = rest.trim_start_matches('/').split('/').next().unwrap_or("");
+        if child.is_empty() {
+            continue;
+        }
+        let child_folder = if folder.is_empty() {
+            child.to_string()
+        } else {
+            format!("{folder}/{child}")
+        };
+        if seen.insert(child_folder.clone()) {
+            folders.push(MediaFolderEntry {
+                name: child.to_string(),
+                folder: child_folder,
+            });
+        }
+    }
+    folders.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+    Ok(MediaPoolListing { folders, files })
+}
+
 #[tauri::command]
 pub async fn media_search_files(
     store: State<'_, MediaStore>,
@@ -531,6 +624,7 @@ pub async fn media_insert_url(
         remote_thumbnail_url: metadata.remote_thumbnail_url.clone(),
         download_status: Some("not_downloaded".into()),
         content: None,
+        folder: None,
     };
 
     let conn = store.conn.lock().await;
@@ -602,6 +696,28 @@ pub struct UploadOutput {
     pub error: Option<String>,
 }
 
+fn media_type_root(media_type: &str) -> Result<std::path::PathBuf, String> {
+    Ok(remote::app_base_dir()?
+        .join("files")
+        .join("media")
+        .join(media_type))
+}
+
+fn media_folder_dir(media_type: &str, folder: &str) -> Result<std::path::PathBuf, String> {
+    let base = media_type_root(media_type)?;
+    if folder.is_empty() {
+        return Ok(base);
+    }
+    let mut dir = base;
+    for segment in folder.split('/') {
+        if segment.is_empty() || segment == "." || segment == ".." || segment.contains('\\') {
+            return Err("invalid folder path".to_string());
+        }
+        dir = dir.join(segment);
+    }
+    Ok(dir)
+}
+
 fn extension_allowed(media_type: &str, extension: &str) -> bool {
     if media_type == "files" {
         return true;
@@ -630,12 +746,11 @@ fn extension_allowed(media_type: &str, extension: &str) -> bool {
 pub async fn media_upload_files(
     store: State<'_, MediaStore>,
     media_type: String,
+    folder: Option<String>,
     file_paths: Vec<String>,
 ) -> Result<Vec<UploadOutput>, String> {
-    let dest_dir = remote::app_base_dir()?
-        .join("files")
-        .join("media")
-        .join(&media_type);
+    let folder = folder.unwrap_or_default();
+    let dest_dir = media_folder_dir(&media_type, &folder)?;
     std::fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
 
     let mut pending: Vec<(String, MediaFileInput)> = Vec::new();
@@ -744,6 +859,7 @@ pub async fn media_upload_files(
                 remote_thumbnail_url: None,
                 download_status: Some("downloaded".to_string()),
                 content,
+                folder: Some(folder.clone()),
             },
         ));
     }
@@ -842,6 +958,31 @@ pub async fn media_delete(store: State<'_, MediaStore>, path: String) -> Result<
     let conn = store.conn.lock().await;
     conn.execute("DELETE FROM media_files WHERE path = ?1", params![path])
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn media_delete_folder(
+    store: State<'_, MediaStore>,
+    media_type: String,
+    folder: String,
+) -> Result<(), String> {
+    if folder.is_empty() {
+        return Err("cannot delete the root folder".to_string());
+    }
+
+    let dir = media_folder_dir(&media_type, &folder)?;
+    if dir.is_dir() {
+        std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+    }
+
+    let pattern = format!("{}/%", escape_like(&folder));
+    let conn = store.conn.lock().await;
+    conn.execute(
+        "DELETE FROM media_files WHERE media_type = ?1 AND (folder = ?2 OR folder LIKE ?3 ESCAPE '#')",
+        params![media_type, folder, pattern],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
