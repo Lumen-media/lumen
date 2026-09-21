@@ -1,6 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { extractMetadata } from './metadata-extractor';
-import type { DownloadStatus, FileInfo, MediaType } from './types';
+import type {
+  DownloadStatus,
+  FileInfo,
+  MediaFolder,
+  MediaPoolListing,
+  MediaType,
+} from './types';
 import { urlMediaService } from './url-media-service';
 
 export interface SearchHit {
@@ -31,6 +37,7 @@ interface MediaFileInput {
   size: number;
   modifiedAt: number;
   extension: string;
+  folder?: string;
   duration?: number | null;
   artist?: string | null;
   originalUrl?: string | null;
@@ -47,6 +54,7 @@ interface RawFileInfo {
   size: number;
   modifiedAt: number;
   extension: string;
+  folder: string;
   duration: number | null;
   title: string;
   artist: string | null;
@@ -72,6 +80,7 @@ function toMediaFileInput(file: FileInfo): MediaFileInput {
     size: file.size,
     modifiedAt: file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
     extension: file.extension,
+    folder: file.folder ?? '',
     duration: file.duration ?? null,
     artist: file.artist ?? null,
     originalUrl: file.originalUrl ?? null,
@@ -93,6 +102,7 @@ function toFileInfo(raw: RawFileInfo): FileInfo {
     size: raw.size,
     modifiedAt: new Date(raw.modifiedAt),
     extension: raw.extension,
+    folder: raw.folder || undefined,
     duration: raw.duration ?? undefined,
     title: raw.title,
     artist: raw.artist ?? undefined,
@@ -137,6 +147,17 @@ class MediaDbService {
   async listFiles(mediaType: MediaType): Promise<FileInfo[]> {
     const rows = await invoke<RawFileInfo[]>('media_list', { mediaType });
     return rows.map(toFileInfo);
+  }
+
+  async listFolder(mediaType: MediaType, folder: string): Promise<MediaPoolListing> {
+    const raw = await invoke<{ folders: MediaFolder[]; files: RawFileInfo[] }>(
+      'media_list_folder',
+      { mediaType, folder }
+    );
+    return {
+      folders: raw.folders,
+      files: raw.files.map(toFileInfo),
+    };
   }
 
   async searchFiles(mediaType: MediaType, query: string): Promise<FileInfo[]> {
@@ -213,15 +234,23 @@ class MediaDbService {
     });
   }
 
-  async uploadFiles(mediaType: MediaType, filePaths: string[]): Promise<UploadResult[]> {
+  async uploadFiles(
+    mediaType: MediaType,
+    filePaths: string[],
+    folder: string = ''
+  ): Promise<UploadResult[]> {
     const results = await invoke<
       Array<{ path: string; file: RawFileInfo | null; error: string | null }>
-    >('media_upload_files', { mediaType, filePaths });
+    >('media_upload_files', { mediaType, folder, filePaths });
     return results.map((r) => ({
       sourcePath: r.path,
       file: r.file ? toFileInfo(r.file) : null,
       error: r.error,
     }));
+  }
+
+  async deleteFolder(mediaType: MediaType, folder: string): Promise<void> {
+    await invoke('media_delete_folder', { mediaType, folder });
   }
 
   async listByType(mediaType: MediaType, limit = 50): Promise<SearchHit[]> {
