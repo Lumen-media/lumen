@@ -218,14 +218,22 @@ fn sized(
         cache_insert(dir, &hash, w, h, q, dest.clone());
         std::fs::read(&dest).map_err(io_err)
     } else if is_video_ext(&ext) {
-        let dest = dir.join(format!("{hash}_q{q}_w{w}.jpg"));
-        let (vw, vh) = video_thumb::generate_box_width(path, &dest, w, q).map_err(str_err)?;
-        let final_dest = dir.join(cache_name(vw, vh));
-        if final_dest != dest {
-            std::fs::rename(&dest, &final_dest).map_err(io_err)?;
-        }
-        cache_insert(dir, &hash, vw, vh, q, final_dest.clone());
-        std::fs::read(&final_dest).map_err(io_err)
+        let (vw, vh, dest) = if let Some(img) = os_thumb::get_thumbnail(path, w) {
+            let (vw, vh) = (img.width(), img.height());
+            let dest = dir.join(cache_name(vw, vh));
+            write_jpeg(&img, &dest, q).map_err(str_err)?;
+            (vw, vh, dest)
+        } else {
+            let tmp = dir.join(format!("{hash}_q{q}_w{w}.jpg"));
+            let (vw, vh) = video_thumb::generate_box_width(path, &tmp, w, q).map_err(str_err)?;
+            let dest = dir.join(cache_name(vw, vh));
+            if dest != tmp {
+                std::fs::rename(&tmp, &dest).map_err(io_err)?;
+            }
+            (vw, vh, dest)
+        };
+        cache_insert(dir, &hash, vw, vh, q, dest.clone());
+        std::fs::read(&dest).map_err(io_err)
     } else {
         Err((415, format!("unsupported source for lumen-thumb://: {src}")))
     }
