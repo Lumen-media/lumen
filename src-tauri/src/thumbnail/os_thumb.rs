@@ -35,10 +35,10 @@ mod platform {
 
         const FLAGS: SIIGBF = SIIGBF(0x01);
 
-        let _ = CoInitializeEx(None, COINIT(0x2)); // COINIT_APARTMENTTHREADED
+        let _ = CoInitializeEx(None, COINIT(0x2));
 
-        let wide: Vec<u16> = src
-            .to_string_lossy()
+        let normalized = src.to_string_lossy().replace('/', "\\");
+        let wide: Vec<u16> = normalized
             .encode_utf16()
             .chain(std::iter::once(0))
             .collect();
