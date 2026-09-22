@@ -14,7 +14,8 @@ const DEFAULT_THUMB: u32 = 480;
 const JPEG_QUALITY_THUMB: u8 = 82;
 const JPEG_QUALITY_FULL: u8 = 88;
 
-static INDEX: OnceLock<Mutex<HashMap<String, Vec<(u32, u32, u8, PathBuf)>>>> = OnceLock::new();
+type ThumbIndex = Mutex<HashMap<String, Vec<(u32, u32, u8, PathBuf)>>>;
+static INDEX: OnceLock<ThumbIndex> = OnceLock::new();
 
 pub fn handle_lumen_request(
     ctx: UriSchemeContext<'_, tauri::Wry>,
