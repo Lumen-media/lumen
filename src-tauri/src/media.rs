@@ -434,10 +434,9 @@ pub async fn media_initialize(store: State<'_, MediaStore>) -> Result<(), String
     Ok(())
 }
 
-#[tauri::command]
-pub async fn media_sync_type(
-    store: State<'_, MediaStore>,
-    media_type: String,
+pub async fn sync_media_type_internal(
+    store: &MediaStore,
+    media_type: &str,
     files: Vec<MediaFileInput>,
 ) -> Result<(), String> {
     let conn = store.conn.lock().await;
@@ -978,16 +977,51 @@ pub async fn media_delete(store: State<'_, MediaStore>, path: String) -> Result<
     Ok(())
 }
 
+fn media_input_from_scanned(scanned: &crate::filescan::ScannedFile) -> MediaFileInput {
+    MediaFileInput {
+        name: scanned.name.clone(),
+        path: scanned.path.clone(),
+        size: scanned.size,
+        modified_at: scanned.modified_at,
+        extension: scanned.extension.clone(),
+        duration: None,
+        artist: None,
+        original_url: None,
+        thumbnail_path: None,
+        remote_thumbnail_url: None,
+        download_status: Some("downloaded".into()),
+        content: None,
+        folder: Some(scanned.folder.clone()),
+    }
+}
+
+pub async fn resync_media_type(
+    store: &MediaStore,
+    media_type: &str,
+) -> Result<(), String> {
+    let scanned = crate::filescan::scan_media_files(media_type.to_string()).await?;
+    let files: Vec<MediaFileInput> = scanned
+        .iter()
+        .map(media_input_from_scanned)
+        .collect();
+    sync_media_type_internal(store, media_type, files).await
+}
+
+#[tauri::command]
+pub async fn media_sync_type(
+    store: State<'_, MediaStore>,
+    media_type: String,
+    files: Vec<MediaFileInput>,
+) -> Result<(), String> {
+    sync_media_type_internal(&store, &media_type, files).await
+}
+
 #[tauri::command]
 pub async fn media_delete_folder(
     store: State<'_, MediaStore>,
     media_type: String,
     folder: String,
 ) -> Result<(), String> {
-    if folder.is_empty() {
-        return Err("cannot delete the root folder".to_string());
-    }
-
     let dir = media_folder_dir(&media_type, &folder)?;
     if dir.is_dir() {
         std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
