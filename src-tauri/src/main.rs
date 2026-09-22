@@ -460,6 +460,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             app.manage(queue_store);
             let media_store = media::initialize_media_store()?;
             app.manage(media_store);
+
+            let resync_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                for media_type in crate::paths::MEDIA_TYPES {
+                    let store = resync_handle.state::<media::MediaStore>();
+                    if let Err(e) = media::resync_media_type(&store, media_type).await {
+                        eprintln!("startup media resync failed for {media_type}: {e}");
+                    }
+                }
+            });
             let download_state = download::initialize_download_state(&app.handle())?;
             app.manage(download_state);
             let app_handle = app.handle();

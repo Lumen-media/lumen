@@ -352,5 +352,6 @@ pub fn set_media_folder(
 
 #[tauri::command]
 pub fn restart_app(app: AppHandle) {
-    app.restart();
+    tauri_plugin_single_instance::destroy(&app);
+    app.request_restart();
 }
