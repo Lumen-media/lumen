@@ -131,7 +131,7 @@ export function MediaFoldersSection() {
           <FolderOpen className="size-4 text-primary" />
           <span className="text-sm font-medium">{t('Media Folders')}</span>
         </div>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground mb-1.5">
           {t('Choose where each media type stores its files.')}
         </p>
         <div className="space-y-2">
