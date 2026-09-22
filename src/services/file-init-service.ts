@@ -1,5 +1,5 @@
-import { exists, mkdir } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
+import { exists, mkdir } from '@tauri-apps/plugin-fs';
 import { getAppBasePath, getMediaTypePath as getResolvedMediaTypePath } from './app-paths';
 import { mediaDbService } from './media-db-service';
 import type { FileInfo, MediaType } from './types';
@@ -42,7 +42,16 @@ class FileInitServiceImpl implements FileInitService {
     'presentation',
   ];
 
+  private initPromise: Promise<void> | null = null;
+
   async initializeMediaFolders(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = this.doInitialize();
+    }
+    return this.initPromise;
+  }
+
+  private async doInitialize(): Promise<void> {
     try {
       const basePath = await getAppBasePath();
       if (!(await exists(basePath))) {
@@ -72,7 +81,7 @@ class FileInitServiceImpl implements FileInitService {
     } catch (error) {
       console.error('Failed to initialize media folders:', error);
       throw new Error(
-        `Failed to initialize media folders: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to initialize media folders: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -92,7 +101,7 @@ class FileInitServiceImpl implements FileInitService {
     } catch (error) {
       console.error(`Failed to get path for media type ${mediaType}:`, error);
       throw new Error(
-        `Failed to get path for media type ${mediaType}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to get path for media type ${mediaType}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
