@@ -22,21 +22,21 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAnnounce } from '@/hooks/use-announce';
+import { useTranslation } from '@/lib/i18n';
 import { ensureMediaWindow } from '@/lib/present-window';
 import { selectPresentationPreview } from '@/lib/presentation-preview';
-import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import {
   type FileInfo,
   fileInitService,
   fileManagementService,
   type MediaFolder,
-  mediaDbService,
   type MediaType,
+  mediaDbService,
 } from '@/services';
+import { useDeleteFolderStore } from '@/stores/delete-folder-store';
 import { useLyricEditStore } from '@/stores/lyric-edit-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
-import { useDeleteFolderStore } from '@/stores/delete-folder-store';
 import { usePlayerStore } from '@/stores/player-store';
 import { usePresentationStore } from '@/stores/presentation-store';
 import { useQueueStore } from '@/stores/queue-store';

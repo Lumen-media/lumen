@@ -1,13 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { FolderOpen, RefreshCw } from 'lucide-react';
 import { join } from '@tauri-apps/api/path';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readDir } from '@tauri-apps/plugin-fs';
-import { useTranslation } from '@/lib/i18n';
-import { CardContent } from '@/components/ui/card';
+import { FolderOpen, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -15,8 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useTranslation } from '@/lib/i18n';
 import { getAppPaths, invalidateAppPathsCache } from '@/services/app-paths';
-import { setMediaFolder, restartApp } from '@/services/media-folder-settings';
+import { restartApp, setMediaFolder } from '@/services/media-folder-settings';
 import type { MediaType } from '@/services/types';
 
 const MEDIA_TYPES: MediaType[] = [
@@ -32,7 +32,9 @@ const MEDIA_TYPES: MediaType[] = [
 
 export function MediaFoldersSection() {
   const { t } = useTranslation();
-  const [paths, setPaths] = useState<{ base: string; media: Record<MediaType, string> } | null>(null);
+  const [paths, setPaths] = useState<{ base: string; media: Record<MediaType, string> } | null>(
+    null
+  );
   const [defaults, setDefaults] = useState<Record<MediaType, string> | null>(null);
   const [pendingType, setPendingType] = useState<MediaType | null>(null);
   const [pendingPath, setPendingPath] = useState<string | null>(null);
@@ -105,17 +107,19 @@ export function MediaFoldersSection() {
     setDialogOpen(true);
   };
 
-  const confirmMigrate = async (mode: 'move' | 'copy' | 'none') => {
+  const applyFolderChange = async (mode: 'move' | 'none') => {
     if (!pendingType || !pendingPath) return;
-    if (mode === 'none') {
-      setDialogOpen(false);
-      return;
-    }
     await setMediaFolder({ mediaType: pendingType, path: pendingPath, migrate: mode });
     invalidateAppPathsCache();
     await load();
     setDialogOpen(false);
     setRestartPrompt(true);
+  };
+
+  const cancelFolderChange = () => {
+    setPendingType(null);
+    setPendingPath(null);
+    setDialogOpen(false);
   };
 
   if (!paths || !defaults) return null;
@@ -146,7 +150,12 @@ export function MediaFoldersSection() {
                     <FolderOpen className="size-3.5" />
                   </Button>
                   {overridden && (
-                    <Button variant="ghost" size="icon-sm" onClick={() => handleReset(type)} title={t('Reset')}>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => handleReset(type)}
+                      title={t('Reset')}
+                    >
                       <RefreshCw className="size-3.5" />
                     </Button>
                   )}
@@ -160,18 +169,30 @@ export function MediaFoldersSection() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('The folder has files. How should they move to the new location?')}</DialogTitle>
-            <DialogDescription>{t('You can move the files, copy them, or keep them in place.')}</DialogDescription>
+            <DialogTitle>{t('The folder has files. What do you want to do?')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'Move to transfer the files to the new folder. Change folder only keeps them where they are and just points the app to the new folder. Cancel aborts the change.'
+              )}
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
-            <Button variant="secondary" className="w-full" onClick={() => confirmMigrate('move')}>
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => applyFolderChange('move')}
+            >
               {t('Move')}
             </Button>
-            <Button variant="outline" className="w-full" onClick={() => confirmMigrate('copy')}>
-              {t('Copy')}
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => applyFolderChange('none')}
+            >
+              {t('Change folder only')}
             </Button>
-            <Button variant="ghost" className="w-full" onClick={() => confirmMigrate('none')}>
-              {t('Keep in place')}
+            <Button variant="ghost" className="w-full" onClick={cancelFolderChange}>
+              {t('Cancel')}
             </Button>
           </div>
         </DialogContent>
@@ -182,10 +203,20 @@ export function MediaFoldersSection() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t('Restart to apply')}</DialogTitle>
-              <DialogDescription>{t('Restart the app now to apply the changes?')}</DialogDescription>
+              <DialogDescription>
+                {t('Restart the app now to apply the changes?')}
+              </DialogDescription>
             </DialogHeader>
             <div className="flex justify-end gap-2">
-              <Button variant="default" onClick={() => { setRestartPrompt(false); void restartApp(); }}>{t('Restart now')}</Button>
+              <Button
+                variant="default"
+                onClick={() => {
+                  setRestartPrompt(false);
+                  void restartApp();
+                }}
+              >
+                {t('Restart now')}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

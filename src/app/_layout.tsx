@@ -3,6 +3,7 @@ import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { Presentation } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
+import { registerStoreCommand } from '@/app/store/store-app';
 import { AppHeader } from '@/components/app-header';
 import { AsidePanel } from '@/components/aside-panel';
 import { DownloadsCookiesDialog } from '@/components/downloads-cookies-dialog';
@@ -13,13 +14,12 @@ import { PresenterControls } from '@/components/presenter-controls';
 import { TitleBar } from '@/components/title-bar';
 import { Card } from '@/components/ui/card';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { formatDuration } from '@/lib/format';
 import { initI18n } from '@/lib/i18n';
 import type { FileInfo } from '@/services';
 import { COOKIE_VALIDATION_CACHE_KEY, useDownloadStore } from '@/stores/download-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 import { useQueueStore } from '@/stores/queue-store';
-import { registerStoreCommand } from '@/app/store/store-app';
-import { formatDuration } from '@/lib/format';
 
 export const Route = createFileRoute('/_layout')({
   component: LayoutComponent,
