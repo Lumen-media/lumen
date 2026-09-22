@@ -22,5 +22,12 @@ export async function setMediaFolder(opts: {
 }
 
 export async function restartApp(): Promise<void> {
-  await invoke('restart_app');
+  try {
+    await invoke('restart_app');
+  } catch {
+    // Fallback if invoke fails
+  }
+  if (typeof window !== 'undefined') {
+    window.location.reload();
+  }
 }

@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, RwLock};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_store::{Store, StoreExt};
 
 /// Media types that can be remapped to folders elsewhere on the machine.
@@ -28,7 +28,7 @@ struct ResolvedPaths {
     media: HashMap<String, PathBuf>,
 }
 
-static RESOLVED: OnceLock<ResolvedPaths> = OnceLock::new();
+static RESOLVED: RwLock<Option<ResolvedPaths>> = RwLock::new(None);
 
 pub fn exe_dir() -> Result<PathBuf, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -49,8 +49,11 @@ pub fn db_path() -> Result<PathBuf, String> {
 
 /// Resolved folder for a media type, honoring the user override when set.
 pub fn media_dir(media_type: &str) -> Result<PathBuf, String> {
-    RESOLVED
-        .get()
+    let guard = RESOLVED
+        .read()
+        .map_err(|e| format!("failed to read resolved paths: {e}"))?;
+    guard
+        .as_ref()
         .and_then(|r| r.media.get(media_type))
         .cloned()
         .ok_or_else(|| format!("media folders are not initialized (missing type: {media_type})"))
@@ -122,26 +125,41 @@ fn validate_target(media_type: &str, target: &Path) -> Result<(), String> {
     if !target.is_absolute() {
         return Err("folder path must be absolute".to_string());
     }
-    for (other, resolved) in RESOLVED
-        .get()
-        .map(|r| r.media.iter())
-        .into_iter()
-        .flatten()
-    {
+    let guard = RESOLVED
+        .read()
+        .map_err(|e| format!("failed to read resolved paths: {e}"))?;
+    let resolved = guard
+        .as_ref()
+        .ok_or_else(|| "paths are not initialized".to_string())?;
+    for (other, resolved_path) in &resolved.media {
         if other == media_type {
             continue;
         }
-        if target == resolved {
+        if target == resolved_path {
             return Err(format!("folder is already used by media type \"{other}\""));
         }
-        if target.starts_with(resolved) {
+        if target.starts_with(resolved_path) {
             return Err(format!("folder contains the \"{other}\" media folder"));
         }
-        if resolved.starts_with(target) {
+        if resolved_path.starts_with(target) {
             return Err(format!("folder is inside the \"{other}\" media folder"));
         }
     }
     Ok(())
+}
+
+fn resolve_media_map<R: Runtime>(store: &Store<R>, base: &Path) -> HashMap<String, PathBuf> {
+    let overrides = read_media_folders(store);
+    let mut media = HashMap::new();
+    for media_type in MEDIA_TYPES {
+        let folder = overrides
+            .get(media_type)
+            .and_then(|value| value.clone())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| base.join("files").join("media").join(media_type));
+        media.insert(media_type.to_string(), folder);
+    }
+    media
 }
 
 /// Resolve all media folders once, honoring overrides from the settings store.
@@ -157,18 +175,12 @@ pub fn init(app: &AppHandle) -> Result<(), String> {
         run_pending_migration(&store, pending);
     }
 
-    let overrides = read_media_folders(&store);
-    let mut media = HashMap::new();
-    for media_type in MEDIA_TYPES {
-        let folder = overrides
-            .get(media_type)
-            .and_then(|value| value.clone())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| base.join("files").join("media").join(media_type));
-        media.insert(media_type.to_string(), folder);
-    }
+    let media = resolve_media_map(&store, &base);
 
-    let _ = RESOLVED.set(ResolvedPaths { base, media });
+    let mut guard = RESOLVED
+        .write()
+        .map_err(|e| format!("failed to write resolved paths: {e}"))?;
+    *guard = Some(ResolvedPaths { base, media });
     Ok(())
 }
 
@@ -272,8 +284,11 @@ fn remove_recursive(path: &Path) -> Result<(), String> {
 
 #[tauri::command]
 pub fn get_app_paths() -> Result<AppPathsPayload, String> {
-    let resolved = RESOLVED
-        .get()
+    let guard = RESOLVED
+        .read()
+        .map_err(|e| format!("failed to read resolved paths: {e}"))?;
+    let resolved = guard
+        .as_ref()
         .ok_or_else(|| "paths are not initialized".to_string())?;
     let media: HashMap<String, String> = resolved
         .media
@@ -288,10 +303,10 @@ pub fn get_app_paths() -> Result<AppPathsPayload, String> {
 }
 
 /// Set (or clear, when `path` is null) the folder override for a media type.
-/// `migrate` ("move" | "copy" | "none") schedules a deferred migration of the
-/// existing folder contents, applied on the next startup before the DB opens.
+/// Migrates contents inline when requested, updates storage and in-memory paths,
+/// and resyncs the media store immediately without requiring an app restart.
 #[tauri::command]
-pub fn set_media_folder(
+pub async fn set_media_folder(
     app: AppHandle,
     media_type: String,
     path: Option<String>,
@@ -301,13 +316,20 @@ pub fn set_media_folder(
         return Err(format!("unknown media type: {media_type}"));
     }
 
-    let resolved = RESOLVED
-        .get()
-        .ok_or_else(|| "paths are not initialized".to_string())?;
-    let current = resolved
-        .media
-        .get(&media_type)
-        .ok_or_else(|| format!("media folder not resolved for type: {media_type}"))?;
+    let (current, base) = {
+        let guard = RESOLVED
+            .read()
+            .map_err(|e| format!("failed to read resolved paths: {e}"))?;
+        let resolved = guard
+            .as_ref()
+            .ok_or_else(|| "paths are not initialized".to_string())?;
+        let current = resolved
+            .media
+            .get(&media_type)
+            .cloned()
+            .ok_or_else(|| format!("media folder not resolved for type: {media_type}"))?;
+        (current, resolved.base.clone())
+    };
 
     let target = match &path {
         Some(path) if !path.trim().is_empty() => {
@@ -315,10 +337,10 @@ pub fn set_media_folder(
             validate_target(&media_type, &target)?;
             target
         }
-        _ => resolved.base.join("files").join("media").join(&media_type),
+        _ => base.join("files").join("media").join(&media_type),
     };
 
-    if &target == current {
+    if target == current {
         return Ok(());
     }
 
@@ -327,31 +349,69 @@ pub fn set_media_folder(
     let prev = folders.get(&media_type).cloned().flatten();
 
     let mode = migrate.unwrap_or_default();
-    let wants_migration = matches!(mode.as_str(), "move" | "copy") && current.is_dir() && has_entries(current)?;
+    let wants_migration = matches!(mode.as_str(), "move" | "copy")
+        && current.is_dir()
+        && has_entries(&current)?;
+
     if wants_migration {
         let pending = PendingMigration {
             media_type: media_type.clone(),
             from: current.to_string_lossy().into_owned(),
             to: target.to_string_lossy().into_owned(),
-            mode,
+            mode: mode.clone(),
             prev,
         };
         store.set(
             KEY_PENDING_MIGRATION,
             serde_json::to_value(pending).map_err(|e| e.to_string())?,
         );
+        let _ = store.save();
+
+        let (moved, skipped) = migrate_contents(&current, &target, &mode)?;
+        if mode == "move" {
+            let empty = fs::read_dir(&current)
+                .map(|mut entries| entries.next().is_none())
+                .unwrap_or(false);
+            if empty {
+                let _ = fs::remove_dir(&current);
+            }
+        }
+        log::info!(
+            "media folder inline migration finished for {media_type}: {moved} moved, {skipped} skipped"
+        );
     } else {
-        store.delete(KEY_PENDING_MIGRATION);
+        fs::create_dir_all(&target).map_err(|e| e.to_string())?;
     }
 
-    folders.insert(media_type, path.map(|p| p.trim().to_string()));
+    folders.insert(media_type.clone(), path.map(|p| p.trim().to_string()));
     write_media_folders(&store, &folders);
+    store.delete(KEY_PENDING_MIGRATION);
     store.save().map_err(|e| e.to_string())?;
+
+    let new_media = resolve_media_map(&store, &base);
+    {
+        let mut guard = RESOLVED
+            .write()
+            .map_err(|e| format!("failed to write resolved paths: {e}"))?;
+        if let Some(ref mut resolved) = *guard {
+            resolved.media = new_media;
+        } else {
+            *guard = Some(ResolvedPaths {
+                base,
+                media: new_media,
+            });
+        }
+    }
+
+    let media_store = app.state::<crate::media::MediaStore>();
+    crate::media::resync_media_type(&media_store, &media_type).await?;
+
     Ok(())
 }
 
 #[tauri::command]
 pub fn restart_app(app: AppHandle) {
-    tauri_plugin_single_instance::destroy(&app);
-    app.request_restart();
+    for (_, window) in app.webview_windows() {
+        let _ = window.eval("window.location.reload()");
+    }
 }
