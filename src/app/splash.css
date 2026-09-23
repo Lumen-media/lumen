@@ -1,0 +1,240 @@
+html.splash-window,
+html.splash-window body,
+html.splash-window #root {
+  background: transparent;
+}
+
+.splash-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+.splash-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.splash-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(48px);
+  opacity: 0.55;
+}
+
+.splash-blob--cyan {
+  width: 320px;
+  height: 320px;
+  left: 50%;
+  top: 22%;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--primary) 55%, transparent),
+    transparent 70%
+  );
+  animation: splash-blob-drift-a 7s ease-in-out infinite;
+}
+
+.splash-blob--blue {
+  width: 260px;
+  height: 260px;
+  right: -30px;
+  bottom: -40px;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, #4f7df9 50%, transparent),
+    transparent 70%
+  );
+  animation: splash-blob-drift-b 8.5s ease-in-out infinite;
+}
+
+.splash-blob--violet {
+  width: 240px;
+  height: 240px;
+  left: -40px;
+  bottom: 8%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, #a855f7 45%, transparent),
+    transparent 70%
+  );
+  animation: splash-blob-drift-c 9s ease-in-out infinite;
+}
+
+.splash-card {
+  position: relative;
+  z-index: 1;
+  width: calc(100% - 48px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 36px 28px 28px;
+  border-radius: 28px;
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  background: color-mix(in oklab, var(--card) 88%, transparent);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  box-shadow:
+    0 24px 60px -18px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: splash-card-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  overflow: hidden;
+}
+
+.splash-logo-wrap {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24px;
+  border: 1px solid color-mix(in oklab, var(--primary) 40%, transparent);
+  background: color-mix(in oklab, var(--secondary) 55%, transparent);
+  box-shadow: 0 8px 28px -8px color-mix(in oklab, var(--primary) 55%, transparent);
+  padding: 16px;
+}
+
+.splash-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.splash-title {
+  margin-top: 20px;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  background: linear-gradient(180deg, var(--foreground), color-mix(in oklab, var(--foreground) 60%, transparent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.splash-subtitle {
+  margin-top: 8px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+.splash-progress {
+  position: relative;
+  margin-top: 24px;
+  width: 100%;
+  height: 4px;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--muted-foreground) 16%, transparent);
+  overflow: hidden;
+}
+
+.splash-progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 35%;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--primary),
+    transparent
+  );
+  box-shadow: 0 0 12px color-mix(in oklab, var(--primary) 60%, transparent);
+  animation: splash-shimmer 1.3s ease-in-out infinite;
+}
+
+.splash-reel {
+  margin-top: 16px;
+  height: 20px;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.splash-reel-strip {
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.splash-reel-item {
+  height: 20px;
+  line-height: 20px;
+  font-size: 13px;
+  color: color-mix(in oklab, var(--muted-foreground) 85%, var(--primary));
+  text-align: center;
+  white-space: nowrap;
+}
+
+.splash-version {
+  margin-top: 14px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+}
+
+@keyframes splash-blob-drift-a {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  50% {
+    transform: translateX(-50%) translateY(26px) scale(1.08);
+  }
+}
+
+@keyframes splash-blob-drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-22px, -18px) scale(1.12);
+  }
+}
+
+@keyframes splash-blob-drift-c {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(20px, -14px) scale(1.1);
+  }
+}
+
+@keyframes splash-card-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes splash-shimmer {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
