@@ -24,6 +24,7 @@ export const Route = createRootRoute({
 });
 
 const AUXILIARY_WINDOW_PATHS = new Set([
+  '/splash',
   '/media-window',
   '/module-overlay-window',
   '/module-surface-window',
