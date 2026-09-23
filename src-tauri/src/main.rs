@@ -52,6 +52,19 @@ fn get_exe_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
+fn close_splashscreen(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(splash) = app.get_webview_window("splashscreen") {
+        splash.close().map_err(|e| e.to_string())?;
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.maximize();
+        let _ = main.show();
+        let _ = main.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn open_folder(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -428,7 +441,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with_state_flags(
                     StateFlags::all()
                         & !StateFlags::DECORATIONS
-                        & !StateFlags::VISIBLE,
+                        & !StateFlags::VISIBLE
+                        & !StateFlags::MAXIMIZED,
                 )
                 .build(),
         )
@@ -530,7 +544,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .build(app)?;
 
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.maximize();
                 let app_handle = app.handle().clone();
                 let window_clone = window.clone();
 
@@ -597,6 +610,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            close_splashscreen,
             get_exe_dir,
             paths::get_app_paths,
             paths::set_media_folder,
