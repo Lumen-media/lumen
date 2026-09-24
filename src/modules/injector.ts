@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { createHost } from './host';
+import { importModuleCode, readModuleEntry } from './module-loader';
 import { useModuleStore } from './store';
 import type { Disposable, LumenPlugin, ModuleManifest } from './types';
 
@@ -134,20 +135,17 @@ export async function loadModule(manifest: ModuleManifest) {
   const store = useModuleStore.getState();
 
   try {
+    const code = await readModuleEntry(manifest);
     let mod: unknown;
-    if (import.meta.env.DEV) {
-      const res = await fetch(`/__modules/${manifest.id}/${manifest.entry}`);
-      if (!res.ok) throw new Error(`module fetch failed: ${res.status}`);
-      const code = await res.text();
-      const blob = new Blob([code], { type: 'application/javascript' });
-      const blobUrl = URL.createObjectURL(blob);
-      try {
-        mod = await import(/* @vite-ignore */ blobUrl);
-      } finally {
-        URL.revokeObjectURL(blobUrl);
-      }
-    } else {
-      mod = await import(/* @vite-ignore */ `lumen-module://${manifest.id}/${manifest.entry}`);
+    try {
+      mod = await importModuleCode(
+        code,
+        `lumen-module://${manifest.id}/${manifest.entry || 'main.js'}`,
+      );
+    } catch (err) {
+      throw new Error(
+        `failed to evaluate module ${manifest.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
     const PluginClass = (mod as { default: new () => LumenPlugin }).default;
 
