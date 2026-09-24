@@ -187,26 +187,50 @@ export class LumenPlugin {
 }
 `.trimStart();
 
-const HOST_DEPS_PROD: Record<string, string> = {
-  'react.js': 'react',
-  'react-dom.js': 'react-dom',
-  'react-dom-client.js': 'react-dom/client',
-  'react-jsx-runtime.js': 'react/jsx-runtime',
-  'react-jsx-dev-runtime.js': 'react/jsx-dev-runtime',
+const HOST_DEPS_PROD: Record<string, { specifier: string; shared?: Record<string, string> }> = {
+  'react.js': { specifier: 'react' },
+  'react-dom.js': { specifier: 'react-dom', shared: { react: '/__lumen/react.js' } },
+  'react-dom-client.js': {
+    specifier: 'react-dom/client',
+    shared: { react: '/__lumen/react.js', 'react-dom': '/__lumen/react-dom.js' },
+  },
+  'react-jsx-runtime.js': { specifier: 'react/jsx-runtime', shared: { react: '/__lumen/react.js' } },
+  'react-jsx-dev-runtime.js': { specifier: 'react/jsx-dev-runtime', shared: { react: '/__lumen/react.js' } },
 };
 
 const cache = new Map<string, string>();
 
-async function bundleDep(entrypoint: string): Promise<string> {
-  if (cache.has(entrypoint)) return cache.get(entrypoint)!;
+const SHIM_DIR = path.join(os.tmpdir(), 'lumen-host-shims');
+
+function shimFile(specifier: string, urlPath: string): string {
+  const safeName = specifier.replace(/\//g, '_');
+  const file = path.join(SHIM_DIR, `${safeName}.mjs`);
+  if (fs.existsSync(file)) return file;
+  fs.mkdirSync(SHIM_DIR, { recursive: true });
+  fs.writeFileSync(file, `export * from ${JSON.stringify(urlPath)};\nexport { default } from ${JSON.stringify(urlPath)};\n`);
+  return file;
+}
+
+async function bundleDep(entrypoint: string, shared: Record<string, string> = {}): Promise<string> {
+  const cacheKey = `${entrypoint}\u0000${Object.keys(shared).sort().join(',')}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey)!;
 
   const mod = _require(entrypoint) as Record<string, unknown>;
   const keys = Object.keys(mod).filter((k) => /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k));
   const namedReexports = keys.map((k) => `export const ${k} = _mod.${k};`).join('\n');
 
+  const alias: Record<string, string> = {};
+  const externalUrls: string[] = [];
+  for (const [specifier, urlPath] of Object.entries(shared)) {
+    alias[specifier] = shimFile(specifier, urlPath);
+    externalUrls.push(urlPath);
+  }
+
+  const resolvedEntry = _require.resolve(entrypoint);
+
   const result = await build({
     stdin: {
-      contents: `import _mod from ${JSON.stringify(entrypoint)};\n${namedReexports}\nexport default _mod;\n`,
+      contents: `import _mod from ${JSON.stringify(resolvedEntry)};\n${namedReexports}\nexport default _mod;\n`,
       resolveDir: process.cwd(),
     },
     bundle: true,
@@ -214,10 +238,12 @@ async function bundleDep(entrypoint: string): Promise<string> {
     write: false,
     minify: true,
     platform: 'browser',
+    alias,
+    external: externalUrls,
   });
 
   const code = result.outputFiles[0].text;
-  cache.set(entrypoint, code);
+  cache.set(cacheKey, code);
   return code;
 }
 
@@ -370,8 +396,8 @@ export function lumenHostModules(): Plugin {
     },
 
     async generateBundle() {
-      for (const [file, dep] of Object.entries(HOST_DEPS_PROD)) {
-        const code = await bundleDep(dep);
+      for (const [file, cfg] of Object.entries(HOST_DEPS_PROD)) {
+        const code = await bundleDep(cfg.specifier, cfg.shared);
         this.emitFile({ type: 'asset', fileName: `__lumen/${file}`, source: code });
       }
 

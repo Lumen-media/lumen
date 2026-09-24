@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react-swc';
 import { defineConfig } from 'vite';
+import { esmExternalRequirePlugin } from 'rolldown/plugins';
 import { lumenHostModules } from './scripts/vite-plugin-lumen-host-modules';
 
 // @ts-expect-error process is a nodejs global
@@ -19,16 +20,13 @@ export default defineConfig({
       routesDirectory: "./src/app",
     }),
     lumenHostModules(),
+    esmExternalRequirePlugin({
+      external: ['react', 'react-dom', 'react-dom/client'],
+    }),
   ],
 
   define: {
     __BUILD_DATE__: JSON.stringify(buildDate),
-  },
-
-  build: {
-    rollupOptions: {
-      external: ['react', 'react-dom', 'react-dom/client'],
-    },
   },
 
   optimizeDeps: {
