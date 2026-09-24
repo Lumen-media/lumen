@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { createPresenterHost } from './presenter-host';
+import { importModuleCode, readModuleEntry } from './module-loader';
 import type { LumenPlugin, ModuleManifest } from './types';
 
 export async function bootPresenterModules(window: 'presenter' | 'surface' = 'presenter') {
@@ -40,20 +41,24 @@ export async function bootSingleModule(moduleId: string, window: 'presenter' | '
 }
 
 async function loadAndBootModule(manifest: ModuleManifest, window: 'presenter' | 'surface') {
-  const res = await fetch(`/__modules/${manifest.id}/${manifest.entry}`);
-  if (!res.ok) return;
-
-  const code = await res.text();
-  const blob = new Blob([code], { type: 'application/javascript' });
-  const blobUrl = URL.createObjectURL(blob);
+  let code: string;
+  try {
+    code = await readModuleEntry(manifest);
+  } catch (err) {
+    console.error(`[presenter] failed to read module ${manifest.id}:`, err);
+    return;
+  }
 
   try {
-    const mod = await import(/* @vite-ignore */ blobUrl) as { default: new () => LumenPlugin };
+    const mod = await importModuleCode(
+      code,
+      `lumen-module://${manifest.id}/${manifest.entry || 'main.js'}`,
+    ) as { default: new () => LumenPlugin };
     const plugin = new mod.default();
     plugin.manifest = manifest;
     const host = await createPresenterHost(manifest, window);
     await plugin.onload(host);
-  } finally {
-    URL.revokeObjectURL(blobUrl);
+  } catch (err) {
+    console.error(`[presenter] failed to boot module ${manifest.id}:`, err);
   }
 }
