@@ -43,6 +43,7 @@ jobs:
             node scripts/version-bump.mjs "$VERSION"
           fi
           echo "tag=v$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -97,6 +98,7 @@ jobs:
           generateReleaseNotes: true
 
       - name: Commit bumped version back
+        if: matrix.platform == 'ubuntu-24.04'
         env:
           VERSION: ${{ steps.version.outputs.version }}
           BRANCH: ${{ startsWith(github.ref, 'refs/tags/') && github.repository_default_branch || github.ref_name }}
@@ -107,7 +109,17 @@ jobs:
           git add package.json pnpm-lock.yaml src-tauri/Cargo.toml src-tauri/tauri.conf.json src-tauri/Cargo.lock
           if git diff --cached --quiet; then
             echo "Sem mudanças de versão para commitar."
-          else
-            git commit -m "chore: bump version to $VERSION"
-            git push origin "HEAD:refs/heads/$BRANCH"
+            exit 0
           fi
+          git commit -m "chore: bump version to $VERSION"
+
+          for i in 1 2 3 4 5; do
+            if git push origin "HEAD:refs/heads/$BRANCH"; then
+              echo "Push do bump de versão OK."
+              exit 0
+            fi
+            echo "Push rejeitado (conflito). Fazendo pull --rebase e tentando de novo..."
+            git pull --rebase --autostash origin "$BRANCH"
+          done
+          echo "Não foi possível empurrar o bump de versão após várias tentativas."
+          exit 1
