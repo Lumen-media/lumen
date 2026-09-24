@@ -91,7 +91,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ steps.version.outputs.tag }}
-          releaseName: ${{ format('Lumen {0}', steps.version.outputs.version) }}
+          releaseName: ${{ steps.version.outputs.tag }}
           releaseDraft: true
           prerelease: false
           generateReleaseNotes: true
