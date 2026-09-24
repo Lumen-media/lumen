@@ -190,6 +190,7 @@ export class LumenPlugin {
 const HOST_DEPS_PROD: Record<string, string> = {
   'react.js': 'react',
   'react-dom.js': 'react-dom',
+  'react-dom-client.js': 'react-dom/client',
   'react-jsx-runtime.js': 'react/jsx-runtime',
   'react-jsx-dev-runtime.js': 'react/jsx-dev-runtime',
 };
@@ -199,9 +200,13 @@ const cache = new Map<string, string>();
 async function bundleDep(entrypoint: string): Promise<string> {
   if (cache.has(entrypoint)) return cache.get(entrypoint)!;
 
+  const mod = _require(entrypoint) as Record<string, unknown>;
+  const keys = Object.keys(mod).filter((k) => /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k));
+  const namedReexports = keys.map((k) => `export const ${k} = _mod.${k};`).join('\n');
+
   const result = await build({
     stdin: {
-      contents: `export * from ${JSON.stringify(entrypoint)}; export { default } from ${JSON.stringify(entrypoint)};`,
+      contents: `import _mod from ${JSON.stringify(entrypoint)};\n${namedReexports}\nexport default _mod;\n`,
       resolveDir: process.cwd(),
     },
     bundle: true,
@@ -250,7 +255,7 @@ export function lumenHostModules(): Plugin {
 
       imports['react'] = '/__lumen/react.js';
       imports['react-dom'] = '/__lumen/react-dom.js';
-      imports['react-dom/client'] = '/__lumen/react-dom.js';
+      imports['react-dom/client'] = '/__lumen/react-dom-client.js';
       imports['react/jsx-runtime'] = '/__lumen/react-jsx-runtime.js';
       imports['react/jsx-dev-runtime'] = '/__lumen/react-jsx-dev-runtime.js';
       imports['@lumen-media/ui'] = '/__lumen/ui.js';
@@ -347,6 +352,7 @@ export function lumenHostModules(): Plugin {
         const DEV_WRAPPERS: Record<string, string> = {
           'react.js': 'react',
           'react-dom.js': 'react-dom',
+          'react-dom-client.js': 'react-dom/client',
           'react-jsx-runtime.js': 'react/jsx-runtime',
           'react-jsx-dev-runtime.js': 'react/jsx-dev-runtime',
         };
