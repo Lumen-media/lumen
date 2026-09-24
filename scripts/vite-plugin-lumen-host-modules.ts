@@ -405,6 +405,18 @@ export function lumenHostModules(): Plugin {
 
       const uiEntry = path.resolve(projectRoot, 'src/lib/module-ui.ts');
       if (fs.existsSync(uiEntry)) {
+        const uiShared: Record<string, string> = {
+          react: '/__lumen/react.js',
+          'react-dom': '/__lumen/react-dom.js',
+          'react/jsx-runtime': '/__lumen/react-jsx-runtime.js',
+          'react/jsx-dev-runtime': '/__lumen/react-jsx-dev-runtime.js',
+        };
+        const uiAlias: Record<string, string> = {};
+        const uiExternalUrls: string[] = [];
+        for (const [specifier, urlPath] of Object.entries(uiShared)) {
+          uiAlias[specifier] = shimFile(specifier, urlPath);
+          uiExternalUrls.push(urlPath);
+        }
         const uiResult = await build({
           entryPoints: [uiEntry],
           bundle: true,
@@ -412,8 +424,8 @@ export function lumenHostModules(): Plugin {
           write: false,
           minify: true,
           platform: 'browser',
-          external: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
-          alias: { '@': path.resolve(projectRoot, 'src') },
+          alias: { '@': path.resolve(projectRoot, 'src'), ...uiAlias },
+          external: uiExternalUrls,
           loader: { '.tsx': 'tsx', '.ts': 'ts' },
         });
         this.emitFile({ type: 'asset', fileName: '__lumen/ui.js', source: uiResult.outputFiles[0].text });
