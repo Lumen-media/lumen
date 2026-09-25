@@ -37,7 +37,7 @@ listen<{ triggerId: string; config: unknown }>('module:queue-add-trigger', (even
       : triggerId;
   const tag = cfg?.versionDisplayName != null ? String(cfg.versionDisplayName) : '';
   const configStr = JSON.stringify(config);
-  const entryId = hashString(triggerId + ':' + configStr);
+  const entryId = hashString(`${triggerId}:${configStr}`);
 
   const entriesStore = useQueueEntriesStore.getState();
   const existing = entriesStore.entries.find((e) => e.id === entryId);
