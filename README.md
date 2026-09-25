@@ -202,4 +202,4 @@ Issues and pull requests are welcome. Please use the issue templates in `.github
 
 ## License
 
-[MIT](LICENSE) © 2026 Gabriel Santos. Use it, fork it, ship it — just keep the notice.
+[Apache-2.0](LICENSE) © 2026 Gabriel Santos. Use it, fork it, ship it — just keep the notice, and don't use the Lumen name or logo to endorse something that isn't us. See [NOTICE](NOTICE).
