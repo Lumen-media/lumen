@@ -17,6 +17,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "biome check --formatter-enabled=false .",
+    "lint:fix": "biome check --formatter-enabled=false --write .",
     "format": "biome format --write ."
   },
   "dependencies": {
