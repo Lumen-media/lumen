@@ -1,10 +1,9 @@
 'use client';
 
-import { useTranslation } from '@/lib/i18n';
 import { ArrowRight, Code2, FileText, Lock, RefreshCw, Shield, Sparkles } from 'lucide-react';
-
 import { useAppVersion } from '@/hooks/use-app-version';
 import { useSystemInfo } from '@/hooks/use-system-info';
+import { useTranslation } from '@/lib/i18n';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Separator } from '../ui/separator';

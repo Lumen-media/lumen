@@ -2,8 +2,8 @@ import path from "node:path";
 import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react-swc';
-import { defineConfig } from 'vite';
 import { esmExternalRequirePlugin } from 'rolldown/plugins';
+import { defineConfig } from 'vite';
 import { lumenHostModules } from './scripts/vite-plugin-lumen-host-modules';
 
 // @ts-expect-error process is a nodejs global

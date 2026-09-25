@@ -17,9 +17,6 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { formatDate, formatFileSize } from '@/lib/format';
-import { getFileIcon } from '@/lib/file-icons';
-import { useTranslation } from '@/lib/i18n';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,6 +26,9 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { getFileIcon } from '@/lib/file-icons';
+import { formatDate, formatFileSize } from '@/lib/format';
+import { useTranslation } from '@/lib/i18n';
 import type { FileInfo, MediaType } from '@/services';
 import { lumenUrl } from '@/services/lumen-url';
 import { useDeleteFileStore } from '@/stores/delete-file-store';

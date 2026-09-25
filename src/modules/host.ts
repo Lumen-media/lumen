@@ -1,14 +1,17 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
+import { useI18nStore } from '@/lib/i18n';
+import { queueDbService } from '@/services/queue-db-service';
+import { useQueueEntriesStore } from '@/stores/queue-entries-store';
+import { useQueueStore } from '@/stores/queue-store';
 import { createBusAPI, createEventsAPI } from './apis/bus';
 import { createCommandsAPI } from './apis/commands';
-import { createMenusAPI } from './apis/menus';
 import { createDataAPI } from './apis/data';
 import {
   createLibraryHostAPI,
   createLyricsHostAPI,
-  createPlayerHostAPI,
   createOverlayHostAPI,
+  createPlayerHostAPI,
   createPresentationHostAPI,
   createQueueHostAPI,
   createSurfaceHostAPI,
@@ -18,14 +21,11 @@ import { createFontsAPI } from './apis/fonts';
 import { createFsAPI } from './apis/fs';
 import { createI18nAPI } from './apis/i18n';
 import { createLoggerAPI } from './apis/logger';
+import { createMenusAPI } from './apis/menus';
 import { createNetAPI } from './apis/net';
 import { createPanelsAPI } from './apis/panels';
 import { createSettingsAPI } from './apis/settings';
 import { createUIAPI } from './apis/ui';
-import { useI18nStore } from '@/lib/i18n';
-import { useQueueEntriesStore } from '@/stores/queue-entries-store';
-import { useQueueStore } from '@/stores/queue-store';
-import { queueDbService } from '@/services/queue-db-service';
 import type { LumenHost, ModuleManifest } from './types';
 
 listen<{ triggerId: string; config: unknown }>('module:queue-add-trigger', (event) => {

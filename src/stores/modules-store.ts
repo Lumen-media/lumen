@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import {
-  storeService,
   type StoreCatalog,
   type StoreProgressPhase,
+  storeService,
 } from '@/services/store-service';
 
 export interface StoreProgressState {

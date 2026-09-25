@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
 import type React from 'react';
+import { useMemo } from 'react';
 import { useModuleStore } from '../store';
 import type { PanelSpec } from '../types';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';

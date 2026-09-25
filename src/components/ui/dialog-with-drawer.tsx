@@ -1,11 +1,11 @@
 import type { DialogRootChangeEventDetails } from '@base-ui/react/dialog';
+import type * as React from 'react';
 import {
   forwardRef,
   useCallback,
   useImperativeHandle,
   useState,
 } from 'react';
-import type * as React from 'react';
 
 import {
   Dialog,

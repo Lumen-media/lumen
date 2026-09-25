@@ -1,13 +1,13 @@
-import { create } from 'zustand';
 import { emit, listen } from '@tauri-apps/api/event';
+import { create } from 'zustand';
+import { useI18nStore } from '@/lib/i18n';
 import { loadConfig, saveConfigKey } from '@/services/config';
 import {
   deleteProfile as deleteProfileFile,
   listProfiles,
-  saveProfile,
   type Profile,
+  saveProfile,
 } from '@/services/profile-service';
-import { useI18nStore } from '@/lib/i18n';
 import { type AccentId, type ColorMode, useThemeStore } from './theme-store';
 
 function buildDefaultProfile(): Profile {

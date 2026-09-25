@@ -1,12 +1,11 @@
 'use client';
 
-import { useTranslation } from '@/lib/i18n';
 import { BookOpen, ImagePlus, Loader2, MonitorPlay, Music, Smartphone, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-
-import { devicesService } from '@/services';
+import { useTranslation } from '@/lib/i18n';
 import type { Device, DevicePermissions } from '@/services';
+import { devicesService } from '@/services';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Checkbox } from '../ui/checkbox';

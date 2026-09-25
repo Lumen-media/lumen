@@ -1,6 +1,6 @@
 import { listen } from '@tauri-apps/api/event';
 import { create } from 'zustand';
-import { downloadService, type DownloadCallbacks } from '@/services/download-service';
+import { type DownloadCallbacks, downloadService } from '@/services/download-service';
 import { mediaDbService } from '@/services/media-db-service';
 import type {
   CookieValidation,

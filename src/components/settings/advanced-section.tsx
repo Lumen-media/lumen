@@ -1,18 +1,18 @@
 'use client';
 
-import { useTranslation } from '@/lib/i18n';
 import { Cpu, Globe, MessageCircle, MonitorPlay, Shield } from 'lucide-react';
 import { useEffect } from 'react';
+import { useTranslation } from '@/lib/i18n';
 
 import { useAppSettingsStore } from '@/stores/app-settings-store';
 import { useChatStore } from '@/stores/chat-store';
 import { useStreamingStore } from '@/stores/streaming-store';
-import { MediaFoldersSection } from './media-folders-section';
 import { CardContent } from '../ui/card';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
+import { MediaFoldersSection } from './media-folders-section';
 
 export function AdvancedSection() {
   const { t } = useTranslation();

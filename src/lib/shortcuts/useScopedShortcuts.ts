@@ -1,5 +1,5 @@
-import { useHotkeys } from '@tanstack/react-hotkeys';
 import type { Hotkey, UseHotkeyDefinition, UseHotkeyOptions } from '@tanstack/react-hotkeys';
+import { useHotkeys } from '@tanstack/react-hotkeys';
 import { SHORTCUTS } from './default-shortcuts';
 import type { ShortcutGate, ShortcutScope } from './types';
 

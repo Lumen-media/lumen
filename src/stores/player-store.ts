@@ -1,7 +1,7 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
-import { create } from 'zustand';
 import { toast } from 'sonner';
+import { create } from 'zustand';
 import { ensureMediaWindow, getMediaWindow } from '@/lib/present-window';
 import { createStreamSocket } from '@/lib/stream-socket';
 import { useModuleStore } from '@/modules/store';

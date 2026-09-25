@@ -1,13 +1,13 @@
 'use client';
 
-import { useTranslation } from '@/lib/i18n';
 import { CheckCircle2, Cookie, DownloadCloud, Loader2, ShieldAlert, ShieldCheck, Video, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useDownloadStore } from '@/stores/download-store';
-import type { CookieValidation } from '@/services/types';
-import { CardContent } from '../ui/card';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import type { CookieValidation } from '@/services/types';
+import { useDownloadStore } from '@/stores/download-store';
 import { Button } from '../ui/button';
+import { CardContent } from '../ui/card';
 import { Separator } from '../ui/separator';
 
 const COOKIE_STATUS_META: Record<
