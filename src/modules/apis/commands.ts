@@ -1,10 +1,12 @@
 import { useCommandStore } from '@/stores/command-store';
 import type { CommandSpec, CommandsAPI, Disposable, PrefixSpec } from '../types';
 
-export function createCommandsAPI(): CommandsAPI {
+export function createCommandsAPI(moduleId?: string): CommandsAPI {
   return {
     add(spec: CommandSpec): Disposable {
-      useCommandStore.getState()._register(spec);
+      useCommandStore.getState()._register(
+        moduleId ? { ...spec, moduleId } : spec
+      );
       return {
         dispose() {
           useCommandStore.getState()._unregister(spec.id);
@@ -22,7 +24,9 @@ export function createCommandsAPI(): CommandsAPI {
     },
 
     addPrefix(spec: PrefixSpec): Disposable {
-      useCommandStore.getState()._registerPrefix(spec);
+      useCommandStore.getState()._registerPrefix(
+        moduleId ? { ...spec, moduleId } : spec
+      );
       return {
         dispose() {
           useCommandStore.getState()._unregisterPrefix(spec.prefix);

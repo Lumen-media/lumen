@@ -99,7 +99,7 @@ export async function createHost(
     app: { version: appVersion, locale: useI18nStore.getState().locale || navigator.language },
 
     panels: createPanelsAPI(id),
-    commands: createCommandsAPI(),
+    commands: createCommandsAPI(id),
     menus: createMenusAPI(),
     ui: createUIAPI(openCommandPalette),
 

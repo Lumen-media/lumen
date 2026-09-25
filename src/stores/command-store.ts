@@ -12,6 +12,7 @@ export interface ActiveApp {
   title: string;
   component: React.ComponentType<CommanderAppProps>;
   search?: boolean | CommanderSearchOptions;
+  moduleId?: string;
 }
 
 interface CommandStore {
