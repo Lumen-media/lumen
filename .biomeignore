@@ -1,2 +1,0 @@
-# Ignore generated route files
-src/**/*.gen.ts
