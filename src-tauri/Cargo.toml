@@ -3,7 +3,7 @@ name = "lumen"
 version = "0.4.6"
 description = "Desktop software for live events - lyrics, media, slides and remote control from a single interface"
 authors = ["gabrielSantos1101"]
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/Lumen-media/lumen"
 edition = "2024"
 
