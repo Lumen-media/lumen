@@ -1,3 +1,10 @@
+// Copyright 2026 Gabriel Santos
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 — see LICENSE for the full text.
+// If you modify this file, you must carry a prominent notice stating that you
+// changed it (LICENSE section 4(b)).
+
 import { TextEditor as _TextEditor, type TextEditorRef } from '@/components/text-editor';
 import { type BubbleMenuItem, TextEditorBubbleMenu } from '@/components/text-editor-bubble-menu';
 import { TextEditorToolbar } from '@/components/text-editor-toolbar';
