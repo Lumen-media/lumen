@@ -612,6 +612,7 @@ function RootView() {
         title: r.commandSpec.title,
         component: r.commandSpec.component,
         search: r.commandSpec.commanderSearch,
+        moduleId: r.commandSpec.moduleId,
       } satisfies ActiveApp);
       return;
     }
@@ -766,15 +767,17 @@ function AppView({
         onBack={() => void onBackAction()}
       />
       <div className="min-h-[320px] flex-1 px-3 pb-3">
-        <AppComponent
-          onClose={close}
-          onBack={() => void onBackAction()}
-          query={value}
-          setQuery={setValue}
-          setSearchTrailing={setSearchTrailing}
-          setBackHandler={setBackHandler}
-          setFooterTrailing={setFooterTrailing}
-        />
+        <div data-module-scope={app.moduleId}>
+          <AppComponent
+            onClose={close}
+            onBack={() => void onBackAction()}
+            query={value}
+            setQuery={setValue}
+            setSearchTrailing={setSearchTrailing}
+            setBackHandler={setBackHandler}
+            setFooterTrailing={setFooterTrailing}
+          />
+        </div>
       </div>
       <CommanderFooter showBack>{FooterTrailing}</CommanderFooter>
     </div>

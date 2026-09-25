@@ -65,6 +65,7 @@ export interface CommandSpec {
   run?: (args?: unknown) => unknown;
   component?: React.ComponentType<CommanderAppProps>;
   commanderSearch?: boolean | CommanderSearchOptions;
+  moduleId?: string;
 }
 
 export interface PanelsAPI {
@@ -87,6 +88,7 @@ export interface PrefixSpec {
   icon?: React.ComponentType<{ className?: string }>;
   placeholder?: string;
   handle(query: string): PrefixResult[] | Promise<PrefixResult[]>;
+  moduleId?: string;
 }
 
 export interface CommandsAPI {

@@ -112,6 +112,7 @@ function prefixResultToSearchResult(r: import('@/modules/types').PrefixResult, s
       run: r.run,
       component: r.component,
       commanderSearch: r.commanderSearch,
+      moduleId: spec.moduleId,
     },
   };
 }
