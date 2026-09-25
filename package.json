@@ -3,6 +3,13 @@
   "private": true,
   "version": "0.4.6",
   "type": "module",
+  "license": "MIT",
+  "author": "gabrielSantos1101",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lumen-media/lumen.git"
+  },
+  "homepage": "https://github.com/Lumen-media/lumen#readme",
   "packageManager": "pnpm@12.3.4",
   "scripts": {
     "dev": "vite",
