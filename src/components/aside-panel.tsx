@@ -79,13 +79,13 @@ import {
 } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useTranslation } from '@/lib/i18n';
 import { formatDuration } from '@/lib/format';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { useModuleStore } from '@/modules/store';
 import type { QueueTriggerSpec } from '@/modules/types';
-import { mediaDbService } from '@/services/media-db-service';
 import { lumenUrl } from '@/services/lumen-url';
+import { mediaDbService } from '@/services/media-db-service';
 import { notesService } from '@/services/notes-service';
 import { queueDbService } from '@/services/queue-db-service';
 import type { FileInfo } from '@/services/types';

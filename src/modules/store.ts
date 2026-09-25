@@ -1,5 +1,5 @@
-import { create } from 'zustand';
 import type React from 'react';
+import { create } from 'zustand';
 import type { ModuleRecord, ModuleStatus, PanelSpec, QueueActionSpec, QueueTriggerSpec, SurfaceWindowOptions } from './types';
 
 export interface ModuleSurfaceState {

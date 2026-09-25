@@ -16,6 +16,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { ensureMediaWindow } from '@/lib/present-window';
 import {
   clearPresentationPreview,
   getPresentationPreviewPath,
@@ -23,7 +24,6 @@ import {
   type PresentationPreviewEvent,
   selectPresentationPreview,
 } from '@/lib/presentation-preview';
-import { ensureMediaWindow } from '@/lib/present-window';
 import { cn } from '@/lib/utils';
 import { type FileInfo, fileManagementService, presentationPreviewsCache } from '@/services';
 import { type PresentationSlide, usePresentationStore } from '@/stores/presentation-store';

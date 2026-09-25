@@ -2,35 +2,35 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type React from 'react';
-import { lyricService } from '@/services/lyric-service';
 import { lumenUrl } from '@/services/lumen-url';
+import { lyricService } from '@/services/lyric-service';
 import { mediaDbService } from '@/services/media-db-service';
-import { useModuleStore } from '../store';
+import type { Profile } from '@/services/profile-service';
 import { usePlayerStore } from '@/stores/player-store';
+import { useProfileStore } from '@/stores/profile-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
 import { useQueueStore } from '@/stores/queue-store';
+import { ACCENT_PRESETS } from '@/stores/theme-store';
+import { useModuleStore } from '../store';
 import type {
   LibraryHostAPI,
   LyricsHostAPI,
   MediaItem,
   MediaRef,
-  MediaType as PublicMediaType,
+  OverlayHostAPI,
   PlayerHostAPI,
   PresentationHostAPI,
-  OverlayHostAPI,
-  SurfaceHostAPI,
-  SurfaceWindowOptions,
+  MediaType as PublicMediaType,
   QueueHostAPI,
   StageBackdropChangeDetail,
+  SurfaceHostAPI,
+  SurfaceWindowOptions,
   ThemeAddInput,
   ThemeAddResult,
   ThemeRef,
   ThemesHostAPI,
 } from '../types';
 import { globalBus } from './bus';
-import { useProfileStore } from '@/stores/profile-store';
-import { ACCENT_PRESETS } from '@/stores/theme-store';
-import type { Profile } from '@/services/profile-service';
 
 function stripExt(name: string) {
   return name.replace(/\.[^/.]+$/, '');

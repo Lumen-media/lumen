@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { useModuleStore } from '@/modules/store';
 import { queueDbService, rowToItem } from '@/services/queue-db-service';
 import type { FileInfo } from '@/services/types';
-import { useQueueStore, type QueueItem } from './queue-store';
+import { type QueueItem, useQueueStore } from './queue-store';
 
 export type TriggerInstance = { id: string; triggerId: string; config: unknown; showLabel: boolean; played: boolean };
 

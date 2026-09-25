@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import { createPresenterHost } from './presenter-host';
 import { importModuleCode, readModuleEntry } from './module-loader';
+import { createPresenterHost } from './presenter-host';
 import type { LumenPlugin, ModuleManifest } from './types';
 
 export async function bootPresenterModules(window: 'presenter' | 'surface' = 'presenter') {

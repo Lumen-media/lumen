@@ -2,11 +2,11 @@
 
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
-import { useTranslation } from '@/lib/i18n';
 import { CheckCircle2, Cookie, ExternalLink, FileUp, Loader2, LogIn, StepForward, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useDownloadStore } from '@/stores/download-store';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { useDownloadStore } from '@/stores/download-store';
 import { Button } from './ui/button';
 import {
   Dialog,

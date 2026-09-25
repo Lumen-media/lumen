@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import { createFileRoute } from '@tanstack/react-router';
+import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/lib/i18n';
 import './splash.css';

@@ -10,10 +10,10 @@ import { useProfiles } from '@/hooks/use-profiles';
 import { useStreamPreview } from '@/hooks/use-stream-preview';
 import { useScopedShortcuts } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
-import { lumenUrl } from '@/services/lumen-url';
 import { PresenterSlot } from '@/modules/components/PresenterSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
+import { lumenUrl } from '@/services/lumen-url';
 import { usePlayerStore } from '@/stores/player-store';
 import { useProfileStore } from '@/stores/profile-store';
 

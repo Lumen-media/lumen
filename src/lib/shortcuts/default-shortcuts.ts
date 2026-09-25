@@ -1,7 +1,7 @@
 import { emit } from '@tauri-apps/api/event';
+import { openPresentation } from '@/lib/present-window';
 import { getPresentationPreviewPath } from '@/lib/presentation-preview';
 import { router } from '@/lib/router';
-import { openPresentation } from '@/lib/present-window';
 import { fileManagementService } from '@/services';
 import { useAsideStore } from '@/stores/aside-store';
 import { useChatStore } from '@/stores/chat-store';

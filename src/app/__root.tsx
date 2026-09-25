@@ -1,8 +1,8 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router';
 import * as React from 'react';
-import { NoticesDialog } from '@/components/notices-dialog';
 import { GlobalAlert } from '@/components/global-alert';
 import { LyricModal } from '@/components/lyric-modal';
+import { NoticesDialog } from '@/components/notices-dialog';
 import { OptimizingIndicator } from '@/components/optimizing-indicator';
 import { QuickShortcutsModal } from '@/components/quick-shortcuts-modal';
 import { ShortcutsSheet } from '@/components/shortcuts-sheet';

@@ -1,3 +1,4 @@
+import { emit, listen } from '@tauri-apps/api/event';
 import { createDataAPI } from './apis/data';
 import { createThemesHostAPI } from './apis/domain';
 import { createFsAPI } from './apis/fs';
@@ -6,7 +7,6 @@ import { createLoggerAPI } from './apis/logger';
 import { createNetAPI } from './apis/net';
 import { createPanelsAPI } from './apis/panels';
 import { getBackgroundPickerOpener } from './apis/ui';
-import { emit, listen } from '@tauri-apps/api/event';
 import type { BusAPI, Disposable, LumenHost, ModuleManifest } from './types';
 
 const noop = () => {};

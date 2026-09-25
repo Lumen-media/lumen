@@ -1,9 +1,9 @@
 'use client';
 
-import { useTranslation } from '@/lib/i18n';
 import { Loader2, QrCode, RefreshCw } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from '@/lib/i18n';
 import type { RegistrationTokenPayload, RemoteAccessSettings } from '@/services';
 import { devicesService } from '@/services';
 import { Button } from '../ui/button';

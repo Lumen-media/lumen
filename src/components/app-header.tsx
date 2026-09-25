@@ -11,9 +11,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
 import { useTranslation } from '@/lib/i18n';
 import { formatShortcutForDisplay, menuShortcut } from '@/lib/shortcuts';
+import { cn } from '@/lib/utils';
 import { HeaderTrailingSlot } from '@/modules/components/HeaderTrailingSlot';
 import { useAsideStore } from '@/stores/aside-store';
 import { useChatStore } from '@/stores/chat-store';

@@ -1,5 +1,5 @@
 import { useMenuRegistry } from '@/components/titlebar/menu-registry';
-import type { Disposable, MenuItemAction, MenusAPI, MenuSpec } from '../types';
+import type { Disposable, MenuItemAction, MenuSpec, MenusAPI } from '../types';
 
 export function createMenusAPI(): MenusAPI {
   return {
