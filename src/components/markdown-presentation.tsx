@@ -6,12 +6,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useScopedShortcuts } from '@/lib/shortcuts';
-import { type LyricData, parseLyricFile } from '@/services/lyric-service';
-import { lumenUrl } from '@/services/lumen-url';
-import { useProfileStore } from '@/stores/profile-store';
 import { cn } from '@/lib/utils';
+import { lumenUrl } from '@/services/lumen-url';
+import { type LyricData, parseLyricFile } from '@/services/lyric-service';
+import { useProfileStore } from '@/stores/profile-store';
 
-function useBackgroundSrc(path?: string) {
+function useBackgroundSrc(path: string | undefined, width: number) {
   const [src, setSrc] = useState<string | undefined>();
 
   useEffect(() => {
@@ -19,13 +19,13 @@ function useBackgroundSrc(path?: string) {
       setSrc(undefined);
       return;
     }
-    setSrc(lumenUrl(path));
-  }, [path]);
+    setSrc(lumenUrl(path, { w: width }));
+  }, [path, width]);
 
   return src;
 }
 
-function useSlideBgSrc(path?: string) {
+function useSlideBgSrc(path: string | undefined, width: number) {
   const [displayedSrc, setDisplayedSrc] = useState<string | undefined>();
 
   useEffect(() => {
@@ -33,12 +33,20 @@ function useSlideBgSrc(path?: string) {
       setDisplayedSrc(undefined);
       return;
     }
-    const url = lumenUrl(path);
+    const url = lumenUrl(path, { w: width });
+    let cancelled = false;
     const img = new Image();
-    img.onload = () => setDisplayedSrc(url);
-    img.onerror = () => setDisplayedSrc(undefined);
+    img.onload = () => {
+      if (!cancelled) setDisplayedSrc(url);
+    };
+    img.onerror = () => {
+      if (!cancelled) setDisplayedSrc(undefined);
+    };
     img.src = url;
-  }, [path]);
+    return () => {
+      cancelled = true;
+    };
+  }, [path, width]);
 
   return displayedSrc;
 }
@@ -101,7 +109,7 @@ export function MarkdownPresentation({
       : slide?.background || lyricData.metadata.globalBackground || profileBackground || undefined;
 
     if (blackoutActive) {
-      invoke('push_stream_blank').catch(() => {});
+      invoke('push_stream_blank').catch(() => { });
       return;
     }
 
@@ -132,7 +140,15 @@ export function MarkdownPresentation({
         active: true,
       },
     }).catch(() => { });
-  }, [blackoutActive, currentSlide, filePath, hideLyrics, lyricData, profileBackground, useProfileWallpaper]);
+  }, [
+    blackoutActive,
+    currentSlide,
+    filePath,
+    hideLyrics,
+    lyricData,
+    profileBackground,
+    useProfileWallpaper,
+  ]);
 
   const totalSlides = lyricData?.slides.length ?? 0;
   const pendingSlideRef = useRef<number | null>(null);
@@ -273,9 +289,15 @@ export function MarkdownPresentation({
   }, [animation, exiting, slide]);
 
   const globalBgSrc = useBackgroundSrc(
-    useProfileWallpaper ? profileBackground : lyricData?.metadata.globalBackground || profileBackground
+    useProfileWallpaper
+      ? profileBackground
+      : lyricData?.metadata.globalBackground || profileBackground,
+    winW
   );
-  const slideBgSrc = useSlideBgSrc(useProfileWallpaper ? undefined : slide?.background);
+  const slideBgSrc = useSlideBgSrc(
+    useProfileWallpaper ? undefined : slide?.background,
+    winW
+  );
 
   if (!lyricData || !slide) {
     return <div className="h-full w-full bg-black" />;
@@ -325,10 +347,10 @@ export function MarkdownPresentation({
               <div key={`${currentSlide}-${i}`}>
                 {animation === 'typewriter'
                   ? line.split('').map((ch, j) => (
-                      <span key={`${currentSlide}-${i}-${j}`} className="md-char">
-                        {ch}
-                      </span>
-                    ))
+                    <span key={`${currentSlide}-${i}-${j}`} className="md-char">
+                      {ch}
+                    </span>
+                  ))
                   : line}
               </div>
             ))}
