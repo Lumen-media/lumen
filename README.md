@@ -202,4 +202,4 @@ Issues and pull requests are welcome. Please use the issue templates in `.github
 
 ## License
 
-No license has been declared yet. Add a `LICENSE` file before distributing binaries beyond the existing releases.
+[MIT](LICENSE) © 2026 Gabriel Santos. Use it, fork it, ship it — just keep the notice.
