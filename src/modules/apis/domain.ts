@@ -291,6 +291,7 @@ listen<StageBackdropChangeDetail>('stage-backdrop-change', (event) => {
 listen('module:overlay-window-closed', () => {
   overlayViewId = null;
   overlayProps = undefined;
+  restoreMainAfterOverlay().catch(() => {});
   globalBus.emit('overlay:clear');
 }).catch(() => {});
 
@@ -352,6 +353,26 @@ listen('module:presenter-ready', () => {
   }, 400);
 }).catch(() => {});
 
+let mainHiddenForOverlay = false;
+
+async function hideMainForOverlay() {
+  if (mainHiddenForOverlay) return;
+  const main = await WebviewWindow.getByLabel('main').catch(() => null);
+  if (!main) return;
+  const ok = await main.hide().then(() => true).catch(() => false);
+  if (ok) mainHiddenForOverlay = true;
+}
+
+async function restoreMainAfterOverlay() {
+  if (!mainHiddenForOverlay) return;
+  mainHiddenForOverlay = false;
+  const main = await WebviewWindow.getByLabel('main').catch(() => null);
+  if (!main) return;
+  await main.unminimize().catch(() => {});
+  await main.show().catch(() => {});
+  await main.setFocus().catch(() => {});
+}
+
 async function ensureOverlayWindow() {
   let win = await WebviewWindow.getByLabel('module-overlay-window').catch(() => null);
   if (!win) {
@@ -372,8 +393,6 @@ async function ensureOverlayWindow() {
         finish();
       })
         .then((unlisten) => {
-          // Generous like the surface window: the ready event only fires after
-          // bootPresenterModules() resolves, which can take well over 500ms.
           setTimeout(() => {
             unlisten();
             finish();
@@ -384,17 +403,18 @@ async function ensureOverlayWindow() {
 
     win = await WebviewWindow.getByLabel('module-overlay-window').catch(() => null);
     if (win) {
-      // Show before maximizing. Applying maximize() to a still-hidden window
-      // races with show() and the maximize is lost on Windows.
       await win.show().catch(() => {});
+      await hideMainForOverlay();
       applyOverlayWindowOptions(win, overlayProps);
       syncOverlayProjection();
+      return { created: true };
     }
     return { created: true };
   }
 
   const visible = await win.isVisible().catch(() => false);
   if (!visible) await win.show().catch(() => {});
+  if (!visible) await hideMainForOverlay();
   applyOverlayWindowOptions(win, overlayProps);
   syncOverlayProjection();
   return { created: false };
@@ -621,6 +641,7 @@ export function createOverlayHostAPI(): OverlayHostAPI {
       overlayProps = undefined;
       globalBus.emit('overlay:clear');
       emit('module:overlay-clear').catch(() => {});
+      restoreMainAfterOverlay().catch(() => {});
       WebviewWindow.getByLabel('module-overlay-window')
         .then((w) => w?.close())
         .catch(() => {});

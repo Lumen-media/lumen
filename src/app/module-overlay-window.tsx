@@ -40,9 +40,6 @@ async function applyWindowConfig(config?: WindowConfig) {
       );
     }
     if (config.maximized || config.fullscreen) {
-      // Geometry commands on a hidden window are dropped on Windows, and the
-      // host's show() can land after this event. Wait until we are actually
-      // visible, then maximize.
       if (!(await w.isVisible().catch(() => false))) {
         await new Promise<void>((resolve) => {
           const stop = setTimeout(resolve, 2000);
