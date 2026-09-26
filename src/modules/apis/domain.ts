@@ -372,17 +372,22 @@ async function ensureOverlayWindow() {
         finish();
       })
         .then((unlisten) => {
+          // Generous like the surface window: the ready event only fires after
+          // bootPresenterModules() resolves, which can take well over 500ms.
           setTimeout(() => {
             unlisten();
             finish();
-          }, 500);
+          }, 8000);
         })
         .catch(() => finish());
     });
 
     win = await WebviewWindow.getByLabel('module-overlay-window').catch(() => null);
     if (win) {
+      // Show before maximizing. Applying maximize() to a still-hidden window
+      // races with show() and the maximize is lost on Windows.
       await win.show().catch(() => {});
+      applyOverlayWindowOptions(win, overlayProps);
       syncOverlayProjection();
     }
     return { created: true };
@@ -390,8 +395,18 @@ async function ensureOverlayWindow() {
 
   const visible = await win.isVisible().catch(() => false);
   if (!visible) await win.show().catch(() => {});
+  applyOverlayWindowOptions(win, overlayProps);
   syncOverlayProjection();
   return { created: false };
+}
+
+function applyOverlayWindowOptions(win: WebviewWindow, props: unknown) {
+  const cfg = (props as { windowConfig?: { maximized?: boolean; fullscreen?: boolean } } | undefined)
+    ?.windowConfig;
+  if (!cfg) return;
+  if (cfg.maximized || cfg.fullscreen) {
+    win.maximize().catch(() => {});
+  }
 }
 function surfaceWindowLabel(moduleId: string) {
   return `surface-${moduleId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
