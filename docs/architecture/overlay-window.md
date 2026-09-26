@@ -2,7 +2,7 @@
 
 The overlay is a single shared Tauri window that a module projects one view into. It is separate from the surface windows, which are per-module.
 
-Sources: `src/modules/apis/domain.ts`, `src/app/module-overlay-window.tsx`, `src-tauri/src/module_runtime/mod.rs` (`create_overlay_window`)
+Sources: `src/modules/apis/domain.ts`, `src/app/module-overlay-window.tsx`, `src-tauri/src/main.rs` (`create_overlay_window`)
 
 ---
 
@@ -28,10 +28,10 @@ a second `project()` call **replaces** the first. Two modules calling `project()
 1. `WebviewWindow.getByLabel('module-overlay-window')` — reuse if it already exists
 2. Otherwise `invoke('create_overlay_window', { label, title, route: '/module-overlay-window' })`
 3. Wait for `module:overlay-ready`, bounded at 8s
-4. Re-fetch the handle, `show()`, then apply `maximized`/`fullscreen` from `overlayProps.windowConfig`
+4. Re-fetch the handle, `show()`, hide `main`, then apply `maximized`/`fullscreen` from `overlayProps.windowConfig`
 5. `syncOverlayProjection()` to push the current view into the fresh window
 
-The Rust command builds the window hidden, at 960x540, min 720x405, offset +80/+80 from the main window, and `fullscreen(false)`. It returns immediately; the window is shown by step 4.
+The Rust command builds the window hidden, at 960x540, min 720x405, offset +80/+80 from the main window, `fullscreen(false)` and `always_on_top(true)`. It returns immediately; the window is shown by step 4.
 
 ### Readiness is gated on module boot
 
@@ -49,6 +49,25 @@ bootPresenterModules()
 On `module:overlay-ready` the host re-projects immediately and again at 100ms and 400ms. The retries exist because the window's own `listen('module:overlay-project')` registration races the ready emission: if the listener is not bound yet, the first projection is lost. The window has the same listener-registration race, which is why it pushes its own ready only after boot rather than on mount.
 
 These timers fix the **view content**. They do not fix window geometry, which is why a lost `maximize()` is not recovered by them.
+
+### Taking over the screen
+
+While the overlay is up, the main window is hidden. The swap is one-way in the sense that only the overlay drives it: the media window is not involved, since it already opens on the second screen and its own show/hide is driven by `isScreenOpen` in the player store.
+
+`ensureOverlayWindow` hides `main` after showing the overlay, and both exit paths restore it:
+
+- `host.overlay.clear()`
+- `module:overlay-window-closed`, emitted by the window's `onCloseRequested`, which covers closing via the titlebar and the `overlay.close` shortcut
+
+`hideMainForOverlay` sets a module-scoped `mainHiddenForOverlay` flag only after `hide()` resolves, so a hide that never landed is not "restored" later, and a main window the user hid themselves is not unhidden. `restoreMainAfterOverlay` clears the flag first, making a second call a no-op — which is what makes it safe to run from both paths, since `clear()` closes the window and triggers the close event too.
+
+Restore does `unminimize()` before `show()` so a maximized main window returns maximized rather than restored-small.
+
+The overlay is still *created* while `main` is visible, because `create_overlay_window` reads `main.outer_position()` to place the overlay and a hidden window does not report its position reliably. The order is: create → show overlay → hide main.
+
+### Always-on-top
+
+`create_overlay_window` sets `always_on_top(true)` on the `WebviewWindowBuilder` chain. Without it the overlay could go behind the main window or any other app, which defeats the point of hiding `main` in the first place.
 
 ---
 
@@ -82,15 +101,8 @@ The 2s bound is deliberate: a window that never receives focus would otherwise h
 - resets `overlayViewId`/`overlayProps`
 - emits `overlay:clear` on the bus (for `onStateChange` subscribers)
 - emits `module:overlay-clear` so the window drops its presenter state
+- restores `main` (see [Taking over the screen](#taking-over-the-screen))
 
-The window also emits `module:overlay-window-closed` from an `onCloseRequested` handler, which the host listens for to reset the same state — so closing via the window's own titlebar button clears the overlay as well.
+The window also emits `module:overlay-window-closed` from an `onCloseRequested` handler, which the host listens for to reset the same state and restore `main` — so closing via the window's own titlebar button clears the overlay and brings the main window back as well.
 
 `isWindowOpen()` is `presenterViewId !== null`, i.e. it reflects whether a view is projected, not whether the OS window is open. A closed window with no projection reports `false`, which is the useful answer for a module.
-
----
-
-## The window is not always-on-top
-
-`createOverlayHostAPI` is documented as projecting "into the always-on-top overlay window", but no `always_on_top` or `set_always_on_top` call exists in the Rust command or in the frontend. The window is an ordinary window that happens to be a separate top-level surface; it can be occluded by, and will go behind, the main window.
-
-If always-on-top is intended behavior, the flag is simply missing from the `WebviewWindowBuilder` chain. Until it is added, the docstring overstates the guarantee.
