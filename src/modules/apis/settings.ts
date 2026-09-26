@@ -1,5 +1,6 @@
 import type { Disposable, SettingSpec, SettingsAPI } from '../types';
 
+/** Typed settings registry, namespaced per module. */
 export function createSettingsAPI(moduleId: string): SettingsAPI {
   const values = new Map<string, unknown>();
   const specs = new Map<string, SettingSpec>();

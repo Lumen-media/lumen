@@ -7,6 +7,12 @@ function normalizeQueryValue(v: NetQueryValue | NetQueryValue[]): string[] {
   return [String(v)];
 }
 
+/**
+ * Outbound HTTP.
+ *
+ * `moduleId` selects the manifest whose `permissions.network` allowlist
+ * gates every request; a host outside it fails with `permission_denied`.
+ */
 export function createNetAPI(moduleId: string): NetAPI {
   return {
     async request<T = unknown>(input: NetRequest): Promise<NetResponse<T>> {

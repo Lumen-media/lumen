@@ -1,6 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { FsAPI } from '../types';
 
+/**
+ * Sandboxed filesystem access.
+ *
+ * `moduleId` selects the root; every path is resolved inside it and traversal
+ * outside is rejected by the Rust runtime.
+ */
 export function createFsAPI(moduleId: string): FsAPI {
   return {
     async read(path) {

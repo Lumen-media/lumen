@@ -7,6 +7,7 @@ const FALLBACK_FONTS = [
   'Segoe UI', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana',
 ];
 
+/** Lists fonts installed on the host system. */
 export function createFontsAPI(): FontsAPI {
   return {
     async list() {

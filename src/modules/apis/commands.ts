@@ -1,6 +1,12 @@
 import { useCommandStore } from '@/stores/command-store';
 import type { CommandSpec, CommandsAPI, Disposable, PrefixSpec } from '../types';
 
+/**
+ * Command palette and prefix registry.
+ *
+ * `moduleId` is stamped onto every {@link CommandSpec} so the host can
+ * attribute and unregister a module's entries on unload.
+ */
 export function createCommandsAPI(moduleId?: string): CommandsAPI {
   return {
     add(spec: CommandSpec): Disposable {

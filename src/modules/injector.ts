@@ -20,6 +20,7 @@ const loaded = new Map<string, LoadedModule>();
 
 let openCommandPaletteFn: (prefilter?: string) => void = () => {};
 
+/** Injected by the app shell so the host can open the command palette. */
 export function setOpenCommandPalette(fn: (prefilter?: string) => void) {
   openCommandPaletteFn = fn;
 }
@@ -58,6 +59,13 @@ function scopeModuleStyles(moduleId: string) {
   }
 }
 
+/**
+ * Loads every enabled module.
+ *
+ * Installs the global error handlers on the first call, then resolves the
+ * module list from the Rust side and loads each one. A module that throws is
+ * marked `faulted` and the rest still load.
+ */
 export async function bootModules() {
   if (!globalHandlersInstalled) {
     installGlobalErrorHandlers();
@@ -131,6 +139,13 @@ function startModuleEventListeners() {
   });
 }
 
+/**
+ * Reads, evaluates and invokes a module's `onload`.
+ *
+ * On failure the record becomes `faulted` with `error`/`errorAt` set and
+ * `errorCount` incremented; the loader disables a module once it passes the
+ * crash quota. Never throws for a module-level failure.
+ */
 export async function loadModule(manifest: ModuleManifest) {
   const store = useModuleStore.getState();
 
@@ -173,6 +188,10 @@ export async function loadModule(manifest: ModuleManifest) {
   }
 }
 
+/**
+ * Runs `onunload` and disposes everything the module registered.
+ * No-op when the module was never loaded.
+ */
 export async function unloadModule(id: string) {
   const entry = loaded.get(id);
   if (!entry) return;
@@ -201,6 +220,7 @@ export async function unloadModule(id: string) {
   useModuleStore.getState().setStatus(id, 'disabled');
 }
 
+/** Unloads then loads a module in place, keeping its enabled state. */
 export async function reloadModule(id: string) {
   await unloadModule(id);
   const record = useModuleStore.getState().modules.get(id);
@@ -210,6 +230,10 @@ export async function reloadModule(id: string) {
   }
 }
 
+/**
+ * Installs a module from a local path or archive via the Rust runtime, then
+ * loads it. `devMode` keeps it sideloaded so it survives updates.
+ */
 export async function installModule(path: string, devMode = false) {
   const result = await invoke<{ manifest: ModuleManifest; source: string; enabled: boolean }>(
     'module_install', { path, devMode }
@@ -225,11 +249,13 @@ export async function installModule(path: string, devMode = false) {
   await loadModule(result.manifest);
 }
 
+/** Unloads the module and marks it disabled in the persisted module list. */
 export async function disableModule(id: string) {
   await unloadModule(id);
   await invoke('module_disable', { id });
 }
 
+/** Clears the disabled flag and loads the module again. */
 export async function enableModule(id: string) {
   await invoke('module_enable', { id });
   const record = useModuleStore.getState().modules.get(id);
@@ -239,6 +265,7 @@ export async function enableModule(id: string) {
   }
 }
 
+/** Unloads the module and removes it and its data from disk. */
 export async function uninstallModule(id: string) {
   await unloadModule(id);
   await invoke('module_uninstall', { id });

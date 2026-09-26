@@ -1,6 +1,7 @@
 import { useModuleStore } from '../store';
 import type { Disposable, PanelSpec, PanelsAPI } from '../types';
 
+/** Panel registration, namespaced per module. */
 export function createPanelsAPI(moduleId: string): PanelsAPI {
   return {
     add(spec: PanelSpec): Disposable {
