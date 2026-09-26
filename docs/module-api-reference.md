@@ -177,6 +177,39 @@ function ControlWindow({ close }: { close?: () => void }) {
 
 ---
 
+## `host.overlay` ✅
+
+Projects a view into the overlay window — a separate always-on-top surface that outlives the presenter window. Use it for lower-thirds, countdowns or anything that must stay on top while the presenter window is closed or reused.
+
+```ts
+// First call opens the overlay window implicitly
+host.overlay.project('my-module-countdown', { secondsLeft: 5 })
+
+// Clearing closes the window
+host.overlay.clear()
+```
+
+### `OverlayHostAPI`
+
+| Method | Returns | Description |
+|---|---|---|
+| `state()` | `'idle' \| 'live'` | Whether a view is currently projected |
+| `isWindowOpen()` | `boolean` | Same as `state() === 'live'` |
+| `project(viewId, props?)` | `void` | Replaces the overlay view. Opens the window on the first call. |
+| `clear()` | `void` | Clears the view and closes the overlay window |
+| `onStateChange(handler)` | `Disposable` | Subscribe to project/clear transitions |
+
+### Public bus events
+
+| Topic | Payload | Description |
+|---|---|---|
+| `overlay:project` | `{ viewId, props? }` | A module took over the overlay |
+| `overlay:clear` | — | The overlay was cleared or the window closed |
+
+> Unlike `host.surface`, the overlay window is a single shared window — there is one per app, not one per module. The last module to call `project()` owns it, so two modules competing for the overlay will fight.
+
+---
+
 ## `host.panels` ⚠️
 
 Adds React components to named slots in the interface. The infrastructure is ready; slots are still being wired into the app layout.
@@ -1004,10 +1037,16 @@ host.player.play('media-item-id')
 
 | Method | Returns | Description |
 |---|---|---|
-| `nextSlide()` | `void` | Advances to next slide in the active presentation/lyric |
-| `play(itemId)` | `void` | Plays the library item with the given ID |
+| `current()` | `TrackRef \| null` | The loaded track, or `null` when nothing is playing |
+| `state()` | `'playing' \| 'paused' \| 'idle'` | Transport state, read from the player store |
+| `play(track?)` | `void` | Loads and plays the given track. No-op when omitted. |
+| `pause()` | `void` | Pauses playback |
+| `seek(seconds)` | `void` | Seeks within the current track |
+| `volume(value?)` | `number` | Sets volume when given, otherwise reads it. Always returns `1`. |
+| `next()` | `void` | Next track |
+| `prev()` | `void` | Previous track |
 
-> ⚠️ Methods emit via bus — full read state (`current()`, `state()`, `volume()`) not yet wired.
+> ⚠️ `current()` and `state()` read real store state. The write methods (`pause`, `seek`, `volume`, `next`, `prev`) emit on the app event bus, and `volume()` is a stub that always returns `1` rather than the applied value.
 
 ---
 
@@ -1025,15 +1064,21 @@ const item = await host.library.addUrl?.({
 
 Initial support is intentionally provider-limited: only YouTube URLs are accepted, and they are stored as `video` media with cached thumbnail metadata when available.
 
-## Domain APIs 🚧
+## Domain APIs
 
-Still only wired via bus — read methods return empty/default data.
+The app-domain surface: lyrics, library, queue, player, presentation, overlay and fonts. They do not share a status — check each row.
 
-| API | Read methods | Write methods |
-|---|---|---|
-| `host.lyrics` | `list()` → `[]`, `get()` → `null`, `currentSlide()` → `null` | `advance()`, `back()` emit on bus |
-| `host.library` | `list()` → `[]`, `get()` → `null` | — |
-| `host.presentation` | `state()` → `'idle'`, `isWindowOpen()` → `false` | `project()`, `clear()`, `requestPresenterControls()`, `controls.slides()` |
+| API | Status | Read methods | Write methods |
+|---|---|---|---|
+| `host.lyrics` | ⚠️ Partial | `list()`/`get()` query the media database and return real rows. `currentSlide()` returns the correct `index` but an empty `text`. | `advance()`, `back()` emit on bus |
+| `host.library` | ✅ Working | `list()`, `get()`, `metadata()`, `thumbnail()` all read the media database | — |
+| `host.presentation` | ✅ Working | `state()` reflects the real presenter view; `isWindowOpen()` is accurate | `project()`, `clear()`, `requestPresenterControls()`, `controls.slides()` |
+| `host.overlay` | ✅ Working | `state()`, `isWindowOpen()` track the overlay window | `project()`, `clear()` open and close the overlay window |
+| `host.player` | ⚠️ Partial | `current()`, `state()` are real; `volume()` always returns `1` | `pause`, `seek`, `volume`, `next`, `prev` emit on bus |
+| `host.queue` | ⚠️ Partial | `items()` always returns `[]` and `currentIndex()` always returns `-1`; use `state()` and `onChange` instead | Writes, `next`/`previous`/`goTo` and trigger registration work |
+| `host.fonts` | ✅ Working | `list()` returns the fonts installed on the host system | — |
+
+> ⚠️ The `host.queue` row above is the one that still returns empty data. If you were reading an older revision of this page that described lyrics, library and presentation as stubs too, that has not been true since the media database was wired in — only the queue read methods remain stubbed.
 
 ---
 

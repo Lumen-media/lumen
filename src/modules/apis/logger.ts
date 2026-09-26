@@ -1,5 +1,6 @@
 import type { LoggerAPI } from '../types';
 
+/** Console logger that prefixes every line with the calling module's id. */
 export function createLoggerAPI(moduleId: string): LoggerAPI {
   const prefix = `[${moduleId}]`;
   return {

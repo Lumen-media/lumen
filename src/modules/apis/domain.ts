@@ -48,6 +48,7 @@ function toThemeRef(profile?: Profile): ThemeRef {
   };
 }
 
+/** Lyrics library reads and transport control. Backed by the media database. */
 export function createLyricsHostAPI(): LyricsHostAPI {
   return {
     async list(query) {
@@ -95,6 +96,12 @@ export function createLyricsHostAPI(): LyricsHostAPI {
   };
 }
 
+/**
+ * Live queue: writes, transport and trigger registration.
+ *
+ * Read methods are not wired yet — `items()` returns `[]` and
+ * `currentIndex()` returns `-1`. Use `state()` and `onChange` instead.
+ */
 export function createQueueHostAPI(): QueueHostAPI {
   return {
     items() {
@@ -166,6 +173,7 @@ export function createQueueHostAPI(): QueueHostAPI {
   };
 }
 
+/** Indexed media library: search, metadata and thumbnails. */
 export function createLibraryHostAPI(): LibraryHostAPI {
   return {
     async list(type, query) {
@@ -224,6 +232,7 @@ export function createLibraryHostAPI(): LibraryHostAPI {
   };
 }
 
+/** Audio transport for the active track. */
 export function createPlayerHostAPI(): PlayerHostAPI {
   return {
     current() {
@@ -468,6 +477,7 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
   return task;
 }
 
+/** Projects a module view into the presenter window. */
 export function createPresentationHostAPI(): PresentationHostAPI {
   let openedByModule = false;
 
@@ -523,6 +533,12 @@ export function createPresentationHostAPI(): PresentationHostAPI {
   };
 }
 
+/**
+ * Opens a dedicated window for one `surface.window` panel.
+ *
+ * `moduleId` scopes the panel lookup, so only this module's panels can be
+ * promoted to a window.
+ */
 export function createSurfaceHostAPI(moduleId: string): SurfaceHostAPI {
   return {
     state() {
@@ -563,6 +579,7 @@ export function createSurfaceHostAPI(moduleId: string): SurfaceHostAPI {
   };
 }
 
+/** Projects a module view into the always-on-top overlay window. */
 export function createOverlayHostAPI(): OverlayHostAPI {
   return {
     state() {
@@ -635,6 +652,12 @@ async function ensureMediaWindow() {
   return { created: false };
 }
 
+/**
+ * Theme switching and background management.
+ *
+ * `moduleId` is the owner recorded for backgrounds this module imports, so
+ * they can be traced back if a user needs to remove one.
+ */
 export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
   const pendingBackgrounds = new Map<string, Promise<ThemeAddResult>>();
 

@@ -43,6 +43,12 @@ function createSqliteHandle(moduleId: string): SqliteHandle {
   };
 }
 
+/**
+ * Module-private persistence.
+ *
+ * Both the JSON document and the SQLite database live under this module's
+ * sandbox directory, so a module cannot read another module's data.
+ */
 export function createDataAPI(moduleId: string): DataAPI {
   let sqliteHandle: SqliteHandle | undefined;
 

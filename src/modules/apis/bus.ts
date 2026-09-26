@@ -30,10 +30,12 @@ function on<T = unknown>(topic: string, handler: (payload: T) => void): Disposab
 
 export const globalBus: BusAPI = { emit, on };
 
+/** Module-scoped event bus. Topics are prefixed with the calling module id. */
 export function createBusAPI(): BusAPI {
   return globalBus;
 }
 
+/** Alias factory for {@link createBusAPI}; backs the `host.events` property. */
 export function createEventsAPI(): BusAPI {
   const localSubscribers = new Map<string, Set<Handler>>();
 

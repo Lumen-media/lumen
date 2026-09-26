@@ -1,6 +1,12 @@
 import { useMenuRegistry } from '@/components/titlebar/menu-registry';
 import type { Disposable, MenuItemAction, MenuSpec, MenusAPI } from '../types';
 
+/**
+ * Titlebar menu registration and extension.
+ *
+ * Registration goes through the shared menu store so the host can order module
+ * menus against its own built-ins.
+ */
 export function createMenusAPI(): MenusAPI {
   return {
     register(spec: MenuSpec): Disposable {
