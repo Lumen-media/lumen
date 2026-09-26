@@ -200,6 +200,7 @@ async fn create_overlay_window(
     .inner_size(960.0, 540.0)
     .min_inner_size(720.0, 405.0)
     .visible(false)
+    .always_on_top(true)
     .build()
     .map_err(|e| format!("Failed to create overlay window: {}", e))?;
 
