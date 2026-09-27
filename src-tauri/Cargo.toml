@@ -75,5 +75,8 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
 
+[dev-dependencies]
+zip = { version = "2", default-features = false, features = ["deflate", "time"] }
+
 [profile.dev.package.scrypt]
 opt-level = 3
