@@ -9749,6 +9749,7 @@ dependencies = [
  "indexmap 2.14.0",
  "memchr",
  "thiserror 2.0.18",
+ "time",
  "zopfli",
 ]
 
