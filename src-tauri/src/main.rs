@@ -55,7 +55,10 @@ fn get_exe_dir() -> Result<String, String> {
 #[tauri::command]
 fn close_splashscreen(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(splash) = app.get_webview_window("splashscreen") {
-        splash.close().map_err(|e| e.to_string())?;
+        // A failure to close the splash must never keep the app hidden.
+        if let Err(e) = splash.close() {
+            eprintln!("[splash] failed to close the splash window: {e}");
+        }
     }
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.maximize();
