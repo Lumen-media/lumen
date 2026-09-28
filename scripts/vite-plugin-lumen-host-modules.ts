@@ -332,15 +332,21 @@ export function lumenHostModules(): Plugin {
         }
 
         try {
-          const devRes = await fetch(`http://127.0.0.1:5179/module-files/${moduleId}/${fileRelative}`);
-          if (!devRes.ok) throw new Error('not found');
+          const devRes = await fetch(
+            `http://127.0.0.1:5179/module-files/${moduleId}/${fileRelative}`,
+            { signal: AbortSignal.timeout(5000) },
+          );
+          if (!devRes.ok) throw new Error(`module server returned ${devRes.status}`);
           const content = Buffer.from(await devRes.arrayBuffer());
           const contentType = devRes.headers.get('content-type') || 'application/octet-stream';
           res.setHeader('Content-Type', contentType);
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.statusCode = 200;
           res.end(content);
-        } catch {
+        } catch (err) {
+          console.error(
+            `[lumen-host-modules] ${moduleId}/${fileRelative} not on disk and module server unreachable: ${err instanceof Error ? err.message : String(err)}`,
+          );
           res.statusCode = 404;
           res.end(`module file not found: ${moduleId}/${fileRelative}`);
         }
@@ -377,7 +383,10 @@ export function lumenHostModules(): Plugin {
 
         const DEV_WRAPPERS: Record<string, string> = {
           'react.js': 'react',
-          'react-dom.js': 'react-dom',
+          // Vite never emits a `react-dom` dep entry, only `react-dom/client`
+          // plus a shared `react-dom-<hash>.js` chunk. Modules that reach for
+          // `react-dom` (e.g. flushSync) must be served the client entry.
+          'react-dom.js': 'react-dom/client',
           'react-dom-client.js': 'react-dom/client',
           'react-jsx-runtime.js': 'react/jsx-runtime',
           'react-jsx-dev-runtime.js': 'react/jsx-dev-runtime',
