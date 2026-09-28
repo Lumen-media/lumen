@@ -66,7 +66,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_THE_CONTENTS_OF_lumen.key.pub",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIzOTFERTNDOUY2QzlFMTgKUldRWW5teWZQTjZSczM1am9kSlg0UzNEbFl4Z1RLa1hkT2xKNk0zaE5QSXZwTVUvK2l3dVVRYXYK",
       "endpoints": [
         "https://github.com/Lumen-media/lumen/releases/latest/download/latest.json"
       ],
