@@ -7,6 +7,8 @@ import { OptimizingIndicator } from '@/components/optimizing-indicator';
 import { QuickShortcutsModal } from '@/components/quick-shortcuts-modal';
 import { ShortcutsSheet } from '@/components/shortcuts-sheet';
 import { Toaster } from '@/components/ui/sonner';
+import { AppUpdateDialog } from '@/components/updates/update-dialog';
+import { useAppUpdateWatcher } from '@/hooks/use-app-update';
 import { useModules } from '@/hooks/use-modules';
 import { useOptimizingEvents } from '@/hooks/use-optimizing-events';
 import { useProfiles } from '@/hooks/use-profiles';
@@ -54,6 +56,7 @@ function RootComponent() {
   useProfiles();
   useModules(!isAuxiliaryWindow);
   useOptimizingEvents();
+  useAppUpdateWatcher(!isAuxiliaryWindow);
 
   return (
     <React.Fragment>
@@ -67,6 +70,7 @@ function RootComponent() {
           <ShortcutsSheet />
           <LyricModal />
           <NoticesDialog />
+          <AppUpdateDialog />
           <DialogSlot />
           <BackgroundPickerSlot />
           <OptimizingIndicator />
