@@ -156,6 +156,14 @@ html.splash-window #root {
   animation: splash-shimmer 1.3s ease-in-out infinite;
 }
 
+.splash-progress-bar--determinate {
+  width: var(--splash-progress, 0%);
+  animation: none;
+  background: var(--primary);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--primary) 60%, transparent);
+  transition: width 0.25s ease-out;
+}
+
 .splash-reel {
   margin-top: 16px;
   height: 20px;
