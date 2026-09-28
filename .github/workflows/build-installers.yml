@@ -83,16 +83,34 @@ jobs:
             echo "VITE_UNSPLASH_CLIENT_ID=$VITE_UNSPLASH_CLIENT_ID" > .env
           fi
 
+      - name: Verify updater signing key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY não configurado. O build vai falhar ao gerar latest.json."
+            exit 1
+          fi
+
       - name: Build and publish
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ steps.version.outputs.tag }}
           releaseName: ${{ steps.version.outputs.tag }}
           releaseDraft: true
           prerelease: false
           generateReleaseNotes: true
+          tauriConfJson: |
+            {
+              "bundle": {
+                "createUpdaterArtifacts": true
+              }
+            }
 
       - name: Commit bumped version back
         if: matrix.platform == 'ubuntu-24.04'
