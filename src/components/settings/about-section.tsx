@@ -1,9 +1,20 @@
 'use client';
 
-import { ArrowRight, Code2, FileText, Lock, RefreshCw, Shield, Sparkles } from 'lucide-react';
+import {
+  ArrowRight,
+  Code2,
+  FileText,
+  Loader2,
+  Lock,
+  RefreshCw,
+  Shield,
+  Sparkles,
+} from 'lucide-react';
+import { checkForUpdatesManually } from '@/hooks/use-app-update';
 import { useAppVersion } from '@/hooks/use-app-version';
 import { useSystemInfo } from '@/hooks/use-system-info';
 import { useTranslation } from '@/lib/i18n';
+import { useAppUpdateStore } from '@/stores/app-update-store';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Separator } from '../ui/separator';
@@ -19,6 +30,14 @@ export function AboutSection() {
   const { t } = useTranslation();
   const version = useAppVersion();
   const { os, arch, memory, gpu } = useSystemInfo();
+  const phase = useAppUpdateStore((s) => s.phase);
+
+  const checking = phase === 'checking';
+  const downloading = phase === 'downloading' || phase === 'installing';
+
+  async function handleCheck() {
+    await checkForUpdatesManually();
+  }
 
   const SYSTEM_INFO = [
     { label: 'Operating System', value: os },
@@ -38,21 +57,42 @@ export function AboutSection() {
           <div>
             <h2 className="text-2xl font-bold">Lumen</h2>
             <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{t('Version')} {version}</span>
-              <span className="rounded bg-muted px-1.5 py-0.5 font-mono">Build {__BUILD_DATE__}</span>
+              <span>
+                {t('Version')} {version}
+              </span>
+              <span className="rounded bg-muted px-1.5 py-0.5 font-mono">
+                Build {__BUILD_DATE__}
+              </span>
               <span className="rounded bg-muted px-1.5 py-0.5">{t('Desktop App')}</span>
             </div>
           </div>
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <Button size="sm">
-            <RefreshCw className="size-3.5" />
-            {t('Check for Updates')}
+          <Button size="sm" onClick={handleCheck} disabled={checking || downloading}>
+            {checking || downloading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="size-3.5" />
+            )}
+            {downloading ? t('Updating…') : t('Check for Updates')}
           </Button>
-          <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-            <span className="size-1.5 rounded-full bg-emerald-400" />
-            {t('Your app is up to date')}
-          </span>
+          {phase === 'available' ? (
+            <button
+              type="button"
+              onClick={() =>
+                useAppUpdateStore.setState((s) => ({ dialogOpen: true, phase: s.phase }))
+              }
+              className="flex items-center gap-1.5 text-xs text-amber-400"
+            >
+              <span className="size-1.5 rounded-full bg-amber-400" />
+              {t('Update available')}
+            </button>
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="size-1.5 rounded-full bg-emerald-400" />
+              {t('Your app is up to date')}
+            </span>
+          )}
         </div>
       </Card>
 
