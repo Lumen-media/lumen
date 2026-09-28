@@ -16,6 +16,7 @@ mod queue;
 mod remote;
 mod streaming;
 mod thumbnail;
+mod updates;
 mod url_media;
 mod websocket;
 
@@ -454,6 +455,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::UpdateState::default())
         .setup(|app| {
             paths::init(app.handle()).expect("failed to resolve app paths");
 
@@ -746,6 +749,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             locales::sync_locales,
             locales::apply_locale,
             locales::list_locales,
+            updates::app_update_boot,
+            updates::app_update_progress_state,
+            updates::check_app_update,
+            updates::install_app_update,
+            updates::defer_app_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
