@@ -15,6 +15,9 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 const STATE_FILE: &str = "updater.json";
 const PROGRESS_EVENT: &str = "app-update-progress";
+/// The endpoint is a third party and the splash screen waits on this, so never
+/// let the request outlive a short window.
+const CHECK_TIMEOUT_SECS: u64 = 8;
 
 #[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
@@ -142,6 +145,21 @@ fn emit_progress(app: &AppHandle, next: UpdateProgress) {
     let _ = app.emit(PROGRESS_EVENT, next);
 }
 
+/// `check()` talks to a remote endpoint and has no timeout of its own. Wrap it
+/// so a slow or hanging endpoint cannot stall the caller forever.
+async fn check_with_timeout(app: &AppHandle) -> Result<Option<Update>, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(CHECK_TIMEOUT_SECS),
+        updater.check(),
+    )
+    .await
+    {
+        Ok(result) => result.map_err(|e| e.to_string()),
+        Err(_) => Err(format!("update check timed out after {CHECK_TIMEOUT_SECS}s")),
+    }
+}
+
 async fn download_with_progress(app: &AppHandle, update: &Update) -> Result<Vec<u8>, String> {
     let version = update.version.clone();
     let mut downloaded = 0u64;
@@ -248,12 +266,7 @@ pub async fn check_app_update(
 ) -> Result<Option<UpdateInfo>, String> {
     emit_progress(&app, UpdateProgress::of("checking", None));
 
-    let found = app
-        .updater()
-        .map_err(|e| e.to_string())?
-        .check()
-        .await
-        .map_err(|e| e.to_string())?;
+    let found = check_with_timeout(&app).await?;
 
     let Some(update) = found else {
         emit_progress(&app, UpdateProgress::of("up-to-date", None));
@@ -384,13 +397,7 @@ pub async fn app_update_boot(app: AppHandle) -> Result<BootUpdateState, String> 
 
     // `install` needs a live update handle, and it must describe the exact
     // artifact we already downloaded.
-    let found = match app.updater().map_err(|e| e.to_string()) {
-        Ok(updater) => updater.check().await,
-        Err(e) => {
-            eprintln!("updater: deferred install skipped: {e}");
-            return Ok(BootUpdateState::idle());
-        }
-    };
+    let found = check_with_timeout(&app).await;
 
     let update = match found {
         Ok(Some(update)) if update.version == pending.version => update,
@@ -405,7 +412,6 @@ pub async fn app_update_boot(app: AppHandle) -> Result<BootUpdateState, String> 
             return Ok(BootUpdateState::idle());
         }
     };
-
     set_installing(true)?;
     emit_progress(
         &app,
