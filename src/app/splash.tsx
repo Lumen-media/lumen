@@ -19,6 +19,12 @@ const STATUS_MESSAGE_KEYS = [
 
 const STATUS_INTERVAL_MS = 520;
 const CLOSE_POLL_MS = 200;
+/**
+ * The splash must never outlive this, no matter what the updater does. A
+ * hung network call in the backend is not a reason to keep the app behind a
+ * loader forever.
+ */
+const BOOT_DEADLINE_MS = 5000;
 
 function SplashComponent() {
   const { t } = useTranslation();
@@ -59,7 +65,9 @@ function SplashComponent() {
         applyingRef.current = state.applying;
         setApplying(state.applying);
       })
-      .catch(() => {})
+      .catch((error) => {
+        console.error('updater boot check failed', error);
+      })
       .finally(() => {
         bootResolvedRef.current = true;
       });
@@ -73,12 +81,19 @@ function SplashComponent() {
   useEffect(() => {
     const total = STATUS_MESSAGE_KEYS.length * STATUS_INTERVAL_MS + 600;
     const startedAt = Date.now();
+    const deadline = startedAt + BOOT_DEADLINE_MS;
     const timer = window.setInterval(() => {
-      if (closedRef.current || !bootResolvedRef.current || applyingRef.current) return;
-      if (Date.now() - startedAt < total) return;
+      if (closedRef.current || applyingRef.current) return;
+      // Close once the reel is done, or once the boot deadline passes, so a
+      // stuck updater call cannot hold the app on the splash.
+      const elapsed = Date.now() - startedAt;
+      if (!bootResolvedRef.current && Date.now() < deadline) return;
+      if (bootResolvedRef.current && elapsed < total) return;
       closedRef.current = true;
       window.clearInterval(timer);
-      invoke('close_splashscreen').catch(() => {});
+      invoke('close_splashscreen').catch((error) => {
+        console.error('could not close the splash screen', error);
+      });
     }, CLOSE_POLL_MS);
     return () => window.clearInterval(timer);
   }, []);
