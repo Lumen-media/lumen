@@ -1,5 +1,6 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
+import { checkForUpdatesManually } from '@/hooks/use-app-update';
 import { menuShortcut, shortcutAction } from '@/lib/shortcuts';
 import { installModule } from '@/modules/injector';
 import { useAppSettingsStore } from '@/stores/app-settings-store';
@@ -146,6 +147,14 @@ const DEFAULT_MENUS: MenuDef[] = [
         onClick: shortcutAction('help.shortcuts'),
       },
       { type: 'separator' },
+      {
+        type: 'action',
+        label: 'Check for Updates',
+        onClick: () => {
+          useSettingsStore.getState().open('about');
+          void checkForUpdatesManually();
+        },
+      },
       {
         type: 'action',
         label: 'About Lumen',
