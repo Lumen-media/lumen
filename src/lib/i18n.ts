@@ -2,18 +2,30 @@ import { listen } from '@tauri-apps/api/event';
 import { appDataDir, join } from '@tauri-apps/api/path';
 import { readDir, readTextFile } from '@tauri-apps/plugin-fs';
 import { create } from 'zustand';
-import en from '@/locales/en/translation.json';
-import pt from '@/locales/pt/translation.json';
+import en from '@/locales/en.json';
+import enGB from '@/locales/en-GB.json';
+import ptBR from '@/locales/pt-BR.json';
+import ptPT from '@/locales/pt-PT.json';
+import esAR from '@/locales/es-AR.json';
+import esES from '@/locales/es-ES.json';
 import { localesService } from '@/services/locales-service';
 
 const BUNDLED_FALLBACK: Record<string, Record<string, string>> = {
   en: en as Record<string, string>,
-  'pt-BR': pt as Record<string, string>,
+  'en-GB': enGB as Record<string, string>,
+  'pt-BR': ptBR as Record<string, string>,
+  'pt-PT': ptPT as Record<string, string>,
+  'es-AR': esAR as Record<string, string>,
+  'es-ES': esES as Record<string, string>,
 };
 
 const BUNDLED_LANGUAGES: LanguageMeta[] = [
   { code: 'en', name: 'English', nativeName: 'English' },
+  { code: 'en-GB', name: 'English (UK)', nativeName: 'English (UK)' },
   { code: 'pt-BR', name: 'Portuguese (Brazil)', nativeName: 'Português (Brasil)' },
+  { code: 'pt-PT', name: 'Portuguese (Portugal)', nativeName: 'Português (Portugal)' },
+  { code: 'es-AR', name: 'Spanish (Argentina)', nativeName: 'Español (Argentina)' },
+  { code: 'es-ES', name: 'Spanish (Spain)', nativeName: 'Español (España)' },
 ];
 
 const LOCALES_CACHE_KEY = 'lumen-locales-cache';
