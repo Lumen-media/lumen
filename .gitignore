@@ -72,3 +72,4 @@ lumen.code-workspace
 *.tmp
 *.temp
 .cache/
+src/locales/
