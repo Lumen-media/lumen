@@ -11,9 +11,12 @@ use tokio::sync::Mutex;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-#[cfg(target_os = "windows")]
 fn hidden_tokio(mut cmd: Command) -> Command {
-    cmd.creation_flags(CREATE_NO_WINDOW);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
     cmd
 }
 
