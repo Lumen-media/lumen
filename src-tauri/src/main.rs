@@ -340,12 +340,18 @@ fn get_system_info() -> SystemHardwareInfo {
 fn get_gpu_name() -> String {
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
+
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
         if let Ok(out) = std::process::Command::new("powershell")
             .args([
                 "-NoProfile",
+                "-NonInteractive",
                 "-Command",
-                "(Get-WmiObject Win32_VideoController | Select-Object -First 1).Name",
+                "(Get-CimInstance Win32_VideoController | Select-Object -First 1).Name",
             ])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
         {
             let name = String::from_utf8_lossy(&out.stdout).trim().to_string();

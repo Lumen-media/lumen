@@ -1,6 +1,17 @@
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn hidden(mut cmd: Command) -> Command {
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct MediaMetadata {
     pub duration: Option<f64>,
@@ -9,7 +20,7 @@ pub struct MediaMetadata {
 #[tauri::command]
 pub async fn extract_metadata(path: String) -> Result<MediaMetadata, String> {
     // Try ffprobe first
-    if let Ok(output) = Command::new("ffprobe")
+    if let Ok(output) = hidden(Command::new("ffprobe"))
         .args([
             "-v",
             "error",
@@ -30,7 +41,7 @@ pub async fn extract_metadata(path: String) -> Result<MediaMetadata, String> {
     }
 
     // Fallback to mediainfo
-    if let Ok(output) = Command::new("mediainfo")
+    if let Ok(output) = hidden(Command::new("mediainfo"))
         .args(["--Inform=General;%Duration/1000%", &path])
         .output()
         .await
