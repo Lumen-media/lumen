@@ -71,6 +71,25 @@ jobs:
             libgtk-3-dev patchelf xdg-utils
           (sudo apt-get install -y libayatana-appindicator3-dev) || sudo apt-get install -y libappindicator3-dev
 
+      - name: Fetch translations from lumen-locales
+        uses: actions/checkout@v4
+        with:
+          repository: Lumen-media/lumen-locales
+          path: lumen-locales
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Copy translations to app
+        run: |
+          rm -rf src/locales
+          mkdir -p src/locales
+          # lumen-locales has flat .json files in locales/ — create folder per locale
+          for f in lumen-locales/locales/*.json; do
+            base=$(basename "$f" .json)
+            mkdir -p "src/locales/$base"
+            cp "$f" "src/locales/$base/translation.json"
+            echo "Copied $base -> src/locales/$base/translation.json"
+          done
+
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
