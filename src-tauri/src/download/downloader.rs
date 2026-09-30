@@ -8,6 +8,15 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+#[cfg(target_os = "windows")]
+fn hidden_tokio(mut cmd: Command) -> Command {
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DownloadQuality {
@@ -132,7 +141,7 @@ async fn probe_browser(ytdlp: &Path, node_path: Option<&Path>, browser: &str) ->
     }
     args.push("https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_string());
 
-    let child = Command::new(ytdlp)
+    let child = hidden_tokio(Command::new(ytdlp))
         .args(&args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -319,7 +328,7 @@ pub async fn start_download(
         args.push(url.clone());
     }
 
-    let child = Command::new(&ytdlp)
+    let child = hidden_tokio(Command::new(&ytdlp))
         .args(&args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -698,7 +707,7 @@ pub async fn validate_cookies(tools_dir: &Path) -> Result<CookieValidation, Stri
     }
     args.push("https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_string());
 
-    let mut child = Command::new(&ytdlp)
+    let mut child = hidden_tokio(Command::new(&ytdlp))
         .args(&args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
