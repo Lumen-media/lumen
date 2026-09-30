@@ -2,21 +2,31 @@ import { listen } from '@tauri-apps/api/event';
 import { appDataDir, join } from '@tauri-apps/api/path';
 import { readDir, readTextFile } from '@tauri-apps/plugin-fs';
 import { create } from 'zustand';
-import en from '@/locales/en.json';
-import enGB from '@/locales/en-GB.json';
-import ptBR from '@/locales/pt-BR.json';
-import ptPT from '@/locales/pt-PT.json';
-import esAR from '@/locales/es-AR.json';
-import esES from '@/locales/es-ES.json';
 import { localesService } from '@/services/locales-service';
 
+const MINIMAL_FALLBACK_EN: Record<string, string> = {
+  Version: 'Version',
+  'Desktop App': 'Desktop App',
+  'Check for Updates': 'Check for Updates',
+  'Updating...': 'Updating...',
+  'Update available': 'Update available',
+  'Your app is up to date': 'Your app is up to date',
+  'Starting Lumen…': 'Starting Lumen…',
+};
+
+const MINIMAL_FALLBACK_PT_BR: Record<string, string> = {
+  Version: 'Versão',
+  'Desktop App': 'App Desktop',
+  'Check for Updates': 'Verificar Atualizações',
+  'Updating...': 'Atualizando...',
+  'Update available': 'Atualização disponível',
+  'Your app is up to date': 'Seu app está atualizado',
+  'Starting Lumen…': 'Iniciando Lumen…',
+};
+
 const BUNDLED_FALLBACK: Record<string, Record<string, string>> = {
-  en: en as Record<string, string>,
-  'en-GB': enGB as Record<string, string>,
-  'pt-BR': ptBR as Record<string, string>,
-  'pt-PT': ptPT as Record<string, string>,
-  'es-AR': esAR as Record<string, string>,
-  'es-ES': esES as Record<string, string>,
+  en: MINIMAL_FALLBACK_EN,
+  'pt-BR': MINIMAL_FALLBACK_PT_BR,
 };
 
 const BUNDLED_LANGUAGES: LanguageMeta[] = [
