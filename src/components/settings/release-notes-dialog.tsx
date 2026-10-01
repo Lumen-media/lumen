@@ -37,9 +37,11 @@ export function ReleaseNotesDialog() {
     closeDialog,
   } = useReleaseNotesStore();
 
-  const { showReleaseNotes, releaseNotesVersion, markReleaseNotesShown, closeDialog: closeUpdateDialog } = useAppUpdateStore();
+const { showReleaseNotes, releaseNotesVersion, markReleaseNotesShown, closeDialog: closeUpdateDialog } = useAppUpdateStore();
+const { dialogOpen: manualOpen } = useReleaseNotesStore();
 
-  const isAutoShown = showReleaseNotes;
+const isAutoShown = showReleaseNotes;
+const shouldOpen = isAutoShown || manualOpen;
   const targetVersion = releaseNotesVersion;
   const selectedNote = releaseNotes.find((r) => r.tag_name === (targetVersion || selectedVersion)) || releaseNotes[0];
 
@@ -52,8 +54,8 @@ export function ReleaseNotesDialog() {
   }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) handleClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[85vh]">
+    <Dialog open={shouldOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
+      <DialogContent className="max-w-lg max-h-[85vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span>{t('Release Notes')}</span>
