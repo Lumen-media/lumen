@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 
 interface ReleaseNote {
-  version: string;
+  tag_name: string;
   name: string;
   published_at: string;
   body: string;
