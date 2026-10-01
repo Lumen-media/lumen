@@ -62,7 +62,7 @@ export function ReleaseNotesDialog() {
 
   return (
     <Dialog open={shouldOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
-      <DialogContent className="w-[640px] sm:w-[768px] max-w-[90vw] max-h-[75vh]">
+      <DialogContent className="w-[640px] sm:w-[768px] max-w-[90vw] max-h-[75vh]" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span>{t('Release Notes')}</span>
