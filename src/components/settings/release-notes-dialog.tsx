@@ -1,7 +1,7 @@
 'use client';
 
-import { Loader2, X, ChevronRight, ExternalLink } from 'lucide-react';
-import { Markdown } from '@tanstack/markdown';
+import { Loader2, ExternalLink } from 'lucide-react';
+import { Markdown } from '@tanstack/markdown/react';
 import { useTranslation } from '@/lib/i18n';
 import { useReleaseNotesStore } from '@/stores/release-notes-store';
 import { useAppUpdateStore } from '@/stores/app-update-store';
@@ -32,11 +32,9 @@ export function ReleaseNotesDialog() {
     selectedVersion,
     loading,
     error,
-    dialogOpen,
     fetchReleaseNotes,
     selectVersion,
     closeDialog,
-    openDialog,
   } = useReleaseNotesStore();
 
   const { showReleaseNotes, releaseNotesVersion, markReleaseNotesShown, closeDialog: closeUpdateDialog } = useAppUpdateStore();
