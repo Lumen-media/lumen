@@ -5,6 +5,7 @@ import { LyricModal } from '@/components/lyric-modal';
 import { NoticesDialog } from '@/components/notices-dialog';
 import { OptimizingIndicator } from '@/components/optimizing-indicator';
 import { QuickShortcutsModal } from '@/components/quick-shortcuts-modal';
+import { ReleaseNotesDialog } from '@/components/settings/release-notes-dialog';
 import { ShortcutsSheet } from '@/components/shortcuts-sheet';
 import { Toaster } from '@/components/ui/sonner';
 import { AppUpdateDialog } from '@/components/updates/update-dialog';
@@ -71,6 +72,7 @@ function RootComponent() {
           <LyricModal />
           <NoticesDialog />
           <AppUpdateDialog />
+          <ReleaseNotesDialog />
           <DialogSlot />
           <BackgroundPickerSlot />
           <OptimizingIndicator />

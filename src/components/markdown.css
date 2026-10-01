@@ -163,3 +163,42 @@
   background: var(--card);
   font-weight: 600;
 }
+
+.release-notes > :first-child {
+  margin-top: 0;
+}
+
+.release-notes h1,
+.release-notes h2 {
+  margin-top: 1.75em;
+  margin-bottom: 0.75em;
+}
+
+.release-notes h1 {
+  font-size: 1.375em;
+}
+
+.release-notes h2 {
+  font-size: 1.2em;
+}
+
+.release-notes p,
+.release-notes ul,
+.release-notes ol,
+.release-notes blockquote,
+.release-notes pre {
+  margin-top: 0.875em;
+  margin-bottom: 0.875em;
+}
+
+.release-notes li + li {
+  margin-top: 0.375em;
+}
+
+.release-notes blockquote {
+  border-left-color: var(--primary);
+}
+
+.release-notes pre {
+  font-size: 0.9em;
+}

@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { invoke } from '@tauri-apps/api/core';
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
-import { useTranslation } from '@/lib/i18n';
 import { useAppVersion } from '@/hooks/use-app-version';
+import { useTranslation } from '@/lib/i18n';
 import { bootUpdate, onUpdateProgress } from '@/services/app-update-service';
 import { useAppUpdateStore } from '@/stores/app-update-store';
 import './splash.css';
