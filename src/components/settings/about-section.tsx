@@ -50,7 +50,8 @@ export function AboutSection() {
   ];
 
   return (
-    <div className="space-y-4">
+    <>
+      <div className="space-y-4">
       <Card className="flex-row items-center justify-between p-4 bg-background/55">
         <div className="flex items-center gap-4">
           <div className="flex size-14 items-center justify-center rounded-xl bg-primary/15">
@@ -146,5 +147,6 @@ export function AboutSection() {
       </div>
     </div>
     <ReleaseNotesDialog />
+  </>
   );
 }

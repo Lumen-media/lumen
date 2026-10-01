@@ -32,7 +32,6 @@ function SplashComponent() {
   const { t } = useTranslation();
   const version = useAppVersion();
   const checkAndShowReleaseNotes = useAppUpdateStore((s) => s.checkAndShowReleaseNotes);
-  const markReleaseNotesShown = useAppUpdateStore((s) => s.markReleaseNotesShown);
   const messages = STATUS_MESSAGE_KEYS.map((key) => t(key));
   const [statusIndex, setStatusIndex] = useState(0);
   const [applying, setApplying] = useState(false);

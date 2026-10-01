@@ -16,6 +16,13 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString(undefined, {
@@ -37,11 +44,11 @@ export function ReleaseNotesDialog() {
     closeDialog,
   } = useReleaseNotesStore();
 
-const { showReleaseNotes, releaseNotesVersion, markReleaseNotesShown, closeDialog: closeUpdateDialog } = useAppUpdateStore();
-const { dialogOpen: manualOpen } = useReleaseNotesStore();
+  const { showReleaseNotes, releaseNotesVersion, markReleaseNotesShown, closeDialog: closeUpdateDialog } = useAppUpdateStore();
+  const { dialogOpen: manualOpen } = useReleaseNotesStore();
 
-const isAutoShown = showReleaseNotes;
-const shouldOpen = isAutoShown || manualOpen;
+  const isAutoShown = showReleaseNotes;
+  const shouldOpen = isAutoShown || manualOpen;
   const targetVersion = releaseNotesVersion;
   const selectedNote = releaseNotes.find((r) => r.tag_name === (targetVersion || selectedVersion)) || releaseNotes[0];
 
@@ -55,22 +62,23 @@ const shouldOpen = isAutoShown || manualOpen;
 
   return (
     <Dialog open={shouldOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
-      <DialogContent className="max-w-lg max-h-[85vh]">
+      <DialogContent className="max-w-3xl sm:max-w-3xl max-h-[75vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span>{t('Release Notes')}</span>
             {releaseNotes.length > 1 && (
-              <select
-                value={selectedVersion || ''}
-                onChange={(e) => selectVersion(e.target.value)}
-                className="ml-4 text-sm border rounded px-2 py-1 bg-background"
-              >
-                {releaseNotes.map((note) => (
-                  <option key={note.tag_name} value={note.tag_name}>
-                    {note.name || note.tag_name} — {formatDate(note.published_at)}
-                  </option>
-                ))}
-              </select>
+              <Select value={selectedVersion || ''} onValueChange={(value) => selectVersion(value || '')}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder={t('Select version')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {releaseNotes.map((note) => (
+                    <SelectItem key={note.tag_name} value={note.tag_name}>
+                      {note.name || note.tag_name} — {formatDate(note.published_at)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </DialogTitle>
           <DialogDescription>
@@ -78,7 +86,7 @@ const shouldOpen = isAutoShown || manualOpen;
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 max-h-[60vh]">
+        <ScrollArea className="flex-1 max-h-[55vh]">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
