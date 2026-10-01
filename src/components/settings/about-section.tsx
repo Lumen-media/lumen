@@ -15,6 +15,7 @@ import { useAppVersion } from '@/hooks/use-app-version';
 import { useSystemInfo } from '@/hooks/use-system-info';
 import { useTranslation } from '@/lib/i18n';
 import { useAppUpdateStore } from '@/stores/app-update-store';
+import { useReleaseNotesStore } from '@/stores/release-notes-store';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Separator } from '../ui/separator';
@@ -130,6 +131,7 @@ export function AboutSection() {
                 key={label}
                 variant="ghost"
                 className="w-full justify-between px-3 py-2.5 h-auto"
+                onClick={label === 'Release Notes' ? () => useReleaseNotesStore.getState().openDialog() : undefined}
               >
                 <span className="flex items-center gap-2.5">
                   {icon}
@@ -139,12 +141,6 @@ export function AboutSection() {
               </Button>
             ))}
           </div>
-          {/* <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
-            <span className="text-sm">{t('Current Build Status')}</span>
-            <Badge className="border-emerald-400/30 bg-emerald-400/10 text-emerald-400" variant="outline">
-              {t('Stable')}
-            </Badge>
-          </div> */}
         </Card>
       </div>
     </div>

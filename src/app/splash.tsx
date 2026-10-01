@@ -1,8 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { invoke } from '@tauri-apps/api/core';
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { useAppVersion } from '@/hooks/use-app-version';
 import { useTranslation } from '@/lib/i18n';
 import { bootUpdate, onUpdateProgress } from '@/services/app-update-service';
+import { useAppUpdateStore } from '@/stores/app-update-store';
 import './splash.css';
 
 export const Route = createFileRoute('/splash')({
@@ -28,6 +30,8 @@ const BOOT_DEADLINE_MS = 5000;
 
 function SplashComponent() {
   const { t } = useTranslation();
+  const version = useAppVersion();
+  const checkAndShowReleaseNotes = useAppUpdateStore((s) => s.checkAndShowReleaseNotes);
   const messages = STATUS_MESSAGE_KEYS.map((key) => t(key));
   const [statusIndex, setStatusIndex] = useState(0);
   const [applying, setApplying] = useState(false);
@@ -70,6 +74,7 @@ function SplashComponent() {
       })
       .finally(() => {
         bootResolvedRef.current = true;
+        checkAndShowReleaseNotes(version);
       });
 
     return () => {
