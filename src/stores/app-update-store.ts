@@ -19,7 +19,7 @@ interface AppUpdateState {
   checkAndShowReleaseNotes: (currentVersion: string) => void;
 }
 
-export const useAppUpdateStore = create<AppUpdateState>((set, get) => ({
+export const useAppUpdateStore = create<AppUpdateState>((set) => ({
   phase: 'idle',
   info: null,
   downloaded: 0,
