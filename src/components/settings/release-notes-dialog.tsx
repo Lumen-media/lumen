@@ -135,7 +135,7 @@ export function ReleaseNotesDialog() {
 
               <Separator />
 
-              <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:mt-6 prose-headings:mb-3 prose-headings:border-b prose-headings:pb-2 prose-p:my-4 prose-ul:my-4 prose-ol:my-4 prose-blockquote:my-4 prose-code:before:content-none prose-code:after:content-none prose-a:no-underline prose-a:text-primary hover:prose-a:underline">
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:mt-8 prose-headings:mb-4 prose-headings:border-b prose-headings:pb-2 prose-headings:text-lg prose-p:my-5 prose-ul:my-5 prose-ol:my-5 prose-blockquote:my-5 prose-li:my-2 prose-blockquote:pl-4 prose-blockquote:border-l-2 prose-blockquote:border-primary prose-blockquote:text-muted-foreground prose-code:before:content-none prose-code:after:content-none prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-a:no-underline prose-a:text-primary hover:prose-a:underline prose-img:rounded-lg prose-img:shadow-md">
                 <Markdown>{selectedNote.body || 'No release notes provided.'}</Markdown>
               </div>
             </div>
