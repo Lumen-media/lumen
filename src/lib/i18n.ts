@@ -12,6 +12,21 @@ const MINIMAL_FALLBACK_EN: Record<string, string> = {
   'Update available': 'Update available',
   'Your app is up to date': 'Your app is up to date',
   'Starting Lumen…': 'Starting Lumen…',
+  'Welcome to Lumen': 'Welcome to Lumen',
+  'Choose the modules you want to install. You can manage them anytime in Settings → Modules.':
+    'Choose the modules you want to install. You can manage them anytime in Settings → Modules.',
+  Verified: 'Verified',
+  Installed: 'Installed',
+  Installing: 'Installing',
+  '{{count}} selected': '{{count}} selected',
+  'Select all': 'Select all',
+  Clear: 'Clear',
+  Refresh: 'Refresh',
+  'Could not load the module catalog': 'Could not load the module catalog',
+  'Try again': 'Try again',
+  'No modules available': 'No modules available',
+  'Skip for now': 'Skip for now',
+  'Install selected': 'Install selected',
 };
 
 const MINIMAL_FALLBACK_PT_BR: Record<string, string> = {
@@ -22,6 +37,21 @@ const MINIMAL_FALLBACK_PT_BR: Record<string, string> = {
   'Update available': 'Atualização disponível',
   'Your app is up to date': 'Seu app está atualizado',
   'Starting Lumen…': 'Iniciando Lumen…',
+  'Welcome to Lumen': 'Bem-vindo ao Lumen',
+  'Choose the modules you want to install. You can manage them anytime in Settings → Modules.':
+    'Escolha os módulos que deseja instalar. Você pode gerenciá-los a qualquer momento em Configurações → Módulos.',
+  Verified: 'Verificado',
+  Installed: 'Instalado',
+  Installing: 'Instalando',
+  '{{count}} selected': '{{count}} selecionados',
+  'Select all': 'Selecionar todos',
+  Clear: 'Limpar',
+  Refresh: 'Atualizar',
+  'Could not load the module catalog': 'Não foi possível carregar o catálogo de módulos',
+  'Try again': 'Tentar novamente',
+  'No modules available': 'Nenhum módulo disponível',
+  'Skip for now': 'Pular por enquanto',
+  'Install selected': 'Instalar selecionados',
 };
 
 const BUNDLED_FALLBACK: Record<string, Record<string, string>> = {
