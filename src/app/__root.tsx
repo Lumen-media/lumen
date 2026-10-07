@@ -3,6 +3,7 @@ import * as React from 'react';
 import { GlobalAlert } from '@/components/global-alert';
 import { LyricModal } from '@/components/lyric-modal';
 import { NoticesDialog } from '@/components/notices-dialog';
+import { OnboardingDialog } from '@/components/onboarding-dialog';
 import { OptimizingIndicator } from '@/components/optimizing-indicator';
 import { QuickShortcutsModal } from '@/components/quick-shortcuts-modal';
 import { ReleaseNotesDialog } from '@/components/settings/release-notes-dialog';
@@ -71,6 +72,7 @@ function RootComponent() {
           <ShortcutsSheet />
           <LyricModal />
           <NoticesDialog />
+          <OnboardingDialog />
           <AppUpdateDialog />
           <ReleaseNotesDialog />
           <DialogSlot />
