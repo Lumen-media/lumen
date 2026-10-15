@@ -1,36 +1,71 @@
+//! Parser and serializer for Lumen's plain-text lyric format.
+//!
+//! A lyric file is markdown-like: a `---` frontmatter block holds display
+//! metadata (name, author, font, animation, ...) and the body holds one
+//! slide per paragraph, with slides separated by two empty lines. A slide
+//! may start with an `<!-- bg: path -->` comment that overrides the
+//! background for that slide only.
+//!
+//! Parsing is tolerant by design: missing frontmatter, unknown keys and
+//! unparsable numbers simply fall back to defaults, so a hand-written file
+//! always opens.
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+/// Display and playback settings stored in the file's frontmatter.
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LyricMetadata {
+    /// Song or presentation name shown in the library.
     pub name: String,
+    /// Author or credit line.
     pub author: String,
+    /// Free-form notes, also indexed for library search.
     pub notes: String,
+    /// Font family requested from the frontend.
     pub font: String,
+    /// CSS font size, e.g. `"48px"`.
     pub font_size: String,
+    /// Text alignment used by the renderer, a CSS `text-align` value
+    /// (`"center"` by default).
     pub alignment: String,
+    /// Background applied to every slide unless a slide overrides it.
     pub global_background: String,
+    /// Whether slides advance automatically.
     pub auto_play: Option<bool>,
+    /// Delay between automatic slide changes, in seconds; zero is dropped.
     pub interval_seconds: Option<f64>,
+    /// Whether playback loops back to the first slide.
     pub repeat: Option<bool>,
+    /// Animation identifier chosen by the frontend.
     pub animation: Option<String>,
 }
 
+/// One on-screen page of lyrics.
 #[derive(Deserialize, Serialize, Clone)]
 pub struct LyricSlide {
+    /// Lines rendered as separate rows, empty lines already removed.
     pub lines: Vec<String>,
+    /// Per-slide background override, when the file sets one.
     pub background: Option<String>,
 }
 
+/// Complete in-memory representation of a lyric file.
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LyricData {
+    /// Frontmatter metadata with defaults applied.
     pub metadata: LyricMetadata,
+    /// Slides in presentation order.
     pub slides: Vec<LyricSlide>,
 }
 
+/// Splits a leading `---` block into key/value pairs and returns the body.
+///
+/// Content without a well-formed block is returned untouched together with
+/// an empty pair list.
 fn parse_frontmatter(content: &str) -> (Vec<(String, String)>, &str) {
     let Some(rest) = content.strip_prefix("---\n") else {
         return (Vec::new(), content);
@@ -58,12 +93,15 @@ fn parse_frontmatter(content: &str) -> (Vec<(String, String)>, &str) {
     (pairs, after)
 }
 
+/// Pulls the background path out of an `<!-- bg: ... -->` comment, if any.
 fn extract_background(line: &str) -> Option<String> {
     let rest = line.strip_prefix("<!-- bg:")?;
     let end = rest.find("-->")?;
     Some(rest[..end].trim().to_string())
 }
 
+/// Splits the body into slides on two blank lines, capturing a leading
+/// background comment per slide and dropping empty blocks.
 fn parse_slides(body: &str) -> Vec<LyricSlide> {
     let normalized = body.replace("\r\n", "\n");
     if normalized.trim().is_empty() {
@@ -104,6 +142,23 @@ fn parse_slides(body: &str) -> Vec<LyricSlide> {
     slides
 }
 
+/// Parses a lyric file into structured metadata and slides for the frontend.
+///
+/// Frontmatter keys are read as written in the format (`fontSize`,
+/// `intervalSeconds`, `autoPlay`, ...); anything missing or unparsable falls
+/// back to the defaults of [`LyricMetadata`]. The parser never fails: input
+/// without frontmatter or slides yields empty defaults.
+///
+/// # Examples
+///
+/// ```rust
+/// let raw = "---\nname: Amazing Grace\nauthor: Newton\n---\n\nAmazing grace\n\n\nhow sweet the sound";
+/// let data = lyric_parse(raw.to_string()).unwrap();
+/// assert_eq!(data.metadata.name, "Amazing Grace");
+/// assert_eq!(data.slides.len(), 2);
+/// assert_eq!(data.slides[0].lines.join(" "), "Amazing grace");
+/// assert_eq!(data.slides[1].lines.join(" "), "how sweet the sound");
+/// ```
 #[tauri::command]
 pub fn lyric_parse(content: String) -> Result<LyricData, String> {
     let (pairs, body) = parse_frontmatter(&content);
@@ -141,6 +196,21 @@ pub fn lyric_parse(content: String) -> Result<LyricData, String> {
     })
 }
 
+/// Renders [`LyricData`] back into the on-disk lyric format.
+///
+/// Optional metadata is written only when set, the body always ends with a
+/// trailing newline, and slides are separated by two empty lines exactly as
+/// the parser expects. Serialization is pure string building and cannot fail.
+///
+/// # Examples
+///
+/// ```rust
+/// let raw = "---\nname: Amazing Grace\n---\n\nAmazing grace";
+/// let data = lyric_parse(raw.to_string()).unwrap();
+/// let text = lyric_serialize(data).unwrap();
+/// assert!(text.starts_with("---\nname: Amazing Grace"));
+/// assert!(text.trim_end().ends_with("Amazing grace"));
+/// ```
 #[tauri::command]
 pub fn lyric_serialize(data: LyricData) -> Result<String, String> {
     let metadata = &data.metadata;
@@ -188,6 +258,10 @@ pub fn lyric_serialize(data: LyricData) -> Result<String, String> {
     Ok(format!("{}\n", joined.trim()))
 }
 
+/// Flattens a lyric file into the plain text indexed by library search.
+///
+/// The notes come first, followed by every non-empty slide line in order;
+/// blank lines are skipped so the index stays compact.
 #[tauri::command]
 pub fn lyric_build_search_content(data: LyricData) -> Result<String, String> {
     let mut parts: Vec<String> = Vec::new();

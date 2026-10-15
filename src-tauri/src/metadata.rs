@@ -1,9 +1,19 @@
+//! Media duration probing through external command-line tools.
+//!
+//! Container durations are read far more reliably by `ffprobe` and
+//! `mediainfo` than by any pure-Rust option, so this module shells out to
+//! them and parses their stdout. Helper processes are spawned without a
+//! visible window on Windows so no console flashes over the live interface.
+
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
+/// Windows creation flag that keeps a spawned helper process from opening a
+/// console window.
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+/// Applies [`CREATE_NO_WINDOW`] on Windows; a no-op on other platforms.
 fn hidden(mut cmd: Command) -> Command {
     #[cfg(target_os = "windows")]
     {
@@ -12,11 +22,20 @@ fn hidden(mut cmd: Command) -> Command {
     cmd
 }
 
+/// Duration of a media file as reported by an external probe.
 #[derive(Serialize, Deserialize)]
 pub struct MediaMetadata {
+    /// Length in seconds rounded to the nearest whole second, or `None` when
+    /// no tool reported a parsable duration.
     pub duration: Option<f64>,
 }
 
+/// Reports the duration of a media file to the frontend.
+///
+/// `ffprobe` is tried first and `mediainfo` as a fallback, both executed with
+/// hidden windows on Windows. The command never returns an error: a missing
+/// tool, an unreadable file or unparsable output resolves with
+/// `duration: None`, so a media item without timing information still loads.
 #[tauri::command]
 pub async fn extract_metadata(path: String) -> Result<MediaMetadata, String> {
     // Try ffprobe first

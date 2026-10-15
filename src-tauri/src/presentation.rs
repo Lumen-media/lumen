@@ -1,22 +1,41 @@
+//! Metadata extraction for PowerPoint presentations.
+//!
+//! A `.pptx` file is a ZIP archive of XML parts. The module walks
+//! `ppt/slides/slide<N>.xml` in numeric order, collects the text runs of
+//! each slide and reads the presentation title, so the frontend can index
+//! and search presentations without opening them.
+
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use serde::Serialize;
 use std::io::Read;
 use zip::ZipArchive;
 
+/// Text content of a single slide.
 #[derive(Serialize)]
 pub struct SlideText {
+    /// Slide number as encoded in the archive entry name (`slide1.xml` is 1).
     pub index: u32,
+    /// All text runs of the slide, joined with spaces.
     pub text: String,
 }
 
+/// Summary of a presentation returned to the frontend.
 #[derive(Serialize)]
 pub struct PresentationMeta {
+    /// Number of slide entries found in the archive.
     pub slide_count: u32,
+    /// Per-slide text, ordered by slide number.
     pub slides: Vec<SlideText>,
+    /// Title from `ppt/presentation.xml`, falling back to the file name
+    /// without extension.
     pub title: Option<String>,
 }
 
+/// Collects every `a:t` text run of a slide's XML, joined with spaces.
+///
+/// A malformed document ends the scan early and yields the text gathered so
+/// far instead of failing the extraction.
 fn extract_text_from_xml(xml: &[u8]) -> String {
     let mut reader = Reader::from_reader(xml);
     reader.config_mut().trim_text(true);
@@ -55,6 +74,7 @@ fn extract_text_from_xml(xml: &[u8]) -> String {
     text.trim().to_string()
 }
 
+/// Reads the first non-empty text node inside the `presentation` root.
 fn extract_title(xml: &[u8]) -> Option<String> {
     let mut reader = Reader::from_reader(xml);
     reader.config_mut().trim_text(true);
@@ -93,6 +113,17 @@ fn extract_title(xml: &[u8]) -> Option<String> {
     None
 }
 
+/// Extracts slide text and title from a `.pptx` file for the frontend.
+///
+/// Slides are discovered by entry name, sorted numerically and read one by
+/// one; a slide that cannot be read is reported on stderr and skipped. The
+/// title falls back to the file name without extension when the archive does
+/// not carry a usable one.
+///
+/// # Errors
+///
+/// Returns an error when the file cannot be opened, is not a readable ZIP
+/// archive, or a slide's XML cannot be read out of it.
 #[tauri::command]
 pub fn extract_presentation_metadata(path: String) -> Result<PresentationMeta, String> {
     let file = std::fs::File::open(&path)
@@ -158,6 +189,8 @@ pub fn extract_presentation_metadata(path: String) -> Result<PresentationMeta, S
     })
 }
 
+/// Extracts the number from an entry named `slide<N>.xml`, tolerating
+/// Windows path separators.
 fn parse_slide_index(name: &str) -> Option<u32> {
     // Match patterns like: ppt/slides/slide1.xml or ppt/slides/slide01.xml
     let name = name.replace('\\', "/");
