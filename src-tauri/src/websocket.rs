@@ -1,3 +1,18 @@
+//! WebSocket server for remote control.
+//!
+//! Each accepted TCP connection is upgraded to a WebSocket and split into two
+//! paths depending on the peer address:
+//!
+//! * loopback peers are treated as *internal* connections (the desktop app's
+//!   own windows/tools) and may emit raw audio events without pairing;
+//! * every other peer is *external* and must first pair with a registration
+//!   token (`register`) or authenticate with a stored access token (`auth`)
+//!   before any other event is processed.
+//!
+//! External events are permission-checked per device, then dispatched to the
+//! streaming, chat or audio subsystems. Outbound messages are written through
+//! an unbounded channel so the read loop never blocks on a slow client.
+
 use crate::chat::ChatState;
 use crate::chat::store::{self, ChatMessage, decode_base64, validate_message_text};
 use crate::devices::{
@@ -21,6 +36,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
+/// Raw playback/audio event relays received from the desktop's internal
+/// pages. Unknown fields are ignored during deserialization.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct AudioEvent {
     event: String,
@@ -31,6 +48,7 @@ struct AudioEvent {
     artist: Option<String>,
 }
 
+/// Inbound `register` message: pairs a device using a registration token.
 #[derive(Debug, Deserialize)]
 struct RegisterMessage {
     token: String,
@@ -41,41 +59,51 @@ struct RegisterMessage {
     version: String,
 }
 
+/// Inbound `auth` message: re-opens a session for a known device.
 #[derive(Debug, Deserialize)]
 struct AuthMessage {
     device_id: String,
     access_token: String,
 }
 
+/// Inbound `subscribe_stream`/`unsubscribe_stream` message.
 #[derive(Debug, Deserialize)]
 struct SubscribeStreamMessage {
     stream_type: String,
 }
 
+/// Inbound `webrtc_answer` message carrying the remote peer's SDP answer.
 #[derive(Debug, Deserialize)]
 struct WebRtcAnswerMessage {
     stream_type: String,
     sdp: String,
 }
 
+/// Inbound `mobile_offer` message carrying the phone's SDP offer.
 #[derive(Debug, Deserialize)]
 struct MobileOfferMessage {
     sdp: String,
     video_orientation: Option<String>,
 }
 
+/// Inbound `webrtc_ice_candidate` message.
 #[derive(Debug, Deserialize)]
 struct WebRtcIceCandidateMessage {
     stream_type: String,
     candidate: WebRtcIceCandidatePayload,
 }
 
+/// Entry point wired into the TCP accept loop: handles one client connection,
+/// logging (but swallowing) any error so a single bad client cannot take the
+/// server down.
 pub async fn accept_connection(peer: SocketAddr, stream: tokio::net::TcpStream, app: AppHandle) {
     if let Err(error) = handle_connection(peer, stream, app).await {
         eprintln!("Error handling connection from {}: {}", peer, error);
     }
 }
 
+/// Performs the WebSocket handshake and routes the peer to the internal or
+/// external handler based on whether its address is a loopback address.
 async fn handle_connection(
     peer: SocketAddr,
     stream: tokio::net::TcpStream,
@@ -88,6 +116,8 @@ async fn handle_connection(
     handle_external_connection(peer, stream, app).await
 }
 
+/// Serves a loopback (trusted) connection: parses incoming JSON and forwards
+/// streaming, chat and audio events without authentication.
 async fn handle_internal_connection(
     peer: SocketAddr,
     stream: tokio::net::TcpStream,
@@ -178,6 +208,9 @@ async fn handle_internal_connection(
     Ok(())
 }
 
+/// Serves an untrusted connection: requires a successful `register` or `auth`
+/// before dispatching events, enforces per-device permissions, and tears the
+/// session down on disconnect.
 async fn handle_external_connection(
     peer: SocketAddr,
     stream: tokio::net::TcpStream,
@@ -390,6 +423,8 @@ async fn handle_external_connection(
     Ok(())
 }
 
+/// Translates an [`AudioEvent`] into a Tauri event emitted to the desktop
+/// windows (volume, seek, metadata, progress, transport controls, ...).
 fn handle_audio_event(
     app: &AppHandle,
     peer: &str,
@@ -477,12 +512,14 @@ fn handle_audio_event(
     Ok(())
 }
 
+/// Serializes a payload into a WebSocket text message.
 fn json_message<T: Serialize>(payload: &T) -> Result<Message, String> {
     serde_json::to_string(payload)
         .map(Message::Text)
         .map_err(|e| e.to_string())
 }
 
+/// Builds a WebSocket close frame with an application-specific close code.
 fn close_message(code: u16) -> Message {
     Message::Close(Some(tokio_tungstenite::tungstenite::protocol::CloseFrame {
         code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::from(code),
@@ -490,6 +527,7 @@ fn close_message(code: u16) -> Message {
     }))
 }
 
+/// Reports whether an event name belongs to the WebRTC streaming family.
 fn is_streaming_event(event_name: &str) -> bool {
     matches!(
         event_name,
@@ -501,6 +539,8 @@ fn is_streaming_event(event_name: &str) -> bool {
     )
 }
 
+/// Extracts the stream type targeted by a streaming event, defaulting to
+/// `"mobile"` for `mobile_offer` and `"unknown"` when absent.
 fn stream_type_for_event<'a>(event_name: &'a str, value: &'a Value) -> &'a str {
     if event_name == "mobile_offer" {
         return "mobile";
@@ -512,6 +552,7 @@ fn stream_type_for_event<'a>(event_name: &'a str, value: &'a Value) -> &'a str {
         .unwrap_or("unknown")
 }
 
+/// Builds a `stream_error` frame describing why a streaming request failed.
 fn stream_error_message(stream_type: &str, reason: &str) -> Result<Message, String> {
     json_message(&StreamErrorPayload {
         event: "stream_error",
@@ -520,6 +561,7 @@ fn stream_error_message(stream_type: &str, reason: &str) -> Result<Message, Stri
     })
 }
 
+/// Current time in Unix milliseconds, or `0` if the clock predates the epoch.
 fn now_unix_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -527,6 +569,8 @@ fn now_unix_ms() -> u128 {
         .unwrap_or_default()
 }
 
+/// Emits a diagnostics snapshot to the frontend's `streaming_debug_log`
+/// listener for troubleshooting WebRTC negotiation.
 fn emit_streaming_debug(
     app: &AppHandle,
     session_id: &str,
@@ -546,6 +590,16 @@ fn emit_streaming_debug(
     );
 }
 
+/// Handles one streaming event and returns `true` when it was recognised.
+///
+/// Dispatches to the `streaming` module (subscribe/unsubscribe, WebRTC
+/// signalling, mobile offer) and, on failure, replies to the client with a
+/// `stream_error` frame. Every step is mirrored to `streaming_debug_log`.
+///
+/// # Errors
+///
+/// Propagates deserialization failures and any error produced while building
+/// the reply frame.
 async fn handle_streaming_event(
     app: &AppHandle,
     sender: &mpsc::UnboundedSender<Message>,
@@ -778,6 +832,17 @@ async fn handle_streaming_event(
     }
 }
 
+/// Handles one chat event and returns `true` when it was recognised.
+///
+/// Supports `chat_send`, `chat_file_send`, `chat_history`, `chat_reaction`,
+/// `chat_typing` and `chat_read`. Text and files are validated and size-capped
+/// before being stored, then broadcast to the other chat participants and
+/// mirrored to the desktop window through the `chat_message` event.
+///
+/// # Errors
+///
+/// Propagates deserialization, storage and broadcast failures; user-facing
+/// validation problems are reported back over the socket instead.
 async fn handle_chat_event(
     app: &AppHandle,
     sender: &mpsc::UnboundedSender<Message>,
