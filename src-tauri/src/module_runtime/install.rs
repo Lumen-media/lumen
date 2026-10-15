@@ -1,3 +1,19 @@
+//! Module installation from `.lumenpack` archives or directories.
+//!
+//! [`Installer`] copies a module into the modules root and registers it. Two
+//! sources are supported:
+//!
+//! * a `.lumenpack` file, a ZIP archive containing `manifest.json` plus the
+//!   module payload, extracted after validating every entry path;
+//! * a directory, either copied into the modules root (sideload) or referenced
+//!   in place (`dev_mode`, so the developer's build output is served live).
+//!
+//! Both extraction routines treat the archive and the manifest id as untrusted
+//! input. [`resolve_module_dest`] and [`resolve_archive_entry`] reject absolute
+//! paths, `..`/`~` segments and any path that would escape the destination
+//! directory (Zip Slip), and every rejection is covered by the unit tests in
+//! this file.
+
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -6,16 +22,62 @@ use zip::ZipArchive;
 use crate::module_runtime::manifest::{load_manifest, ModuleManifest};
 use crate::module_runtime::registry::{ModuleEntry, Registry};
 
+/// Performs the physical install of a module and records it in the [`Registry`].
+///
+/// Borrows the modules root and a registry for the duration of the install;
+/// typically constructed ad hoc inside a Tauri command (see
+/// [`crate::module_runtime::module_install`] and
+/// [`crate::module_runtime::store::store_install`]).
+///
+/// # Examples
+///
+/// ```no_run
+/// # use std::path::Path;
+/// # use crate::module_runtime::install::Installer;
+/// # use crate::module_runtime::registry::Registry;
+/// let registry = Registry::open(Path::new("/data/lumen.sqlite"))?;
+/// let installer = Installer::new(Path::new("/data/modules"), &registry);
+/// let manifest = installer.install_from_path(Path::new("/tmp/demo.lumenpack"), false)?;
+/// println!("installed {}", manifest.id);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub struct Installer<'a> {
     modules_dir: &'a Path,
     registry: &'a Registry,
 }
 
 impl<'a> Installer<'a> {
+    /// Creates an installer targeting `modules_dir` and writing to `registry`.
     pub fn new(modules_dir: &'a Path, registry: &'a Registry) -> Self {
         Self { modules_dir, registry }
     }
 
+    /// Installs a module from `source_path` and returns its manifest.
+    ///
+    /// Dispatches on the source: a `.lumenpack` extension installs from the
+    /// ZIP archive; a directory installs via [`Installer::install_from_dir`];
+    /// anything else is rejected. On success the module is inserted into the
+    /// registry with `enabled = true`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use std::path::Path;
+    /// # use crate::module_runtime::install::Installer;
+    /// # use crate::module_runtime::registry::Registry;
+    /// # let registry = Registry::open(Path::new("/data/lumen.sqlite"))?;
+    /// # let installer = Installer::new(Path::new("/data/modules"), &registry);
+    /// // Sideload a pack, or install a directory in dev mode to serve it live.
+    /// let manifest = installer.install_from_path(Path::new("/src/my-module"), true)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string when the source is neither a `.lumenpack` file
+    /// nor a directory, when the manifest is missing/invalid, when the module
+    /// id is unsafe to use as a path segment, when an archive entry would
+    /// escape the destination, or on any filesystem failure.
     pub fn install_from_path(
         &self,
         source_path: &Path,
@@ -38,6 +100,11 @@ impl<'a> Installer<'a> {
         }
     }
 
+    /// Extracts a `.lumenpack` ZIP archive into the modules root and registers it.
+    ///
+    /// Reads and validates `manifest.json` from the archive, removes any
+    /// pre-existing install of the same id, then extracts every entry via
+    /// [`resolve_archive_entry`]. The recorded `source` is `"sideload"`.
     fn install_from_pack(&self, pack_path: &Path) -> Result<ModuleManifest, String> {
         let file = fs::File::open(pack_path)
             .map_err(|e| format!("cannot open pack: {e}"))?;
@@ -83,6 +150,11 @@ impl<'a> Installer<'a> {
         Ok(manifest)
     }
 
+    /// Installs a module from an on-disk directory.
+    ///
+    /// The manifest is loaded from `dir`; in `dev_mode` the directory is
+    /// registered in place (`source = "dev"`, changes served live), otherwise
+    /// it is copied into the modules root (`source = "sideload"`).
     fn install_from_dir(&self, dir: &Path, dev_mode: bool) -> Result<ModuleManifest, String> {
         let manifest = load_manifest(dir)?;
 
@@ -111,6 +183,12 @@ impl<'a> Installer<'a> {
     }
 }
 
+/// Resolves and validates the destination directory for `module_id`.
+///
+/// Rejects empty ids, ids containing path separators, `.`/`..`, absolute
+/// paths, and any join that would not stay strictly inside `modules_dir`.
+/// This is the guard that prevents a hostile manifest id from escaping the
+/// modules root.
 fn resolve_module_dest(modules_dir: &Path, module_id: &str) -> Result<PathBuf, String> {
     let reject = || format!("invalid module id: {module_id}");
 
@@ -135,6 +213,11 @@ fn resolve_module_dest(modules_dir: &Path, module_id: &str) -> Result<PathBuf, S
     Ok(dest)
 }
 
+/// Resolves a ZIP entry name to a safe path under `base`.
+///
+/// Normalizes Windows separators, then rejects absolute paths and any `..`/`~`
+/// segment. The final join is re-checked to stay inside `base`, blocking Zip
+/// Slip attacks from crafted archives.
 fn resolve_archive_entry(base: &Path, entry_name: &str) -> Result<PathBuf, String> {
     let candidate = entry_name.replace('\\', "/");
     let reject = || format!("archive entry escapes module directory: {entry_name}");
@@ -158,6 +241,10 @@ fn resolve_archive_entry(base: &Path, entry_name: &str) -> Result<PathBuf, Strin
     Ok(out_path)
 }
 
+/// Reads and parses `manifest.json` from the root of a pack archive.
+///
+/// Does not run [`ModuleManifest::validate`]; callers do that after extraction
+/// so that the id can be inspected first.
 fn extract_manifest_from_archive(
     archive: &mut ZipArchive<fs::File>,
 ) -> Result<ModuleManifest, String> {
@@ -170,6 +257,7 @@ fn extract_manifest_from_archive(
     serde_json::from_str(&content).map_err(|e| format!("invalid manifest.json: {e}"))
 }
 
+/// Recursively copies the directory tree at `src` into `dst`.
 fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     fs::create_dir_all(dst).map_err(|e| e.to_string())?;
     for entry in fs::read_dir(src).map_err(|e| e.to_string())? {

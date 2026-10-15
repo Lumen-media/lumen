@@ -1,3 +1,25 @@
+//! Loopback HTTP server used while developing modules.
+//!
+//! [`start_dev_server`] runs an [axum] server bound to `127.0.0.1:5179` that
+//! exposes the module runtime over plain HTTP so a module's build tooling (or a
+//! browser) can install, reload, disable and uninstall modules and read module
+//! files without going through the Tauri IPC bridge.
+//!
+//! Endpoints:
+//!
+//! | method | path                          | action                          |
+//! |--------|-------------------------------|---------------------------------|
+//! | GET    | `/modules`                    | list all registered modules     |
+//! | POST   | `/modules`                    | install (`{ path, dev_mode }`)  |
+//! | POST   | `/modules/{id}/reload`        | emit `module:reload`            |
+//! | POST   | `/modules/{id}/disable`       | disable a module                |
+//! | DELETE | `/modules/{id}`               | uninstall a module              |
+//! | GET    | `/module-files/*path`         | serve `{module_id}/{file}`      |
+//!
+//! The server is only ever started on the loopback interface and failure to
+//! bind (for example when another instance is running) is logged rather than
+//! propagated.
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -12,28 +34,44 @@ use tokio::net::TcpListener;
 
 use crate::module_runtime::ModuleRuntime;
 
+/// TCP port the development server listens on (loopback only).
 pub const DEV_SERVER_PORT: u16 = 5179;
 
+/// Shared state passed to every axum handler: the Tauri app handle, used to
+/// reach [`ModuleRuntime`] and to emit events.
 #[derive(Clone)]
 struct AppState {
     app: AppHandle,
 }
 
+/// JSON body for `POST /modules`.
 #[derive(Deserialize)]
 struct InstallBody {
+    /// Path to a `.lumenpack` file or module directory.
     path: String,
+    /// Install the directory in place instead of copying it.
     #[serde(default)]
     dev_mode: bool,
 }
 
+/// JSON representation of a module returned by `GET /modules`.
 #[derive(Serialize)]
 struct ModuleListItem {
+    /// Module id.
     id: String,
+    /// Installed version.
     version: String,
+    /// Install source (`sideload`, `dev`, `store`).
     source: String,
+    /// Whether the module is enabled.
     enabled: bool,
 }
 
+/// Starts the development server on `127.0.0.1:DEV_SERVER_PORT`.
+///
+/// The function runs until the server stops and never returns an error: a bind
+/// failure is logged and the function returns, so callers can `spawn` it
+/// without handling failure.
 pub async fn start_dev_server(app: AppHandle) {
     let state = AppState { app: app.clone() };
 
@@ -60,6 +98,7 @@ pub async fn start_dev_server(app: AppHandle) {
     }
 }
 
+/// `GET /modules`: lists every registered module (enabled or not).
 async fn list_modules(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     use tauri::Manager;
     let runtime = state.app.state::<ModuleRuntime>();
@@ -80,6 +119,8 @@ async fn list_modules(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     (StatusCode::OK, Json(items))
 }
 
+/// `POST /modules`: installs a module from a path, delegating to
+/// [`super::module_install`]. Returns `400` with the error message on failure.
 async fn install_module(
     State(state): State<Arc<AppState>>,
     Json(body): Json<InstallBody>,
@@ -96,6 +137,8 @@ async fn install_module(
     }
 }
 
+/// `POST /modules/{id}/reload`: emits `module:reload` so the frontend reloads
+/// the module. Returns `500` if the event cannot be emitted.
 async fn reload_module(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -112,6 +155,8 @@ async fn reload_module(
         })
 }
 
+/// `POST /modules/{id}/disable`: disables a module via
+/// [`super::module_disable`]. Returns `400` on failure.
 async fn disable_module(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -125,6 +170,8 @@ async fn disable_module(
     }
 }
 
+/// `DELETE /modules/{id}`: uninstalls a module via
+/// [`super::module_uninstall`]. Returns `400` on failure.
 async fn uninstall_module(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -138,6 +185,9 @@ async fn uninstall_module(
     }
 }
 
+/// `GET /module-files/{module_id}/{file}`: serves a file from a module's
+/// directory with a minimal MIME mapping and permissive CORS. Returns `400`
+/// for a malformed path, `404` when the module or file is missing.
 async fn serve_module_file(
     State(state): State<Arc<AppState>>,
     Path(path): Path<String>,
