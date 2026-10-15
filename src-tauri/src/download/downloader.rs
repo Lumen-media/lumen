@@ -1,3 +1,31 @@
+//! `yt-dlp`-backed media downloading, progress reporting, and cookie
+//! validation.
+//!
+//! Downloads are executed by spawning the `yt-dlp` binary provisioned in the
+//! tools directory (see [`super::dependencies`]). A download is identified by
+//! a UUID ([`ActiveDownload::download_id`]) and tracked in the shared
+//! [`ActiveDownloads`] map so it can be inspected or cancelled while it runs.
+//!
+//! Lifecycle and events:
+//!
+//! 1. [`start_download`] validates prerequisites, spawns the process, records
+//!    it in the map, and returns an initial [`DownloadResult`] immediately.
+//! 2. A background task parses yt-dlp's stdout and emits
+//!    `video-download-progress` ([`DownloadProgress`]) for each progress
+//!    line.
+//! 3. When the process exits, the file is moved from the temporary downloads
+//!    directory to the user's media directory and either
+//!    `video-download-complete` ([`DownloadResult`]) or `video-download-error`
+//!    ([`DownloadError`]) is emitted. Auth-shaped yt-dlp failures are
+//!    classified as `auth_required` with a cookies hint.
+//! 4. [`cancel_download`] kills the process and removes the entry; cancelled
+//!    jobs emit no completion event.
+//!
+//! Authentication comes either from a `cookies.txt` file installed through
+//! `install_cookies_file` (copied to a temp file per run) or, when no file
+//! exists, from the first logged-in browser detected by
+//! [`detect_youtube_browser`].
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -11,6 +39,7 @@ use tokio::sync::Mutex;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+/// Configures a `Command` so no console window flashes on Windows.
 fn hidden_tokio(mut cmd: Command) -> Command {
     #[cfg(target_os = "windows")]
     {
@@ -20,17 +49,27 @@ fn hidden_tokio(mut cmd: Command) -> Command {
     cmd
 }
 
+/// Requested output quality for a video download.
+///
+/// Serialized to snake_case so the frontend sends `best`, `high`, `medium`,
+/// `low`, or `audio_only`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DownloadQuality {
+    /// Best available video and audio streams.
     Best,
+    /// Video capped at 1080p.
     High,
+    /// Video capped at 720p.
     Medium,
+    /// Video capped at 480p.
     Low,
+    /// Audio-only extraction, converted to MP3.
     AudioOnly,
 }
 
 impl DownloadQuality {
+    /// yt-dlp format selector corresponding to this quality.
     fn yt_dlp_format(&self) -> &str {
         match self {
             DownloadQuality::Best => "bestvideo+bestaudio/best",
@@ -41,53 +80,83 @@ impl DownloadQuality {
         }
     }
 
+    /// Returns `true` when only audio should be extracted (MP3 output).
     pub fn is_audio_only(&self) -> bool {
         matches!(self, DownloadQuality::AudioOnly)
     }
 }
 
+/// Progress snapshot emitted as the `video-download-progress` event.
 #[derive(Debug, Clone, Serialize)]
 pub struct DownloadProgress {
+    /// Identifier of the download this progress belongs to.
     pub download_id: String,
+    /// Completion fraction in `0.0..=1.0`.
     pub progress: f64,
+    /// Transfer speed as reported by yt-dlp (for example `1.23MiB/s`).
     pub speed: String,
+    /// Estimated time remaining as reported by yt-dlp (for example `00:42`).
     pub eta: String,
+    /// Status string; currently always `"downloading"`.
     pub status: String,
 }
 
+/// Outcome of a download, returned by [`start_download`] and re-emitted as the
+/// `video-download-complete` event with the final file information.
 #[derive(Debug, Clone, Serialize)]
 pub struct DownloadResult {
+    /// Identifier of the download job.
     pub download_id: String,
+    /// Absolute path of the finished file. Empty in the immediate return
+    /// value of [`start_download`]; filled in when emitted after completion.
     pub file_path: String,
+    /// Size of the finished file in bytes (`0` until completion).
     pub file_size: u64,
+    /// Media classification: `"video"` or `"audio"`.
     pub media_type: String,
+    /// File extension including the leading dot (for example `.mp4`).
     pub file_extension: String,
 }
 
+/// Failure notification emitted as the `video-download-error` event.
 #[derive(Debug, Clone, Serialize)]
 pub struct DownloadError {
+    /// Identifier of the failed download.
     pub download_id: String,
+    /// Human-readable error message (may include a cookies hint).
     pub message: String,
+    /// Machine-readable error class: `"download_failed"` or `"auth_required"`.
     pub code: String,
 }
 
+/// Bookkeeping for an in-flight download.
 #[derive(Debug)]
 pub struct ActiveDownload {
+    /// Identifier of the download job.
     pub download_id: String,
+    /// Source URL passed to yt-dlp.
     pub url: String,
+    /// Requested output quality.
     pub quality: DownloadQuality,
+    /// Handle to the spawned yt-dlp process, taken by the progress task.
     pub process: Option<Child>,
+    /// Unix timestamp (seconds) when the download was started.
     pub started_at: u64,
 }
 
+/// Shared map of in-flight downloads keyed by `download_id`, held in Tauri
+/// state as [`super::DownloadState::active_downloads`].
 pub type ActiveDownloads = Arc<Mutex<HashMap<String, ActiveDownload>>>;
 
+/// Browsers probed, in order, when looking for YouTube cookies.
 const BROWSER_ORDER: &[&str] = &["chrome", "edge", "firefox", "brave", "chromium"];
 
+/// Creates an empty shared [`ActiveDownloads`] map.
 pub fn create_active_downloads() -> ActiveDownloads {
     Arc::new(Mutex::new(HashMap::new()))
 }
 
+/// Path of the `yt-dlp` binary inside the tools directory.
 fn ytdlp_path(tools_dir: &Path) -> PathBuf {
     let name = if cfg!(target_os = "windows") {
         "yt-dlp.exe"
@@ -97,6 +166,8 @@ fn ytdlp_path(tools_dir: &Path) -> PathBuf {
     tools_dir.join(name)
 }
 
+/// Temporary staging directory yt-dlp writes to before files are moved to the
+/// user's media directory.
 fn downloads_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let data_dir = app
         .path()
@@ -105,18 +176,22 @@ fn downloads_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir.join("tools").join("downloads"))
 }
 
+/// Resolved media directory for downloaded videos.
 fn video_media_dir(_app: &AppHandle) -> Result<PathBuf, String> {
     crate::paths::media_dir("video")
 }
 
+/// Resolved media directory for downloaded audio.
 fn audio_media_dir(_app: &AppHandle) -> Result<PathBuf, String> {
     crate::paths::media_dir("audio")
 }
 
+/// File caching the browser that yielded working YouTube cookies.
 fn browser_cache_file(tools_dir: &Path) -> PathBuf {
     tools_dir.join("browser.txt")
 }
 
+/// Path of the provisioned `node` binary used for yt-dlp JS runtimes.
 fn has_node_at(tools_dir: &Path) -> PathBuf {
     let node_dir = tools_dir.join("node");
     if cfg!(target_os = "windows") {
@@ -126,6 +201,9 @@ fn has_node_at(tools_dir: &Path) -> PathBuf {
     }
 }
 
+/// Probes whether `browser` provides usable YouTube cookies by running
+/// `yt-dlp --cookies-from-browser <browser> --skip-download` against a known
+/// video with a 60 second timeout.
 async fn probe_browser(ytdlp: &Path, node_path: Option<&Path>, browser: &str) -> bool {
     let mut args = vec![
         "--cookies-from-browser".to_string(),
@@ -165,6 +243,7 @@ async fn probe_browser(ytdlp: &Path, node_path: Option<&Path>, browser: &str) ->
     }
 }
 
+/// Returns the browser name cached by [`detect_youtube_browser`], if any.
 fn cached_browser(tools_dir: &Path) -> Option<String> {
     let cached = std::fs::read_to_string(browser_cache_file(tools_dir)).ok()?;
     let name = cached.trim();
@@ -175,6 +254,11 @@ fn cached_browser(tools_dir: &Path) -> Option<String> {
     }
 }
 
+/// Finds a logged-in browser whose cookies work for YouTube.
+///
+/// Returns a cached result when available, otherwise probes each browser in
+/// [`BROWSER_ORDER`] with yt-dlp and caches the first success. Returns `None`
+/// when yt-dlp is not installed or no browser yields usable cookies.
 pub async fn detect_youtube_browser(tools_dir: &Path) -> Option<String> {
     if let Some(cached) = cached_browser(tools_dir) {
         return Some(cached);
@@ -197,6 +281,9 @@ pub async fn detect_youtube_browser(tools_dir: &Path) -> Option<String> {
     None
 }
 
+/// Builds the yt-dlp authentication arguments: `--cookies <file>` when a
+/// working copy exists, otherwise `--cookies-from-browser <browser>` when a
+/// browser was detected, or nothing when neither is available.
 fn auth_args(work_cookies: Option<&Path>, browser: &str) -> Vec<String> {
     let mut args = Vec::new();
     if let Some(work) = work_cookies {
@@ -209,6 +296,25 @@ fn auth_args(work_cookies: Option<&Path>, browser: &str) -> Vec<String> {
     args
 }
 
+/// Starts a `yt-dlp` download and returns immediately with a job id.
+///
+/// Only the `youtube` provider is supported. The function verifies yt-dlp is
+/// installed, resolves FFmpeg (on macOS it must already be on `PATH`), builds
+/// the format selector from `quality` (or `max_height` when set and not
+/// audio-only), attaches authentication, spawns the process, records it in
+/// `active_downloads`, and launches the background task that streams progress
+/// and completion events.
+///
+/// The returned [`DownloadResult`] is a placeholder carrying the new
+/// `download_id`; the real outcome is delivered through the
+/// `video-download-progress`, `video-download-complete`, and
+/// `video-download-error` events.
+///
+/// # Errors
+///
+/// Returns an error string when the provider is not `youtube`, `yt-dlp` is
+/// missing, FFmpeg is missing on macOS, the downloads directory cannot be
+/// created, or the process cannot be spawned.
 pub async fn start_download(
     app: AppHandle,
     tools_dir: PathBuf,
@@ -645,6 +751,15 @@ pub async fn start_download(
     })
 }
 
+/// Cancels an in-flight download by killing its process and removing it from
+/// the active map.
+///
+/// Returns `Ok(())` even when `download_id` is unknown. Cancelled jobs do not
+/// emit a completion or error event.
+///
+/// # Errors
+///
+/// Returns an error string only when the process exists but cannot be killed.
 pub async fn cancel_download(
     active_downloads: &ActiveDownloads,
     download_id: &str,
@@ -661,12 +776,30 @@ pub async fn cancel_download(
     Ok(())
 }
 
+/// Result of [`validate_cookies`], surfaced to the UI.
 #[derive(Debug, Clone, Serialize)]
 pub struct CookieValidation {
+    /// One of `valid`, `missing`, `error`, `rotated`, `blocked`, or
+    /// `no_account`.
     pub status: String,
+    /// Human-readable explanation (in Portuguese) suitable for display.
     pub detail: String,
 }
 
+/// Checks whether YouTube authentication is currently usable.
+///
+/// When no `cookies.txt` exists in `tools_dir`, attempts to detect a logged-in
+/// browser with [`detect_youtube_browser`]: a detection reports `valid`,
+/// otherwise `missing`. With a cookies file present, yt-dlp is run in
+/// `--skip-download` mode with a 90 second timeout and the output is
+/// classified as `rotated` (cookies revoked), `blocked` (PO token / bot
+/// check), `no_account` (logged-out cookies), or `valid` (account name
+/// printed). A timeout reports `error` without failing.
+///
+/// # Errors
+///
+/// Returns an error string when `yt-dlp` is not installed or cannot be spawned
+/// or awaited.
 pub async fn validate_cookies(tools_dir: &Path) -> Result<CookieValidation, String> {
     let cookies_path = tools_dir.join("cookies.txt");
     if !cookies_path.exists() {
@@ -791,6 +924,11 @@ pub async fn validate_cookies(tools_dir: &Path) -> Result<CookieValidation, Stri
     })
 }
 
+/// Copies the cookies file to a uniquely named temporary file used by a single
+/// download run, so concurrent runs do not contend over the same file.
+///
+/// The file name is derived from a hash of the source stem. On copy failure
+/// the original path is returned so the download still has valid cookies.
 fn work_cookies_copy(cookies_path: &std::path::Path) -> PathBuf {
     let name = format!(
         "cookies_work_{}.txt",
@@ -813,6 +951,10 @@ fn work_cookies_copy(cookies_path: &std::path::Path) -> PathBuf {
     }
 }
 
+/// Parses a yt-dlp `[download] ... %` progress line into
+/// `(fraction, speed, eta)`.
+///
+/// Returns `None` for any line that is not a download progress line.
 fn parse_progress(line: &str) -> Option<(f64, String, String)> {
     if !line.contains("[download]") || !line.contains("%") {
         return None;
@@ -842,6 +984,13 @@ fn parse_progress(line: &str) -> Option<(f64, String, String)> {
     Some((percent / 100.0, speed, eta))
 }
 
+/// Returns the most recently modified file in `dir`, ignoring yt-dlp
+/// intermediate artifacts (`.part`, `.ytdl`, `.temp`, hidden files).
+///
+/// # Errors
+///
+/// Returns an error string when `dir` cannot be read or contains no candidate
+/// file.
 fn find_downloaded_file(dir: &Path) -> Result<PathBuf, String> {
     let entries: Vec<_> = std::fs::read_dir(dir)
         .map_err(|e| format!("Failed to read downloads directory: {}", e))?
