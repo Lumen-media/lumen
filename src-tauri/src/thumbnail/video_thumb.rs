@@ -1,3 +1,16 @@
+//! Video thumbnail extraction without spawning an external process.
+//!
+//! Demuxes the container with `symphonia`, decodes the first decodable video
+//! frame with the OpenH264 library, and writes the frame (fitted to the
+//! requested box) as a JPEG. Only H.264/AVC in MP4-family containers
+//! (`mp4`, `mov`, `m4v`) is supported; anything else fails with an error so
+//! callers such as [`super::get_thumbnail`] and [`super::protocol`] can fall
+//! back to the OS thumbnail provider.
+//!
+//! The decoder is primed with the track's `avcC` extradata (converted to
+//! Annex B) so the first access unit can be decoded without waiting for an
+//! in-band parameter set.
+
 use std::path::Path;
 
 use openh264::decoder::{Decoder, DecoderConfig};
@@ -9,20 +22,54 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
+/// Generates a square-bounded JPEG thumbnail of the first decodable frame.
+///
+/// The frame keeps its aspect ratio and fits within a `size` x `size` box.
+/// JPEG quality is fixed at 82.
+///
+/// # Errors
+///
+/// Returns an error string when the file cannot be opened or probed, no video
+/// track exists (`no video track found`), the OpenH264 decoder cannot be
+/// initialized, no frame decodes within the first 300 packets, or the JPEG
+/// cannot be created or encoded.
 pub fn generate(src: &Path, dest: &Path, size: u32) -> Result<(), String> {
     generate_box(src, dest, size, size)
 }
 
+/// Generates a JPEG thumbnail of the first decodable frame within a
+/// `w` x `h` box, preserving the frame's aspect ratio.
+///
+/// JPEG quality is fixed at 82.
+///
+/// # Errors
+///
+/// Same failure modes as [`generate`].
 pub fn generate_box(src: &Path, dest: &Path, w: u32, h: u32) -> Result<(), String> {
     generate_impl(src, dest, Some(w), Some(h), 82).map(|_| ())
 }
 
-/// Generate a thumbnail with a fixed width; height is derived from the frame's
+/// Generates a thumbnail with a fixed width; height is derived from the frame's
 /// aspect ratio. Returns the actual thumbnail dimensions used.
+///
+/// This is the entry point used by [`super::protocol`] when serving
+/// `lumen-thumb://` URLs, where only `w` is known up front. `q` is the JPEG
+/// quality (`1..=100`).
+///
+/// # Errors
+///
+/// Returns an error string when the file cannot be opened or probed, no video
+/// track exists, the decoder cannot be initialized, no frame decodes within
+/// the first 300 packets, or the output JPEG cannot be created or encoded.
 pub fn generate_box_width(src: &Path, dest: &Path, w: u32, q: u8) -> Result<(u32, u32), String> {
     generate_impl(src, dest, Some(w), None, q)
 }
 
+/// Shared implementation for the public `generate*` entry points.
+///
+/// `w`/`h` bound the output box (either may be `None` to derive the missing
+/// dimension from the frame's aspect ratio, but at least one must be `Some`),
+/// and `q` is the JPEG quality. Returns the encoded thumbnail dimensions.
 fn generate_impl(
     src: &Path,
     dest: &Path,
@@ -131,6 +178,12 @@ fn generate_impl(
     }
 }
 
+/// Converts an ISO `avcC` (AVCDecoderConfigurationRecord) extradata blob into
+/// Annex B start-code format by prefixing each SPS/PPS NAL unit with
+/// `00 00 00 01`.
+///
+/// Returns an empty vector when the record is too short or truncated; the
+/// decoder then has to wait for in-band parameter sets.
 fn parse_avcc_extra(data: &[u8]) -> Vec<u8> {
     if data.len() < 7 {
         return Vec::new();
@@ -177,6 +230,10 @@ fn parse_avcc_extra(data: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Rewrites an AVCC-length-prefixed sample into Annex B by replacing each
+/// 4-byte length prefix with the `00 00 00 01` start code.
+///
+/// Malformed trailing bytes are dropped rather than producing a partial NAL.
 fn avcc_to_annexb(data: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len() + 16);
     let mut i = 0;

@@ -1,3 +1,52 @@
+//! URI scheme handlers that serve media and thumbnails to the webview.
+//!
+//! The single entry point [`handle_lumen_request`] is registered twice in
+//! `main.rs` (as an asynchronous scheme handler) and serves two schemes:
+//!
+//! - `lumen://` - full-size media: re-encodes images to JPEG once and caches
+//!   them; passes videos and already-decodable remote bytes through.
+//! - `lumen-thumb://` - on-demand thumbnails: decodes/requests the source at a
+//!   requested width `w` and JPEG quality `q`, then caches the result.
+//!
+//! # URL format
+//!
+//! ```text
+//! lumen-thumb://?src=<source>&w=<width>&q=<quality>
+//! lumen://?src=<source>
+//! ```
+//!
+//! - `src` (required) - local absolute path or `http(s)://` URL.
+//! - `w` (optional) - target width in pixels; defaults to 480. Height is
+//!   derived from the source aspect ratio.
+//! - `q` (optional) - JPEG quality `1..=100`; defaults to 82 (thumbs) or 88
+//!   (full-size Unsplash sources).
+//!
+//! Under WebView2 the same URLs are seen as `http://lumen.localhost/...` or
+//! `http://lumen-thumb.localhost/...`, and both prefixes are accepted here.
+//! The frontend builds these URLs with `lumenUrl()` / `lumenThumbUrl()` in
+//! `src/services/lumen-url.ts`.
+//!
+//! # Behavior
+//!
+//! - Processing runs on a dedicated thread; the responder is invoked exactly
+//!   once from that thread after the work finishes.
+//! - Two webview events are emitted around the work for UI feedback:
+//!   `lumen:optimizing` (payload: the `src` string) when processing starts and
+//!   `lumen:optimized` when it finishes, regardless of success.
+//! - Successful responses carry `Access-Control-Allow-Origin: *` and
+//!   `Cache-Control: public, max-age=31536000, immutable`, since cache file
+//!   names are derived from the source hash and dimensions.
+//! - Sized variants are cached under `<app-data>/lumen/cache/thumbs` (local)
+//!   or `.../remote-thumbs` (remote) as `<blake3(src)>_q<q>_<w>x<h>.jpg`.
+//!   An in-memory index avoids re-scanning the directory, and an existing
+//!   cache entry whose width is within 1.5x of the request is reused instead
+//!   of re-encoding.
+//! - Unsplash sources are rewritten to Unsplash's image CDN parameters
+//!   (`w`, `q`, `fit`, `fm=jpg`, `auto=format`) so resizing happens upstream.
+//! - Local images take a fast path: OS Shell thumbnail first, then a scaled
+//!   JPEG decode that only computes the DCT blocks needed for the target
+//!   width, then a full `image` crate decode.
+
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -9,14 +58,48 @@ use url::{form_urlencoded, Url};
 
 use super::{os_thumb, video_thumb};
 
+/// Width multiplier defining when an already-cached thumbnail is "close
+/// enough" to reuse: a cached image at most `1.5x` the requested width and of
+/// the same quality is served instead of re-encoding.
 const TOLERANCE: f64 = 1.5;
+/// Width used for `lumen-thumb://` requests that omit the `w` parameter.
 const DEFAULT_THUMB: u32 = 480;
+/// JPEG quality for generated thumbnails when `q` is omitted.
 const JPEG_QUALITY_THUMB: u8 = 82;
+/// JPEG quality for full-size (`lumen://`) re-encoded images.
 const JPEG_QUALITY_FULL: u8 = 88;
 
+/// In-memory cache index: key is `<cache dir>::<blake3(src)>` and the value
+/// lists every cached variant as `(width, height, quality, path)`.
 type ThumbIndex = Mutex<HashMap<String, Vec<(u32, u32, u8, PathBuf)>>>;
+/// Process-wide index backing [`find_cached`] and [`cache_insert`].
 static INDEX: OnceLock<ThumbIndex> = OnceLock::new();
 
+/// Asynchronous URI scheme handler for the `lumen` and `lumen-thumb` schemes.
+///
+/// Registered in `main.rs` via
+/// `register_asynchronous_uri_scheme_protocol` for both scheme names; the
+/// scheme is detected from the request URI (`lumen-thumb` enables sized
+/// thumbnail processing, `lumen` serves full-size media).
+///
+/// # Request processing
+///
+/// 1. Strip the scheme prefix (`lumen://`, `lumen-thumb://`, or the
+///    `http(s)://lumen[-thumb].localhost/` form WebView2 produces) and parse
+///    the query string into `src`, `w`, and `q`.
+/// 2. Reject requests without `src` with `400`.
+/// 3. Spawn a worker thread that emits `lumen:optimizing`, runs [`process`],
+///    emits `lumen:optimized`, and answers the [`UriSchemeResponder`]
+///    exactly once.
+///
+/// # Errors
+///
+/// The response status reflects the failure: `400` for a missing `src` or an
+/// undecodable image, `404` when a local `src` does not exist, `415` for
+/// unsupported source types, `500` for cache/IO/encoding failures, and `502`
+/// for upstream HTTP failures when fetching a remote source. Failures are
+/// delivered as plain-text response bodies through the responder rather than
+/// as a Rust `Result`.
 pub fn handle_lumen_request(
     ctx: UriSchemeContext<'_, tauri::Wry>,
     request: tauri::http::Request<Vec<u8>>,
@@ -91,6 +174,19 @@ pub fn handle_lumen_request(
     });
 }
 
+/// Routes a request to the sized or full-size pipeline and returns the bytes
+/// plus their MIME type.
+///
+/// Sized processing is used whenever `is_thumb` is set or an explicit `w` was
+/// requested. Otherwise: remote sources are fetched and re-encoded to JPEG
+/// (Unsplash via its CDN, other hosts locally, with caching); local images
+/// are re-encoded to JPEG; local videos are streamed through unmodified.
+///
+/// # Errors
+///
+/// Returns `(status, message)` for the HTTP response: `404` for missing local
+/// files, `415` for unsupported extensions, `400` for decode failures, `500`
+/// for IO/encoding failures, and `502` for upstream fetch failures.
 fn process(
     cache_root: &Path,
     src: &str,
@@ -164,6 +260,19 @@ fn process(
     }
 }
 
+/// Produces a JPEG of width `w` (default [`DEFAULT_THUMB`]) and quality `q`
+/// (default [`JPEG_QUALITY_THUMB`], clamped to `1..=100`), reusing a cached
+/// variant when [`find_cached`] finds one.
+///
+/// Local images go through the [`decode_local`] fast path; local videos are
+/// decoded with the OS thumbnail provider first and
+/// [`video_thumb::generate_box_width`] as a fallback; remote sources are
+/// fetched and resized, with Unsplash handled through its CDN.
+///
+/// # Errors
+///
+/// Returns `(status, message)` for the HTTP response, as described on
+/// [`process`].
 fn sized(
     dir: &Path,
     src: &str,
@@ -240,6 +349,8 @@ fn sized(
     }
 }
 
+/// Derives the output height for a target width `w` from the source
+/// dimensions, preserving aspect ratio (returns `w` when `ow` is zero).
 fn derive_h(w: u32, ow: u32, oh: u32) -> u32 {
     if ow == 0 {
         return w;
@@ -250,6 +361,9 @@ fn derive_h(w: u32, ow: u32, oh: u32) -> u32 {
 /// Fast path for local images: try the OS thumbnail first (Shell cache), then a
 /// scaled JPEG decode that only decodes the DCT blocks needed for the target
 /// width, falling back to a full `image` decode.
+///
+/// Returns `None` only when all three strategies fail (for example, an
+/// undecodable file).
 fn decode_local(path: &Path, w: u32) -> Option<image::DynamicImage> {
     if let Some(img) = os_thumb::get_thumbnail(path, w) {
         return Some(img);
@@ -261,6 +375,10 @@ fn decode_local(path: &Path, w: u32) -> Option<image::DynamicImage> {
 }
 
 /// Decode a JPEG at a reduced scale so we never materialize the full image.
+///
+/// Uses `jpeg_decoder`'s built-in scaling so only the DCT blocks needed for
+/// the target size are computed; returns `None` for non-JPEG files, files
+/// whose dimensions cannot be read, or when the requested scale is rejected.
 fn decode_scaled_jpeg(path: &Path, w: u32) -> Option<image::DynamicImage> {
     let file = std::fs::File::open(path).ok()?;
     let mut decoder = jpeg_decoder::Decoder::new(std::io::BufReader::new(file));
@@ -278,11 +396,23 @@ fn decode_scaled_jpeg(path: &Path, w: u32) -> Option<image::DynamicImage> {
     Some(image::DynamicImage::ImageRgb8(img))
 }
 
+/// Returns the pixel dimensions of an in-memory image without keeping it.
+///
+/// # Errors
+///
+/// Returns a decode error message when `bytes` are not a readable image.
 fn image_dimensions_bytes(bytes: &[u8]) -> Result<(u32, u32), String> {
     let img = image::load_from_memory(bytes).map_err(|e| format!("image decode: {e}"))?;
     Ok((img.width(), img.height()))
 }
 
+/// Looks up an existing cached thumbnail close enough to the request.
+///
+/// [`INDEX`] is populated from a directory scan on first miss. Among entries
+/// with the same quality whose width covers `w` without exceeding
+/// `w * `[`TOLERANCE`], the smallest pixel area wins, so the served file is
+/// the closest non-upscaled variant. Returns the file to serve, or `None`
+/// when nothing matches and a new thumbnail must be generated.
 fn find_cached(dir: &Path, hash: &str, w: u32, q: u8) -> Option<PathBuf> {
     let index_key = format!("{}::{}", dir.display(), hash);
     let index = INDEX.get_or_init(|| Mutex::new(HashMap::new()));
@@ -306,6 +436,8 @@ fn find_cached(dir: &Path, hash: &str, w: u32, q: u8) -> Option<PathBuf> {
     best.map(|(_, p)| p)
 }
 
+/// Scans `dir` for cache files matching `<hash>_*` and parses their
+/// dimensions and quality from the file name.
 fn scan_cache(dir: &Path, hash: &str) -> Vec<(u32, u32, u8, PathBuf)> {
     let prefix = format!("{hash}_");
     let mut out = Vec::new();
@@ -322,6 +454,10 @@ fn scan_cache(dir: &Path, hash: &str) -> Vec<(u32, u32, u8, PathBuf)> {
     out
 }
 
+/// Parses the trailing `<q>_<w>x<h>.jpg` portion of a cache file name.
+///
+/// Returns `None` when the name does not follow the cache naming convention
+/// (for example `*_full.jpg` files, which carry no dimensions).
 fn parse_dims(rest: &str) -> Option<(u32, u32, u8)> {
     let rest = rest.strip_suffix(".jpg")?;
     let (qpart, dims) = rest.split_once('_')?;
@@ -330,6 +466,8 @@ fn parse_dims(rest: &str) -> Option<(u32, u32, u8)> {
     Some((w.parse().ok()?, h.parse().ok()?, q))
 }
 
+/// Registers a newly written cache file in the in-memory [`INDEX`] so
+/// [`find_cached`] can serve it without another directory scan.
 fn cache_insert(dir: &Path, hash: &str, w: u32, h: u32, q: u8, path: PathBuf) {
     let index_key = format!("{}::{}", dir.display(), hash);
     let index = INDEX.get_or_init(|| Mutex::new(HashMap::new()));
@@ -337,6 +475,12 @@ fn cache_insert(dir: &Path, hash: &str, w: u32, h: u32, q: u8, path: PathBuf) {
     lock.entry(index_key).or_default().push((w, h, q, path));
 }
 
+/// Writes `img` to `dest` as an 8-bit JPEG with the given quality.
+///
+/// # Errors
+///
+/// Returns an error string when the file cannot be created or the JPEG
+/// encoder fails.
 fn write_jpeg(img: &image::DynamicImage, dest: &Path, quality: u8) -> Result<(), String> {
     let file = std::fs::File::create(dest).map_err(|e| format!("create cache file: {e}"))?;
     let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(file, quality);
@@ -345,6 +489,12 @@ fn write_jpeg(img: &image::DynamicImage, dest: &Path, quality: u8) -> Result<(),
         .map_err(|e| format!("encode jpeg: {e}"))
 }
 
+/// Downloads a URL with the blocking `reqwest` client.
+///
+/// # Errors
+///
+/// Returns `(502, message)` when the request fails, the upstream status is
+/// not successful, or the body cannot be read.
 fn fetch(url: &str) -> Result<Vec<u8>, (u16, String)> {
     let resp = reqwest::blocking::get(url).map_err(|e| (502, format!("fetch {url}: {e}")))?;
     if !resp.status().is_success() {
@@ -355,6 +505,8 @@ fn fetch(url: &str) -> Result<Vec<u8>, (u16, String)> {
         .map_err(|e| (502, format!("read {url}: {e}")))
 }
 
+/// Returns `true` when `src` points at the Unsplash image CDN
+/// (`images.unsplash.com` or any `*.unsplash.com` host).
 fn is_unsplash(src: &str) -> bool {
     Url::parse(src)
         .ok()
@@ -363,6 +515,12 @@ fn is_unsplash(src: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Appends Unsplash CDN parameters to `src` so the resize and encode happen
+/// upstream of Lumen.
+///
+/// Adds `w`/`h` when provided (using `fit=crop` when both are present,
+/// otherwise `fit=max`), plus `q`, `fm=jpg`, and `auto=format`. Returns `src`
+/// unchanged when it is not a parseable URL.
 fn unsplash_optimized(src: &str, w: Option<u32>, h: Option<u32>, q: u8) -> String {
     let mut url = match Url::parse(src) {
         Ok(u) => u,
@@ -387,14 +545,17 @@ fn unsplash_optimized(src: &str, w: Option<u32>, h: Option<u32>, q: u8) -> Strin
     url.to_string()
 }
 
+/// Returns `true` for extensions Lumen decodes as raster images.
 fn is_image_ext(ext: &str) -> bool {
     matches!(ext, "png" | "jpg" | "jpeg" | "webp" | "bmp" | "gif")
 }
 
+/// Returns `true` for extensions Lumen recognizes as video containers.
 fn is_video_ext(ext: &str) -> bool {
     matches!(ext, "mp4" | "mov" | "m4v" | "webm" | "avi" | "mkv")
 }
 
+/// Lowercase file extension of `src`, or an empty string when there is none.
 fn extension_of(src: &str) -> String {
     Path::new(src)
         .extension()
@@ -403,6 +564,8 @@ fn extension_of(src: &str) -> String {
         .unwrap_or_default()
 }
 
+/// Best-effort MIME type for a remote URL based on its path extension
+/// (ignoring the query string); falls back to `application/octet-stream`.
 fn mime_for_url(url: &str) -> &'static str {
     let path = url.split('?').next().unwrap_or(url);
     let ext = extension_of(path);
@@ -413,6 +576,8 @@ fn mime_for_url(url: &str) -> &'static str {
     }
 }
 
+/// Maps a lowercase file extension to its MIME type, defaulting to
+/// `application/octet-stream`.
 fn mime_for_ext(ext: &str) -> &'static str {
     match ext {
         "png" => "image/png",
@@ -429,14 +594,17 @@ fn mime_for_ext(ext: &str) -> &'static str {
     }
 }
 
+/// Wraps an I/O error as an HTTP `500` response tuple.
 fn io_err(e: std::io::Error) -> (u16, String) {
     (500, e.to_string())
 }
 
+/// Wraps an encoding error message as an HTTP `500` response tuple.
 fn str_err(e: String) -> (u16, String) {
     (500, e)
 }
 
+/// Builds a plain-text response with the given status code.
 fn response(status: u16, body: impl Into<String>) -> tauri::http::Response<Vec<u8>> {
     tauri::http::Response::builder()
         .status(status)
@@ -444,6 +612,8 @@ fn response(status: u16, body: impl Into<String>) -> tauri::http::Response<Vec<u
         .unwrap()
 }
 
+/// Subdirectory of the app cache used for sized thumbnails: `thumbs` for
+/// local sources and `remote-thumbs` for remote ones.
 fn local_cache_dir(cache_root: &Path, is_remote: bool) -> PathBuf {
     if is_remote {
         cache_root.join("remote-thumbs")
