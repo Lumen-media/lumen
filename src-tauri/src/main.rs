@@ -1,3 +1,10 @@
+//! Lumen desktop application.
+//!
+//! Lumen is a Tauri 2 app for live events: lyrics, media, slides and remote
+//! control from a single interface. This binary wires up the plugin stack,
+//! the shared application state and the IPC command surface consumed by the
+//! webview frontend; each feature lives in its own module declared below.
+
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod chat;
@@ -31,14 +38,24 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use tokio::net::TcpListener;
 
+/// Last known position of each window, keyed by window label.
+///
+/// Managed as Tauri state so secondary windows reopen where the user left
+/// them instead of at a default coordinate.
 struct WindowState {
+    /// Window label to `(x, y)` physical position on screen.
     positions: Mutex<HashMap<String, (i32, i32)>>,
 }
 
+/// Label of the dedicated lyrics and media output window.
 const MEDIA_WINDOW_LABEL: &str = "media-window";
+/// Minimum inner width of the media window, in logical pixels.
 const MEDIA_WINDOW_MIN_WIDTH: f64 = 1050.0;
+/// Minimum inner height of the media window, in logical pixels.
 const MEDIA_WINDOW_MIN_HEIGHT: f64 = 650.0;
+/// Width the media window opens with when no saved state exists.
 const MEDIA_WINDOW_INITIAL_WIDTH: f64 = 1280.0;
+/// Height the media window opens with when no saved state exists.
 const MEDIA_WINDOW_INITIAL_HEIGHT: f64 = 720.0;
 
 #[tauri::command]
@@ -68,9 +85,13 @@ fn close_splashscreen(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Windows creation flag that keeps a spawned process off the taskbar and
+/// away from a flashing console window.
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+/// Applies [`CREATE_NO_WINDOW`] to a command so helper processes never flash
+/// a console window on Windows.
 #[cfg(target_os = "windows")]
 fn hidden_std(mut cmd: std::process::Command) -> std::process::Command {
     use std::os::windows::process::CommandExt;
@@ -228,16 +249,26 @@ async fn create_overlay_window(
     Ok(())
 }
 
+/// Optional sizing and chrome overrides accepted by the surface window
+/// command; omitted fields fall back to sensible defaults.
 #[derive(serde::Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct SurfaceWindowOptions {
+    /// Whether the window opens maximized.
     maximized: Option<bool>,
+    /// Whether the window can be resized by the user.
     resizable: Option<bool>,
+    /// Whether the native title bar is drawn.
     decorations: Option<bool>,
+    /// Whether the window opens in fullscreen.
     fullscreen: Option<bool>,
+    /// Initial inner width in logical pixels.
     width: Option<f64>,
+    /// Initial inner height in logical pixels.
     height: Option<f64>,
+    /// Smallest inner width the window manager allows.
     min_width: Option<f64>,
+    /// Smallest inner height the window manager allows.
     min_height: Option<f64>,
 }
 
@@ -290,7 +321,11 @@ async fn create_surface_window(
     Ok(())
 }
 
+/// Last serialized UI state of each surface window, keyed by window label.
+///
+/// Lets a recreated window resume with the state it had before it was closed.
 struct SurfaceStore {
+    /// Window label to the JSON blob last saved by the frontend.
     states: Mutex<HashMap<String, String>>,
 }
 
@@ -326,9 +361,12 @@ fn get_system_fonts() -> Vec<String> {
     families
 }
 
+/// Hardware summary reported to the settings UI.
 #[derive(serde::Serialize)]
 struct SystemHardwareInfo {
+    /// Total physical memory in gigabytes, rounded to one decimal.
     total_memory_gb: f64,
+    /// Model name of the primary GPU, or `"Unknown"` when it cannot be read.
     gpu_name: String,
 }
 
@@ -347,6 +385,8 @@ fn get_system_info() -> SystemHardwareInfo {
     }
 }
 
+/// Best-effort GPU model lookup through the native system tools of each
+/// platform, returning `"Unknown"` when none of them yields a name.
 fn get_gpu_name() -> String {
     #[cfg(target_os = "windows")]
     {
@@ -407,8 +447,10 @@ fn get_gpu_name() -> String {
     "Unknown".to_string()
 }
 
+/// Payload of the `stream-overlay-toggle` event broadcast to the windows.
 #[derive(serde::Serialize, Clone)]
 struct StreamOverlayPayload {
+    /// Whether the streaming overlay should be shown.
     active: bool,
 }
 
@@ -418,6 +460,10 @@ async fn set_stream_overlay(app: tauri::AppHandle, active: bool) -> Result<(), S
         .map_err(|e| e.to_string())
 }
 
+/// Entry point: configures the global thread pool, registers plugins,
+/// protocols and managed state, builds the tray icon and the
+/// close-confirmation flow, then hands the IPC command table to Tauri and
+/// runs the event loop.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     rayon::ThreadPoolBuilder::new()
         .num_threads(2)
