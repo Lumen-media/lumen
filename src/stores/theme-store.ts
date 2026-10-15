@@ -29,7 +29,7 @@ interface ThemeState {
 
 export const useThemeStore = create<ThemeState>((set) => ({
   colorMode: 'dark',
-  accentId: 'cyan',
+  accentId: 'purple',
   setColorMode: (colorMode) => {
     set({ colorMode });
     saveConfigKey('theme', { colorMode, accentId: useThemeStore.getState().accentId });
