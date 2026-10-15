@@ -6,6 +6,36 @@ use tokio::sync::Mutex;
 use crate::remote;
 use crate::url_media::{canonicalize_youtube_url, resolve_youtube};
 
+/// Media library: folder synchronization, CRUD, search, and theme management.
+///
+/// This module is the heart of Lumen's media catalog. It provides:
+/// - Folder synchronization (`media_sync_type`, `media_sync_themes`) that walks
+///   configured media directories and upserts file metadata into SQLite.
+/// - CRUD operations for media files and themes (`media_insert`, `media_delete`,
+///   `media_update_download_status`, `media_insert_theme`).
+/// - Full-text search across media types (`media_search`, `media_search_multi`,
+///   `media_search_files`).
+/// - YouTube URL resolution via [`crate::url_media::resolve_youtube`] and
+///   thumbnail caching.
+/// - Theme catalog management for presentation theming.
+///
+/// # Thread safety
+///
+/// [`MediaStore`] wraps a `rusqlite::Connection` in a `Mutex`, making it safe
+/// for concurrent access from Tauri commands. Each command locks briefly for
+/// its transaction.
+///
+/// # Database schema
+///
+/// The `media_files` table stores one row per file with columns for path, size,
+/// modification time, extension, media type, duration, artist, searchable
+/// content, original URL (for URL-based entries), thumbnail paths, download
+/// status, and folder. The `theme_files` table tracks theme assets separately.
+///
+/// # Frontend commands
+///
+/// All `pub` functions marked with `#[tauri::command]` are exposed to the
+/// frontend via Tauri's IPC. They follow the naming pattern `media_*`.
 const MEDIA_BOOTSTRAP: &str = "
 DROP TRIGGER IF EXISTS mf_ai;
 DROP TRIGGER IF EXISTS mf_au;
@@ -83,77 +113,163 @@ CREATE INDEX IF NOT EXISTS idx_mf_content ON media_files (content);
 CREATE INDEX IF NOT EXISTS idx_mf_type_content ON media_files (media_type, content);
 ";
 
+/// Input structure for inserting or updating a media file record.
+///
+/// Used by [`media_insert`] and [`media_upload_files`]. All fields are required
+/// except the optional metadata fields.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaFileInput {
+    /// Display name of the media file.
     pub name: String,
+    /// Absolute filesystem path to the media file.
     pub path: String,
+    /// File size in bytes.
     pub size: i64,
+    /// Last modification timestamp in milliseconds since UNIX epoch.
     pub modified_at: i64,
+    /// File extension (e.g., "mp4", "mp3", "jpg", "url").
     pub extension: String,
+    /// Duration in seconds (for audio/video files), if available.
     pub duration: Option<f64>,
+    /// Artist/creator metadata, if available.
     pub artist: Option<String>,
+    /// Original remote URL (for URL-based media entries like YouTube).
     pub original_url: Option<String>,
+    /// Local path to thumbnail image, if available.
     pub thumbnail_path: Option<String>,
+    /// Remote URL to thumbnail image, if available.
     pub remote_thumbnail_url: Option<String>,
+    /// Download status: `"downloaded"`, `"not_downloaded"`, or `"missing"`.
     pub download_status: Option<String>,
+    /// Extracted text/content for search (e.g., presentation slide text).
     #[serde(default)]
     pub content: Option<String>,
+    /// Folder path relative to the media type root directory.
     #[serde(default)]
     pub folder: Option<String>,
 }
 
+/// Public representation of a media file for frontend consumption.
+///
+/// Returned by list/search commands (`media_list`, `media_search`,
+/// `media_get_by_id`, etc.). The `download_status` is always present
+/// (defaults to `"downloaded"` for local files, `"not_downloaded"` for
+/// URL-based entries).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaFileInfo {
+    /// Unique database identifier.
     pub id: i64,
+    /// Display name of the media file.
     pub name: String,
+    /// Absolute filesystem path to the media file.
     pub path: String,
+    /// File size in bytes.
     pub size: i64,
+    /// Last modification timestamp in milliseconds since UNIX epoch.
     pub modified_at: i64,
+    /// File extension (e.g., "mp4", "mp3", "jpg", "url").
     pub extension: String,
+    /// Folder path relative to the media type root directory.
     pub folder: String,
+    /// Duration in seconds (for audio/video files), if available.
     pub duration: Option<f64>,
+    /// Title for display (alias of `name`).
     pub title: String,
+    /// Artist/creator metadata, if available.
     pub artist: Option<String>,
+    /// Original remote URL (for URL-based media entries).
     pub original_url: Option<String>,
+    /// Local path to thumbnail image, if available.
     pub thumbnail_path: Option<String>,
+    /// Remote URL to thumbnail image, if available.
     pub remote_thumbnail_url: Option<String>,
+    /// Download status: `"downloaded"`, `"not_downloaded"`, or `"missing"`.
     pub download_status: String,
 }
 
+/// Search result hit from media search operations.
+///
+/// Includes the media type so the frontend can filter/group results. The
+/// `rank` field is currently always `0` (reserved for future relevance
+/// scoring). `download_status` is `Option` because the search query may not
+/// select it for all media types.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchHit {
+    /// Unique database identifier.
     pub id: i64,
+    /// Display name of the media file.
     pub name: String,
+    /// Absolute filesystem path to the media file.
     pub path: String,
+    /// Media type category (e.g., "video", "audio", "image", "files", "presentation", "themes").
     pub media_type: String,
+    /// Artist/creator metadata, if available.
     pub artist: Option<String>,
+    /// Duration in seconds (for audio/video files), if available.
     pub duration: Option<f64>,
+    /// Last modification timestamp in milliseconds since UNIX epoch.
     pub modified_at: i64,
+    /// Search ranking score (currently always `0`).
     pub rank: i64,
+    /// Title for display, if available.
     pub title: Option<String>,
+    /// Original remote URL (for URL-based media entries).
     pub original_url: Option<String>,
+    /// Local path to thumbnail image, if available.
     pub thumbnail_path: Option<String>,
+    /// Remote URL to thumbnail image, if available.
     pub remote_thumbnail_url: Option<String>,
+    /// Download status, if available.
     pub download_status: Option<String>,
 }
 
+/// Represents a theme file stored in the theme catalog.
+///
+/// Returned by [`media_list_themes`] and managed by [`media_insert_theme`]
+/// / [`media_delete_theme`]. Themes are presentation assets (CSS, fonts,
+/// backgrounds) that can be applied to slides/lyrics.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThemeFile {
+    /// Unique database identifier.
     pub id: i64,
+    /// Display name of the theme file.
     pub name: String,
+    /// Absolute filesystem path to the theme file.
     pub path: String,
+    /// File size in bytes.
     pub size: i64,
+    /// Last modification timestamp in milliseconds since UNIX epoch.
     pub modified_at: i64,
+    /// File extension.
     pub extension: String,
 }
 
+/// Media store managing SQLite connection for media catalog persistence.
+///
+/// Created once at app startup via [`initialize_media_store`] and registered
+/// with Tauri's state manager. All `media_*` commands access it through
+/// `State<MediaStore>`. The connection is wrapped in a `Mutex` to serialize
+/// access; Tauri commands for media naturally queue up so contention is low.
 pub struct MediaStore {
     conn: Mutex<Connection>,
 }
 
+/// Creates the media store, opens the SQLite database, runs bootstrap SQL,
+/// and ensures schema columns/indexes exist.
+///
+/// # Errors
+///
+/// Returns an error string if the database path cannot be resolved, the
+/// connection fails to open, or any bootstrap SQL statement fails.
+///
+/// # Panics
+///
+/// Panics if the mutex is poisoned (only possible if another thread
+/// panicked while holding the lock).
 pub fn initialize_media_store() -> Result<MediaStore, String> {
     let db_path = crate::paths::db_path()?;
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
@@ -428,6 +544,16 @@ fn search_media_rows(
     query_rows(conn, &sql, refs.as_slice())
 }
 
+/// Initializes the media store (no-op, ensures store is ready).
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_initialize')` resolves with `null` on success.
+///
+/// # Errors
+///
+/// Returns an error string if the database lock cannot be acquired (should
+/// not happen under normal operation).
 #[tauri::command]
 pub async fn media_initialize(store: State<'_, MediaStore>) -> Result<(), String> {
     let _conn = store.conn.lock().await;
@@ -471,6 +597,17 @@ pub async fn sync_media_type_internal(
     Ok(())
 }
 
+/// Lists all media files of a given type.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_list', { mediaType })` resolves with `MediaFileInfo[]`.
+/// For `mediaType === "files"`, includes both "files" and "presentation"
+/// types combined.
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails.
 #[tauri::command]
 pub async fn media_list(
     store: State<'_, MediaStore>,
@@ -497,21 +634,40 @@ pub async fn media_list(
     Ok(rows.iter().map(file_info_from_row).collect())
 }
 
+/// Represents a folder entry in the media pool browser.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaFolderEntry {
+    /// Folder display name (last path segment).
     pub name: String,
+    /// Folder path relative to media type root.
     pub folder: String,
+    /// Absolute filesystem path to the folder.
     pub absolute_path: String,
 }
 
+/// Combined listing of folders and files for the media pool UI.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaPoolListing {
+    /// Child folders of the current folder.
     pub folders: Vec<MediaFolderEntry>,
+    /// Media files in the current folder.
     pub files: Vec<MediaFileInfo>,
 }
 
+/// Lists folders and files for a media type, optionally scoped to a folder.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_list_folder', { mediaType, folder? })` resolves with
+/// `MediaPoolListing`. `folder` is a relative path; omit or empty string for
+/// root.
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails or the folder path is
+/// invalid.
 #[tauri::command]
 pub async fn media_list_folder(
     store: State<'_, MediaStore>,
@@ -578,6 +734,16 @@ pub async fn media_list_folder(
     Ok(MediaPoolListing { folders, files })
 }
 
+/// Searches media files by name within a single media type.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_search_files', { mediaType, query })` resolves with
+/// `MediaFileInfo[]`. Searches case-insensitive name matches.
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails.
 #[tauri::command]
 pub async fn media_search_files(
     store: State<'_, MediaStore>,
@@ -591,6 +757,17 @@ pub async fn media_search_files(
     Ok(rows.iter().map(file_info_from_row).collect())
 }
 
+/// Inserts or updates a media file record.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_insert', { file, mediaType, content? })` resolves with
+/// `null` on success. Uses `ON CONFLICT(path)` to upsert. If `content` is
+/// provided it overrides `file.content`.
+///
+/// # Errors
+///
+/// Returns an error string if the database insert fails.
 #[tauri::command]
 pub async fn media_insert(
     store: State<'_, MediaStore>,
@@ -606,6 +783,19 @@ pub async fn media_insert(
     insert_media_file(&conn, &file, &media_type)
 }
 
+/// Inserts a YouTube URL as a media entry, fetching metadata via oEmbed.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_insert_url', { url, refreshMetadata, duration? })` resolves
+/// with the created `MediaFileInfo`. If `refreshMetadata` is `false` and the
+/// URL already exists, returns the existing entry. `duration` can override
+/// the fetched duration.
+///
+/// # Errors
+///
+/// Returns an error string if the URL is not a valid YouTube URL, the oEmbed
+/// request fails, or the database insert fails.
 #[tauri::command]
 pub async fn media_insert_url(
     store: State<'_, MediaStore>,
@@ -659,6 +849,17 @@ pub async fn media_insert_url(
         .ok_or_else(|| "media file not found after insert".to_string())
 }
 
+/// Full-text search across media files.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_search', { query, fullContent?, mediaType?, limit? })`
+/// resolves with `SearchHit[]`. `fullContent` includes `content` column in
+/// search. `mediaType` filters to one type. `limit` defaults to 50.
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails.
 #[tauri::command]
 pub async fn media_search(
     store: State<'_, MediaStore>,
@@ -680,6 +881,17 @@ pub async fn media_search(
     Ok(rows.iter().map(search_hit_from_row).collect())
 }
 
+/// Full-text search across multiple media types, grouped by type.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_search_multi', { query, fullContent?, mediaTypes, limitPerGroup? })`
+/// resolves with `SearchHit[]`. Each media type gets up to `limitPerGroup`
+/// results (default 50). Empty query returns latest files per type.
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails.
 #[tauri::command]
 pub async fn media_search_multi(
     store: State<'_, MediaStore>,
@@ -707,11 +919,15 @@ pub async fn media_search_multi(
     Ok(hits)
 }
 
+/// Result of a single file upload operation.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UploadOutput {
+    /// Source path provided by the caller.
     pub path: String,
+    /// Created media file info, if successful.
     pub file: Option<MediaFileInfo>,
+    /// Error message, if failed.
     pub error: Option<String>,
 }
 
@@ -758,6 +974,20 @@ fn extension_allowed(media_type: &str, extension: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Uploads multiple files to a media type folder and indexes them.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_upload_files', { mediaType, folder?, filePaths })` resolves
+/// with `UploadOutput[]`. Validates extension against allowed list per media
+/// type. Extracts duration via ffprobe and slide text for presentations.
+/// Auto-renames on collision.
+///
+/// # Errors
+///
+/// Returns an error string if the destination directory cannot be created.
+/// Individual file failures are reported in the `error` field of each
+/// `UploadOutput`, not as a command error.
 #[tauri::command]
 pub async fn media_upload_files(
     store: State<'_, MediaStore>,
@@ -910,6 +1140,16 @@ pub async fn media_upload_files(
     Ok(outputs)
 }
 
+/// Lists media files of a type as search hits (lighter than MediaFileInfo).
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_list_by_type', { mediaType, limit? })` resolves with
+/// `SearchHit[]`. Default limit 50.
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails.
 #[tauri::command]
 pub async fn media_list_by_type(
     store: State<'_, MediaStore>,
@@ -923,6 +1163,15 @@ pub async fn media_list_by_type(
     Ok(rows.iter().map(search_hit_from_row).collect())
 }
 
+/// Retrieves a media file by database ID.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_get_by_id', { id })` resolves with `SearchHit | null`.
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails.
 #[tauri::command]
 pub async fn media_get_by_id(
     store: State<'_, MediaStore>,
@@ -933,6 +1182,15 @@ pub async fn media_get_by_id(
     Ok(rows.first().map(search_hit_from_row))
 }
 
+/// Retrieves a media file by filesystem path.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_get_by_path', { path })` resolves with `SearchHit | null`.
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails.
 #[tauri::command]
 pub async fn media_get_by_path(
     store: State<'_, MediaStore>,
@@ -943,6 +1201,16 @@ pub async fn media_get_by_path(
     Ok(rows.first().map(search_hit_from_row))
 }
 
+/// Retrieves full media file info by filesystem path.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_get_file_info_by_path', { path })` resolves with
+/// `MediaFileInfo | null`. Includes download_status and folder.
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails.
 #[tauri::command]
 pub async fn media_get_file_info_by_path(
     store: State<'_, MediaStore>,
@@ -953,6 +1221,17 @@ pub async fn media_get_file_info_by_path(
     Ok(rows.first().map(file_info_from_row))
 }
 
+/// Retrieves media file info by original URL (and optional canonical URL).
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_get_file_info_by_original_url', { originalUrl, canonicalUrl? })`
+/// resolves with `MediaFileInfo | null`. If `canonicalUrl` omitted, it is
+/// derived via [`canonicalize_youtube_url`].
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails.
 #[tauri::command]
 pub async fn media_get_file_info_by_original_url(
     store: State<'_, MediaStore>,
@@ -969,6 +1248,16 @@ pub async fn media_get_file_info_by_original_url(
     Ok(rows.first().map(file_info_from_row))
 }
 
+/// Deletes a media file record by path.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_delete', { path })` resolves with `null` on success.
+/// Does not delete the actual file from disk.
+///
+/// # Errors
+///
+/// Returns an error string if the database delete fails.
 #[tauri::command]
 pub async fn media_delete(store: State<'_, MediaStore>, path: String) -> Result<(), String> {
     let conn = store.conn.lock().await;
@@ -995,6 +1284,15 @@ fn media_input_from_scanned(scanned: &crate::filescan::ScannedFile) -> MediaFile
     }
 }
 
+/// Resyncs a media type by scanning the filesystem and syncing the database.
+///
+/// Scans the configured media directory for `media_type`, converts found files
+/// to `MediaFileInput`, and calls [`sync_media_type_internal`] to upsert new
+/// files and remove deleted ones. Called at startup for each media type.
+///
+/// # Errors
+///
+/// Returns an error string if the filesystem scan fails or the sync fails.
 pub async fn resync_media_type(
     store: &MediaStore,
     media_type: &str,
@@ -1007,6 +1305,16 @@ pub async fn resync_media_type(
     sync_media_type_internal(store, media_type, files).await
 }
 
+/// Syncs a media type with a provided file list (used by frontend-driven sync).
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_sync_type', { mediaType, files })` resolves with `null`.
+/// Delegates to [`sync_media_type_internal`].
+///
+/// # Errors
+///
+/// Returns an error string if the sync fails.
 #[tauri::command]
 pub async fn media_sync_type(
     store: State<'_, MediaStore>,
@@ -1016,6 +1324,18 @@ pub async fn media_sync_type(
     sync_media_type_internal(&store, &media_type, files).await
 }
 
+/// Deletes a folder and all its media file records.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_delete_folder', { mediaType, folder })` resolves with
+/// `null`. Removes the directory from disk (if it exists) and deletes all
+/// `media_files` rows where `folder` matches exactly or is a subfolder.
+///
+/// # Errors
+///
+/// Returns an error string if the folder path is invalid, the directory cannot
+/// be removed, or the database delete fails.
 #[tauri::command]
 pub async fn media_delete_folder(
     store: State<'_, MediaStore>,
@@ -1037,6 +1357,17 @@ pub async fn media_delete_folder(
     Ok(())
 }
 
+/// Updates the download status and optionally other fields of a media entry.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_update_download_status', { originalUrl, status, newPath?, newSize?, newMediaType?, newExtension? })`
+/// resolves with `null`. Matches rows by `original_url` or `path` (using the
+/// canonical URL). Always updates `modified_at` to now.
+///
+/// # Errors
+///
+/// Returns an error string if the database update fails.
 #[tauri::command]
 pub async fn media_update_download_status(
     store: State<'_, MediaStore>,
@@ -1088,6 +1419,16 @@ pub async fn media_update_download_status(
     Ok(())
 }
 
+/// Syncs the theme catalog with a provided file list.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_sync_themes', { files })` resolves with `null`. Upserts
+/// new theme files and removes entries for files no longer present.
+///
+/// # Errors
+///
+/// Returns an error string if the database operations fail.
 #[tauri::command]
 pub async fn media_sync_themes(
     store: State<'_, MediaStore>,
@@ -1131,6 +1472,15 @@ pub async fn media_sync_themes(
     Ok(())
 }
 
+/// Lists all theme files in the catalog.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_list_themes')` resolves with `ThemeFile[]` sorted by name.
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails.
 #[tauri::command]
 pub async fn media_list_themes(
     store: State<'_, MediaStore>,
@@ -1158,6 +1508,17 @@ pub async fn media_list_themes(
     Ok(rows)
 }
 
+/// Inserts a theme file into the catalog.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_insert_theme', { file, contentHash? })` resolves with
+/// `null`. Uses `INSERT OR IGNORE` so duplicate paths are silently skipped.
+/// `content_hash` can be used for deduplication.
+///
+/// # Errors
+///
+/// Returns an error string if the database insert fails.
 #[tauri::command]
 pub async fn media_insert_theme(
     store: State<'_, MediaStore>,
@@ -1181,6 +1542,16 @@ pub async fn media_insert_theme(
     Ok(())
 }
 
+/// Deletes a theme file from the catalog.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_delete_theme', { path })` resolves with `null`. Does not
+/// delete the actual file from disk.
+///
+/// # Errors
+///
+/// Returns an error string if the database delete fails.
 #[tauri::command]
 pub async fn media_delete_theme(
     store: State<'_, MediaStore>,
