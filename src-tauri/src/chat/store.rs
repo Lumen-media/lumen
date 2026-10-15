@@ -1,3 +1,24 @@
+//! Chat persistence, validation, and WebSocket broadcast helpers.
+//!
+//! This module backs the live chat system with:
+//!
+//! * **Domain types** serialized to the frontend and over WebSocket —
+//!   [`ChatMessage`], [`ChatFile`], [`Reaction`], [`ReplyRef`],
+//!   [`ChatConfig`].
+//! * **Persistence** — [`ChatStore`] keeps a bounded in-memory history and,
+//!   when enabled, mirrors it to SQLite (tables created by
+//!   [`ensure_tables`], settings read/written by [`load_config`] /
+//!   [`save_config`]).
+//! * **Fan-out** — the `broadcast_*` functions push JSON events to every
+//!   WebSocket session that holds the `chat` permission, while
+//!   [`send_chat_history`] and [`send_chat_error`] target a single session.
+//! * **Validation** — [`validate_message_text`] and [`ChatStore::save_file`]
+//!   enforce size, type, and content limits.
+//!
+//! All fallible functions return `Result<_, String>` with short, stable
+//! error codes (e.g. `"empty_message"`, `"file_too_large"`) that the
+//! frontend maps to user-facing messages.
+
 use std::collections::VecDeque;
 use std::path::PathBuf;
 
@@ -10,52 +31,97 @@ use uuid::Uuid;
 
 use crate::devices::{DeviceState, is_permission_allowed};
 
+/// A file attachment referenced by a chat message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatFile {
+    /// Original file name chosen by the sender, used for display and for
+    /// extension checks.
     pub file_name: String,
+    /// Absolute path where the file was stored on disk.
     pub file_path: String,
+    /// Size of the file in bytes.
     pub file_size: u64,
 }
 
+/// A single emoji reaction added by one sender to a message.
+///
+/// Reactions are unique per `(message_id, emoji, sender_id)` in the
+/// database, so toggling simply adds or removes this record.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reaction {
+    /// The emoji used for the reaction.
     pub emoji: String,
+    /// Id of the sender that reacted (e.g. `"operator"` or a device id).
     pub sender_id: String,
+    /// Unix timestamp (seconds) of when the reaction was added.
     pub ts: u64,
 }
 
+/// Snapshot of the message being replied to, embedded in [`ChatMessage::reply_to`].
+///
+/// Duplicating the sender name and text lets clients render the quote
+/// without an extra lookup, and lets replies outlive deletion of the
+/// original message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplyRef {
+    /// Id of the message being replied to.
     pub id: u64,
+    /// Display name of the replied-to message's sender.
     pub sender_name: String,
+    /// Text of the replied-to message.
     pub text: String,
+    /// Attachment of the replied-to message, if it had one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<ChatFile>,
 }
 
+/// A chat message as stored in memory and exchanged with clients.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
+    /// Stable message id, assigned by [`ChatStore::push`]. Ids are
+    /// sequential and monotonic while the app runs.
     pub id: u64,
+    /// Id of the sender (`"operator"` for the desktop, a device id for
+    /// remote clients).
     pub sender_id: String,
+    /// Role of the sender, e.g. `"operator"` or `"guest"`.
     pub sender_type: String,
+    /// Human-readable sender name shown in the UI.
     pub sender_name: String,
+    /// Message body, already trimmed and validated by
+    /// [`validate_message_text`].
     pub text: String,
+    /// Unix timestamp (seconds) of when the message was sent.
     pub ts: u64,
+    /// Attachment carried by this message, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<ChatFile>,
+    /// Reactions currently on this message. Emptied on insert; reactions are
+    /// managed separately via [`ChatStore::toggle_reaction`].
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub reactions: Vec<Reaction>,
+    /// Resolved quote of the replied-to message, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reply_to: Option<ReplyRef>,
+    /// Raw id of the replied-to message.
+    ///
+    /// Serialized output is skipped: clients receive the resolved
+    /// [`ChatMessage::reply_to`] snapshot instead. Persisted to SQLite so
+    /// replies can be rehydrated by [`ChatStore::load_from_disk`].
     #[serde(skip)]
     pub reply_to_id: Option<u64>,
 }
 
+/// User-configurable chat settings, persisted in the `chat_settings` table.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChatConfig {
+    /// Whether the chat is usable at all; commands reject input while `false`.
     pub enabled: bool,
+    /// Whether history is mirrored to SQLite and restored on startup.
     pub persist_enabled: bool,
+    /// Maximum number of messages retained in memory (and on disk).
     pub history_limit: u32,
+    /// Notification style requested by the operator, e.g. `"toast"`.
     #[serde(default = "default_notification_mode")]
     pub notification_mode: String,
 }
@@ -75,7 +141,13 @@ impl Default for ChatConfig {
     }
 }
 
+/// Maximum accepted length in bytes for a single chat message.
+///
+/// Enforced by [`validate_message_text`].
 pub const MAX_MESSAGE_LENGTH: usize = 4000;
+/// Maximum accepted size in bytes for a chat file attachment (25 MB).
+///
+/// Enforced by [`ChatStore::save_file`].
 pub const MAX_FILE_SIZE: u64 = 25 * 1024 * 1024; // 25 MB
 
 const BLOCKED_EXTENSIONS: &[&str] = &[
@@ -83,6 +155,17 @@ const BLOCKED_EXTENSIONS: &[&str] = &[
     "js", "jse", "wsf", "wsh", "hta", "cpl", "lnk", "inf", "reg", "rgs",
 ];
 
+/// Creates the chat tables (`chat_settings`, `chat_messages`,
+/// `chat_reactions`) if they do not exist yet.
+///
+/// Also performs a lightweight migration: adds the `reply_to_id` column to
+/// `chat_messages` when upgrading from an older database. Safe to call on
+/// every startup.
+///
+/// # Errors
+///
+/// Returns a SQLite error string when table creation or the column check
+/// fails.
 pub fn ensure_tables(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS chat_settings (
@@ -128,6 +211,16 @@ pub fn ensure_tables(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// Reads the chat settings from the `chat_settings` table.
+///
+/// Starts from [`ChatConfig::default`] and overlays any recognized keys, so
+/// a fresh or partially populated database still yields a valid config.
+/// Unknown keys are ignored and an unparseable `history_limit` falls back to
+/// the default of `200`.
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the settings cannot be queried.
 pub fn load_config(conn: &Connection) -> Result<ChatConfig, String> {
     let mut stmt = conn
         .prepare("SELECT key, value FROM chat_settings")
@@ -158,6 +251,15 @@ pub fn load_config(conn: &Connection) -> Result<ChatConfig, String> {
     Ok(config)
 }
 
+/// Writes the chat settings to the `chat_settings` table.
+///
+/// Stores `enabled`, `persist_enabled`, `notification_mode`, and
+/// `history_limit` as key/value rows using `INSERT OR REPLACE`, so existing
+/// rows are updated in place.
+///
+/// # Errors
+///
+/// Returns a SQLite error string when any row cannot be written.
 pub fn save_config(conn: &Connection, config: &ChatConfig) -> Result<(), String> {
     let entries = [
         ("enabled", if config.enabled { "1" } else { "0" }),
@@ -185,6 +287,19 @@ pub fn save_config(conn: &Connection, config: &ChatConfig) -> Result<(), String>
     Ok(())
 }
 
+/// Bounded in-memory chat history backed by an optional SQLite mirror.
+///
+/// The store owns:
+///
+/// * a [`VecDeque`] of the most recent [`ChatMessage`]s, capped at
+///   `history_limit` (oldest messages are trimmed first);
+/// * the next message id counter, kept monotonic across restarts;
+/// * an open SQLite connection used for persistence and reactions;
+/// * the directory where attachments are written by
+///   [`ChatStore::save_file`].
+///
+/// Created by [`crate::chat::initialize_chat_state`] and shared through
+/// [`crate::chat::ChatState`].
 pub struct ChatStore {
     messages: VecDeque<ChatMessage>,
     next_id: u64,
@@ -195,6 +310,17 @@ pub struct ChatStore {
 }
 
 impl ChatStore {
+    /// Creates an empty store bound to the given database and files
+    /// directory.
+    ///
+    /// The database connection is opened eagerly; tables are expected to
+    /// already exist (see [`ensure_tables`]). Call
+    /// [`ChatStore::load_from_disk`] afterwards to restore persisted
+    /// history.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the SQLite database at `db_path` cannot be opened.
     pub fn new(
         history_limit: u32,
         persist_enabled: bool,
@@ -212,6 +338,13 @@ impl ChatStore {
         }
     }
 
+    /// Enables or disables disk persistence.
+    ///
+    /// When turning persistence *on*, the in-memory id counter is rebased to
+    /// continue after the highest id already present in the database, and
+    /// SQLite's `AUTOINCREMENT` sequence is realigned so future ids never
+    /// collide with restored history. Turning it *off* leaves existing rows
+    /// untouched.
     pub fn set_persist_enabled(&mut self, enabled: bool) {
         if enabled && !self.persist_enabled {
             let max_db_id: u64 = self.conn
@@ -241,6 +374,11 @@ impl ChatStore {
         self.persist_enabled = enabled;
     }
 
+    /// Changes the maximum number of retained messages.
+    ///
+    /// If the new limit is smaller than the current history, the oldest
+    /// messages are trimmed immediately (deleting their files and database
+    /// rows when persistence is enabled).
     pub fn set_history_limit(&mut self, limit: u32) {
         self.history_limit = limit as usize;
         while self.messages.len() > self.history_limit {
@@ -273,6 +411,20 @@ impl ChatStore {
         );
     }
 
+    /// Restores history from SQLite, or clears the tables when persistence
+    /// is disabled.
+    ///
+    /// With persistence off, all stored rows are deleted and the in-memory
+    /// history is left empty. With persistence on, the most recent
+    /// `history_limit` messages are loaded oldest-first, their reactions are
+    /// rehydrated in a single batch query, and reply targets are resolved
+    /// into [`ReplyRef`] snapshots. The id counter is advanced past the
+    /// highest restored id.
+    ///
+    /// # Errors
+    ///
+    /// Returns a SQLite error string when reading messages or reactions
+    /// fails.
     pub fn load_from_disk(&mut self) -> Result<(), String> {
         if !self.persist_enabled {
             let conn = &self.conn;
@@ -371,6 +523,15 @@ impl ChatStore {
         Ok(())
     }
 
+    /// Removes all messages, attachments, and reactions.
+    ///
+    /// Empties the in-memory ring, deletes every attachment file referenced
+    /// by a stored message, and truncates `chat_messages` and
+    /// `chat_reactions`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a SQLite error string when the delete statements fail.
     pub fn clear_history(&mut self) -> Result<(), String> {
         self.messages.clear();
 
@@ -394,6 +555,17 @@ impl ChatStore {
         Ok(())
     }
 
+    /// Deletes one message by id.
+    ///
+    /// Removes the message and its attachment from memory, clears its
+    /// reactions, detaches any replies that referenced it (both in memory
+    /// and in SQLite), and deletes its database row. Succeeds silently when
+    /// `message_id` is not present.
+    ///
+    /// # Errors
+    ///
+    /// Returns a SQLite error string when the delete or update statements
+    /// fail.
     pub fn delete_message(&mut self, message_id: u64) -> Result<(), String> {
         if let Some(msg) = self.messages.iter().find(|m| m.id == message_id) {
             if let Some(ref file) = msg.file {
@@ -430,6 +602,10 @@ impl ChatStore {
         Ok(())
     }
 
+    /// Returns a clone of the retained history, oldest message first.
+    ///
+    /// When `limit` is `Some(n)`, at most the last `n` messages are
+    /// returned; `None` returns the entire retained history.
     pub fn get_messages(&self, limit: Option<u32>) -> Vec<ChatMessage> {
         let n = limit
             .map(|l| l as usize)
@@ -437,10 +613,21 @@ impl ChatStore {
         self.messages.iter().rev().take(n).cloned().rev().collect()
     }
 
+    /// Finds a retained message by id.
+    ///
+    /// Returns `None` when the message was trimmed, deleted, or never
+    /// existed.
     pub fn find_message(&self, id: u64) -> Option<&ChatMessage> {
         self.messages.iter().find(|m| m.id == id)
     }
 
+    /// Appends a message to the history and returns the committed copy.
+    ///
+    /// Any reactions on the incoming message are discarded, the id and
+    /// timestamp are (re)assigned, and the oldest message is trimmed when
+    /// the history is full. When persistence is enabled the message is also
+    /// written to SQLite; write failures are logged but do not fail the
+    /// call.
     pub fn push(&mut self, mut msg: ChatMessage) -> ChatMessage {
         msg.reactions = Vec::new();
 
@@ -484,6 +671,19 @@ impl ChatStore {
         Ok(())
     }
 
+    /// Stores an attachment on disk under the chat files directory.
+    ///
+    /// The stored file is renamed to `<uuid>.<ext>` to avoid collisions and
+    /// path traversal; the original name is preserved in the returned
+    /// [`ChatFile`]. The extension is lower-cased and checked against a
+    /// blocklist of executable types.
+    ///
+    /// # Errors
+    ///
+    /// * `"file_too_large"` — `data` exceeds [`MAX_FILE_SIZE`].
+    /// * `"blocked_file_type"` — the extension is considered unsafe.
+    /// * `"file_save_error"` — the directory could not be created or the
+    ///   file could not be written.
     pub fn save_file(&self, file_name: &str, data: &[u8]) -> Result<ChatFile, String> {
         if data.len() as u64 > MAX_FILE_SIZE {
             return Err("file_too_large".to_string());
@@ -518,6 +718,18 @@ impl ChatStore {
         })
     }
 
+    /// Adds or removes a reaction for `(message_id, emoji, sender_id)`.
+    ///
+    /// If the reaction already exists it is removed and `Ok(None)` is
+    /// returned; otherwise it is inserted with timestamp `ts` and returned
+    /// as `Ok(Some(reaction))`. The change is mirrored in both SQLite and
+    /// the in-memory message.
+    ///
+    /// # Errors
+    ///
+    /// Returns `"message_not_found"` when `message_id` is not in the
+    /// retained history, or a SQLite error string when the insert or delete
+    /// fails.
     pub fn toggle_reaction(
         &mut self,
         message_id: u64,
@@ -614,6 +826,17 @@ fn load_reactions_batch(conn: &Connection, message_ids: &[u64]) -> Result<std::c
     Ok(map)
 }
 
+/// Broadcasts a new message to every WebSocket session allowed to see chat.
+///
+/// The payload includes the resolved `file_url`
+/// (`http://127.0.0.1:{file_server_port}/files/{name}`) so clients can load
+/// attachments directly. Sessions without the `chat` permission, or without
+/// a sender channel, are skipped.
+///
+/// # Errors
+///
+/// Returns an error string when the payload cannot be serialized or the
+/// session registry lock is poisoned.
 pub fn broadcast_chat_message(
     state: &DeviceState,
     message: &ChatMessage,
@@ -664,6 +887,13 @@ pub fn broadcast_chat_message(
     Ok(())
 }
 
+/// Broadcasts the current `enabled` state to every WebSocket session
+/// allowed to see chat.
+///
+/// # Errors
+///
+/// Returns an error string when the payload cannot be serialized or the
+/// session registry lock is poisoned.
 pub fn broadcast_chat_config(
     state: &DeviceState,
     config: &ChatConfig,
@@ -688,6 +918,16 @@ pub fn broadcast_chat_config(
     Ok(())
 }
 
+/// Broadcasts a reaction toggle to every WebSocket session allowed to see
+/// chat.
+///
+/// `reaction` is `Some` when the reaction was added and `None` when it was
+/// removed.
+///
+/// # Errors
+///
+/// Returns an error string when the payload cannot be serialized or the
+/// session registry lock is poisoned.
 pub fn broadcast_chat_reaction(
     state: &DeviceState,
     message_id: u64,
@@ -718,6 +958,13 @@ pub fn broadcast_chat_reaction(
     Ok(())
 }
 
+/// Broadcasts a typing indicator to every WebSocket session allowed to see
+/// chat.
+///
+/// # Errors
+///
+/// Returns an error string when the payload cannot be serialized or the
+/// session registry lock is poisoned.
 pub fn broadcast_chat_typing(
     state: &DeviceState,
     sender_id: &str,
@@ -746,6 +993,13 @@ pub fn broadcast_chat_typing(
     Ok(())
 }
 
+/// Broadcasts a message deletion to every WebSocket session allowed to see
+/// chat.
+///
+/// # Errors
+///
+/// Returns an error string when the payload cannot be serialized or the
+/// session registry lock is poisoned.
 pub fn broadcast_chat_delete(state: &DeviceState, message_id: u64) -> Result<(), String> {
     let payload = serde_json::to_string(&json!({
         "event": "chat_deleted",
@@ -767,6 +1021,13 @@ pub fn broadcast_chat_delete(state: &DeviceState, message_id: u64) -> Result<(),
     Ok(())
 }
 
+/// Sends the current chat history to a single WebSocket session.
+///
+/// Used when a remote device joins and is granted the `chat` permission.
+///
+/// # Errors
+///
+/// Returns an error string when the history cannot be serialized.
 pub fn send_chat_history(
     sender: &UnboundedSender<Message>,
     messages: Vec<ChatMessage>,
@@ -782,6 +1043,12 @@ pub fn send_chat_history(
     Ok(())
 }
 
+/// Sends a chat error reason (e.g. a rejected send) to a single WebSocket
+/// session.
+///
+/// # Errors
+///
+/// Returns an error string when the payload cannot be serialized.
 pub fn send_chat_error(
     sender: &UnboundedSender<Message>,
     reason: &str,
@@ -797,6 +1064,15 @@ pub fn send_chat_error(
     Ok(())
 }
 
+/// Trims and validates a chat message body.
+///
+/// Returns the trimmed text on success.
+///
+/// # Errors
+///
+/// * `"empty_message"` — the text is empty or whitespace only.
+/// * `"message_too_long"` — the trimmed text exceeds
+///   [`MAX_MESSAGE_LENGTH`].
 pub fn validate_message_text(text: &str) -> Result<String, String> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -808,6 +1084,13 @@ pub fn validate_message_text(text: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
+/// Decodes a standard (padded) base64 string into raw bytes.
+///
+/// Used when remote clients upload attachments inline.
+///
+/// # Errors
+///
+/// Returns `"invalid_file"` when `data` is not valid base64.
 pub fn decode_base64(data: &str) -> Result<Vec<u8>, String> {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD
