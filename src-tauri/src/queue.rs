@@ -1,3 +1,20 @@
+//! Media playback queue for Lumen.
+//!
+//! The queue is a persisted, ordered list of playable entries stored in the
+//! `queue` table of `lumen.db`. Entries are either local files/downloads
+//! (identified by `file_path`) or remote URLs and triggers, which use
+//! synthetic paths:
+//!
+//! * `url` entries keep the canonical video URL in `file_path` and track
+//!   download state (`not_downloaded`, `downloaded`, `missing`);
+//! * `trigger://{entry_id}` entries represent automation triggers rather
+//!   than playable media and are managed by dedicated commands.
+//!
+//! Ordering is controlled by the integer `position` column; the Tauri
+//! commands in this module add, remove, reorder, shuffle, mark as played,
+//! and update metadata. [`QueueStore`] wraps the shared SQLite connection in
+//! a `tokio::sync::Mutex`.
+
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -20,90 +37,178 @@ const QUEUE_TABLE: &str = "CREATE TABLE IF NOT EXISTS queue (
         artist           TEXT
       )";
 
+/// Raw database representation of a queue entry.
+///
+/// Mirrors the `queue` table columns one-to-one (plus the migration-added
+/// columns) and is serialized in camelCase for the frontend. Convert to the
+/// friendlier [`QueueItem`] with the crate-internal `into_item`.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueRow {
+    /// Primary key of the row.
     pub id: i64,
+    /// Sort key; lower positions play first.
     pub position: i64,
+    /// File system path, canonical URL, or `trigger://{entry_id}`.
     pub file_path: String,
+    /// Name derived from the title when set, otherwise the file name.
     pub file_name: String,
+    /// File size in bytes (0 for URLs and triggers).
     pub file_size: i64,
+    /// File modification time in milliseconds (0 for URLs and triggers).
     pub file_modified_at: i64,
+    /// Lower-case file extension (`""` for triggers, `"url"` for URL entries).
     pub file_extension: String,
+    /// `1` when the entry has been played, `0` otherwise.
     pub played: i64,
+    /// Media duration in seconds, when known.
     pub duration: Option<f64>,
+    /// Track title, when set.
     pub title: Option<String>,
+    /// Track artist, when set.
     pub artist: Option<String>,
+    /// Original source URL for downloaded media or URL entries.
     pub original_url: Option<String>,
+    /// Local path of the cached thumbnail.
     pub thumbnail_path: Option<String>,
+    /// Remote URL of the thumbnail, when not cached locally.
     pub remote_thumbnail_url: Option<String>,
+    /// Download state: `downloaded`, `not_downloaded`, or `missing`.
     pub download_status: Option<String>,
 }
 
+/// Queue entry shaped for the frontend UI.
+///
+/// Produced from [`QueueRow`] with normalized defaults (a non-empty title,
+/// a resolved `download_status`, and a boolean `played`).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueItem {
+    /// Primary key of the row.
     pub id: i64,
+    /// Display name (title when available, otherwise the file name).
     pub name: String,
+    /// File system path, canonical URL, or trigger path.
     pub path: String,
+    /// File size in bytes.
     pub size: i64,
+    /// File modification time in milliseconds.
     pub modified_at: i64,
+    /// Lower-case file extension.
     pub extension: String,
+    /// Whether the entry has been played.
     pub played: bool,
+    /// Media duration in seconds, when known.
     pub duration: Option<f64>,
+    /// Track title; always populated (falls back to the file name).
     pub title: String,
+    /// Track artist, when known.
     pub artist: Option<String>,
+    /// Original source URL, when applicable.
     pub original_url: Option<String>,
+    /// Local path of the cached thumbnail.
     pub thumbnail_path: Option<String>,
+    /// Remote URL of the thumbnail.
     pub remote_thumbnail_url: Option<String>,
+    /// Normalized download state: `downloaded`, `not_downloaded`, or `missing`.
     pub download_status: String,
 }
 
+/// Input payload for adding an entry to the queue.
+///
+/// Deserialized in camelCase from the frontend and passed to
+/// `queue::queue_add_to_queue` and `queue::queue_play_next`.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueFileInput {
+    /// File name or source title.
     pub name: String,
+    /// File system path or canonical URL.
     pub path: String,
+    /// File size in bytes.
     pub size: i64,
+    /// File modification time in milliseconds.
     pub modified_at: i64,
+    /// Lower-case file extension.
     pub extension: String,
+    /// Media duration in seconds, when known.
     pub duration: Option<f64>,
+    /// Track title override.
     pub title: Option<String>,
+    /// Track artist.
     pub artist: Option<String>,
+    /// Original source URL.
     pub original_url: Option<String>,
+    /// Local path of a cached thumbnail.
     pub thumbnail_path: Option<String>,
+    /// Remote URL of a thumbnail.
     pub remote_thumbnail_url: Option<String>,
+    /// Explicit download state; defaults based on the extension when omitted.
     pub download_status: Option<String>,
 }
 
+/// Partial metadata update for an existing queue entry.
+///
+/// Only `Some` fields are written; omitted fields are left unchanged. Passed
+/// to `queue::queue_update_metadata`.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueMetadataUpdate {
+    /// New duration in seconds.
     pub duration: Option<f64>,
+    /// New track title.
     pub title: Option<String>,
+    /// New track artist.
     pub artist: Option<String>,
+    /// New local thumbnail path.
     pub thumbnail_path: Option<String>,
+    /// New remote thumbnail URL.
     pub remote_thumbnail_url: Option<String>,
 }
 
+/// Position update addressed by queue row id.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdPositionUpdate {
+    /// Id of the row to move.
     pub id: i64,
+    /// New sort position.
     pub position: i64,
 }
 
+/// Position update addressed by file path.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PathPositionUpdate {
+    /// File path (or canonical URL) identifying the row to move.
     pub path: String,
+    /// New sort position.
     pub position: i64,
 }
 
+/// Tauri-managed queue store wrapping the shared SQLite connection.
+///
+/// Registered with `.manage(...)` at startup (see [`initialize_queue_store`])
+/// and injected into every `queue_*` command as `State<'_, QueueStore>`.
+/// Commands lock [`QueueStore::conn`] for the duration of their query.
 pub struct QueueStore {
+    /// Connection to `lumen.db`, serialized behind an async mutex so
+    /// concurrent commands cannot interleave transactions.
     conn: Mutex<Connection>,
 }
 
+/// Opens `lumen.db`, creates the `queue` table, applies column migrations,
+/// and returns the managed [`QueueStore`].
+///
+/// Called once during app setup. Migration adds the `original_url`,
+/// `thumbnail_path`, `remote_thumbnail_url`, and `download_status` columns
+/// when upgrading from older schema versions, then ensures the
+/// `original_url` index exists.
+///
+/// # Errors
+///
+/// Returns an error string when the base directory cannot be resolved or the
+/// database cannot be opened, migrated, or indexed.
 pub fn initialize_queue_store() -> Result<QueueStore, String> {
     let db_path = remote::app_base_dir()?.join("lumen.db");
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
@@ -292,18 +397,43 @@ fn shuffle<T>(slice: &mut [T]) {
     }
 }
 
+/// Tauri command: returns the full queue ordered by position.
+///
+/// Entries are converted to [`QueueItem`] with normalized defaults.
+///
+/// # Examples
+///
+/// ```js
+/// const items = await invoke("queue_load");
+/// ```
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the queue cannot be read.
 #[tauri::command]
 pub async fn queue_load(store: State<'_, QueueStore>) -> Result<Vec<QueueItem>, String> {
     let conn = store.conn.lock().await;
     load_rows(&conn).map(|rows| rows.into_iter().map(QueueRow::into_item).collect())
 }
 
+/// Tauri command: returns the full queue as raw [`QueueRow`] records.
+///
+/// Unlike [`queue_load`], no defaulting is applied.
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the queue cannot be read.
 #[tauri::command]
 pub async fn queue_load_rows(store: State<'_, QueueStore>) -> Result<Vec<QueueRow>, String> {
     let conn = store.conn.lock().await;
     load_rows(&conn)
 }
 
+/// Tauri command: returns only trigger entries (`file_path LIKE 'trigger://%'`).
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the query fails.
 #[tauri::command]
 pub async fn queue_load_trigger_entries(
     store: State<'_, QueueStore>,
@@ -312,6 +442,29 @@ pub async fn queue_load_trigger_entries(
     load_rows_where(&conn, "SELECT * FROM queue WHERE file_path LIKE 'trigger://%' ORDER BY position ASC")
 }
 
+/// Tauri command: adds a trigger entry to the queue, or returns the existing
+/// one.
+///
+/// Keyed by `entry_id` (`trigger://{entry_id}`); if a matching row already
+/// exists its id is returned unchanged, otherwise the entry is appended at
+/// the end with `config_json` stored in `original_url` and `tag` as the
+/// artist.
+///
+/// # Examples
+///
+/// ```js
+/// const id = await invoke("queue_add_trigger_entry", {
+///   entryId: "abc",
+///   triggerId: "start-confetti",
+///   configJson: "{}",
+///   title: "Confetti",
+///   tag: "visual",
+/// });
+/// ```
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the lookup or insert fails.
 #[tauri::command]
 pub async fn queue_add_trigger_entry(
     store: State<'_, QueueStore>,
@@ -345,6 +498,13 @@ pub async fn queue_add_trigger_entry(
     Ok(conn.last_insert_rowid())
 }
 
+/// Tauri command: removes a trigger entry.
+///
+/// Deletes the row whose path is `trigger://{entry_id}`.
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the delete fails.
 #[tauri::command]
 pub async fn queue_remove_trigger_entry(
     store: State<'_, QueueStore>,
@@ -359,6 +519,11 @@ pub async fn queue_remove_trigger_entry(
     Ok(())
 }
 
+/// Tauri command: flips the played flag of a trigger entry.
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the update fails.
 #[tauri::command]
 pub async fn queue_toggle_trigger_played(
     store: State<'_, QueueStore>,
@@ -373,6 +538,21 @@ pub async fn queue_toggle_trigger_played(
     Ok(())
 }
 
+/// Tauri command: checks whether a file or URL is already queued.
+///
+/// The input is canonicalized as a YouTube URL first, then matched against
+/// either `file_path` or `original_url`, so equivalent URL forms are treated
+/// as duplicates.
+///
+/// # Examples
+///
+/// ```js
+/// const alreadyQueued = await invoke("queue_exists", { filePath: "https://youtu.be/abc" });
+/// ```
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the count query fails.
 #[tauri::command]
 pub async fn queue_exists(
     store: State<'_, QueueStore>,
@@ -390,6 +570,21 @@ pub async fn queue_exists(
     Ok(count > 0)
 }
 
+/// Tauri command: appends a file to the end of the queue.
+///
+/// Returns the new row id.
+///
+/// # Examples
+///
+/// ```js
+/// const id = await invoke("queue_add_to_queue", {
+///   file: { name: "song.mp3", path: "C:\\media\\song.mp3", size: 1024, modifiedAt: 0, extension: "mp3" },
+/// });
+/// ```
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the insert fails.
 #[tauri::command]
 pub async fn queue_add_to_queue(
     store: State<'_, QueueStore>,
@@ -400,6 +595,13 @@ pub async fn queue_add_to_queue(
     insert_at_position(&conn, &file, position)
 }
 
+/// Tauri command: inserts a file at the front of the queue ("play next").
+///
+/// Assigns a position below the current minimum and returns the new row id.
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the insert fails.
 #[tauri::command]
 pub async fn queue_play_next(
     store: State<'_, QueueStore>,
@@ -410,6 +612,22 @@ pub async fn queue_play_next(
     insert_at_position(&conn, &file, position)
 }
 
+/// Tauri command: resolves a URL's metadata and appends it to the queue.
+///
+/// Resolves the URL with the media resolver (title, artist, thumbnails,
+/// canonical form), builds a `url`-extension entry marked `not_downloaded`,
+/// and appends it. Returns the new row id.
+///
+/// # Examples
+///
+/// ```js
+/// const id = await invoke("queue_add_url_to_queue", { url: "https://youtu.be/abc" });
+/// ```
+///
+/// # Errors
+///
+/// Returns an error string when the URL cannot be resolved, or a SQLite
+/// error string when the insert fails.
 #[tauri::command]
 pub async fn queue_add_url_to_queue(
     store: State<'_, QueueStore>,
@@ -436,6 +654,17 @@ pub async fn queue_add_url_to_queue(
     insert_at_position(&conn, &file, position)
 }
 
+/// Tauri command: removes a queue entry by id.
+///
+/// # Examples
+///
+/// ```js
+/// await invoke("queue_remove", { id: 7 });
+/// ```
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the delete fails.
 #[tauri::command]
 pub async fn queue_remove(store: State<'_, QueueStore>, id: i64) -> Result<(), String> {
     let conn = store.conn.lock().await;
@@ -444,6 +673,11 @@ pub async fn queue_remove(store: State<'_, QueueStore>, id: i64) -> Result<(), S
     Ok(())
 }
 
+/// Tauri command: marks a queue entry as played (`played = 1`).
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the update fails.
 #[tauri::command]
 pub async fn queue_mark_played(store: State<'_, QueueStore>, id: i64) -> Result<(), String> {
     let conn = store.conn.lock().await;
@@ -452,6 +686,11 @@ pub async fn queue_mark_played(store: State<'_, QueueStore>, id: i64) -> Result<
     Ok(())
 }
 
+/// Tauri command: flips the played flag of a queue entry.
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the update fails.
 #[tauri::command]
 pub async fn queue_toggle_played(store: State<'_, QueueStore>, id: i64) -> Result<(), String> {
     let conn = store.conn.lock().await;
@@ -463,6 +702,22 @@ pub async fn queue_toggle_played(store: State<'_, QueueStore>, id: i64) -> Resul
     Ok(())
 }
 
+/// Tauri command: pops the next unplayed entry and marks it played.
+///
+/// Selects the lowest-position entry with `played = 0`, optionally skipping
+/// the entry whose path matches `exclude_path` (canonicalized), then sets it
+/// to played and returns it. Returns `None` when no unplayed entry remains.
+///
+/// # Examples
+///
+/// ```js
+/// const next = await invoke("queue_shift", { excludePath: null });
+/// if (next) play(next.path);
+/// ```
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the select or update fails.
 #[tauri::command]
 pub async fn queue_shift(
     store: State<'_, QueueStore>,
@@ -498,6 +753,11 @@ pub async fn queue_shift(
     }
 }
 
+/// Tauri command: removes every entry from the queue.
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the delete fails.
 #[tauri::command]
 pub async fn queue_clear(store: State<'_, QueueStore>) -> Result<(), String> {
     let conn = store.conn.lock().await;
@@ -505,6 +765,20 @@ pub async fn queue_clear(store: State<'_, QueueStore>) -> Result<(), String> {
     Ok(())
 }
 
+/// Tauri command: reorders the queue following an explicit id order.
+///
+/// `ordered_ids`'s index becomes each row's `position`, applied atomically
+/// inside a transaction.
+///
+/// # Examples
+///
+/// ```js
+/// await invoke("queue_reorder", { orderedIds: [3, 1, 2] });
+/// ```
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the transaction or an update fails.
 #[tauri::command]
 pub async fn queue_reorder(
     store: State<'_, QueueStore>,
@@ -523,6 +797,15 @@ pub async fn queue_reorder(
     Ok(())
 }
 
+/// Tauri command: applies a batch of position updates by id and by path.
+///
+/// `id_updates` are applied first, then `path_updates`, all within a single
+/// transaction. Useful for reconciling the queue after a drag-and-drop that
+/// mixes persisted and unsaved entries.
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the transaction or any update fails.
 #[tauri::command]
 pub async fn queue_update_all_positions(
     store: State<'_, QueueStore>,
@@ -549,6 +832,20 @@ pub async fn queue_update_all_positions(
     Ok(())
 }
 
+/// Tauri command: randomizes the queue order.
+///
+/// Assigns each row a new position based on a time-seeded Fisher-Yates
+/// shuffle, applied in a single transaction. No-op when the queue is empty.
+///
+/// # Examples
+///
+/// ```js
+/// await invoke("queue_shuffle");
+/// ```
+///
+/// # Errors
+///
+/// Returns a SQLite error string when loading or updating fails.
 #[tauri::command]
 pub async fn queue_shuffle(store: State<'_, QueueStore>) -> Result<(), String> {
     let mut conn = store.conn.lock().await;
@@ -572,6 +869,24 @@ pub async fn queue_shuffle(store: State<'_, QueueStore>) -> Result<(), String> {
     Ok(())
 }
 
+/// Tauri command: updates metadata fields of a queue entry.
+///
+/// Only `Some` fields of `metadata` are written; the row is matched by
+/// `file_path` or its canonicalized `original_url`. Returns early without
+/// touching the database when no fields are provided.
+///
+/// # Examples
+///
+/// ```js
+/// await invoke("queue_update_metadata", {
+///   filePath: "https://youtu.be/abc",
+///   metadata: { title: "New title", duration: 213.5 },
+/// });
+/// ```
+///
+/// # Errors
+///
+/// Returns a SQLite error string when the update fails.
 #[tauri::command]
 pub async fn queue_update_metadata(
     store: State<'_, QueueStore>,
