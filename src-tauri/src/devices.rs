@@ -1,3 +1,17 @@
+//! Device pairing and remote-control session management.
+//!
+//! Remote clients (phones/tablets) connect to the local WebSocket server,
+//! pair with the desktop by presenting a short-lived registration token, and
+//! then receive permission-gated player, lyrics, streaming and chat events.
+//! Registered devices and their permissions are persisted in the app's SQLite
+//! database (`lumen.db`) so they survive restarts; the pairing token itself
+//! is held only in memory and expires 15 minutes after generation.
+//!
+//! The Tauri commands in this module form the frontend's device-management
+//! API (list devices, toggle them, edit permissions, configure remote
+//! access), while the free functions are called by the WebSocket server when
+//! a client registers, authenticates or sends events.
+
 use std::{
     collections::HashMap,
     fs,
@@ -15,6 +29,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
+/// `CREATE TABLE` statement for the `devices` table, executed idempotently
+/// on startup. Columns mirror the fields of [`Device`]; the `permissions_*`
+/// columns store a [`DevicePermissions`] set as integers.
 const DEVICES_TABLE_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS devices (
     device_id TEXT PRIMARY KEY,
@@ -35,13 +52,24 @@ CREATE TABLE IF NOT EXISTS devices (
 )
 "#;
 
+/// Feature flags that gate which remote-control events a device may send or
+/// receive. Enforced for every WebSocket event through
+/// [`is_permission_allowed`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DevicePermissions {
+    /// Playback control: play/pause, stop, next/previous, mute, volume, seek,
+    /// loop, URL loading, metadata and progress.
     pub player: bool,
+    /// Loading and displaying lyric files.
     pub lyrics: bool,
+    /// Controlling the Bible view.
     pub bible: bool,
+    /// Controlling media playback.
     pub media: bool,
+    /// Subscribing to or publishing WebRTC audio/video streams.
     pub streaming: bool,
+    /// Participating in the live chat: send, files, history, reactions,
+    /// typing and read markers.
     pub chat: bool,
 }
 
@@ -58,31 +86,62 @@ impl Default for DevicePermissions {
     }
 }
 
+/// A paired remote-control client, persisted in the `devices` table and kept
+/// mirrored in [`DeviceState::devices`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Device {
+    /// Stable identifier chosen by the client; primary key in the database.
     pub device_id: String,
+    /// Human-readable name shown in the desktop's device list.
     pub device_name: String,
+    /// Coarse client kind (for example phone or tablet) reported at
+    /// registration.
     pub device_type: String,
+    /// Operating system string reported by the client at registration.
     pub os: String,
+    /// App version reported by the client at registration.
     pub version: String,
+    /// Secret issued by the desktop on registration; required on every
+    /// subsequent authentication.
     pub access_token: String,
+    /// Whether the device is currently allowed to connect; toggled from the
+    /// desktop UI.
     pub is_active: bool,
+    /// Per-feature access flags enforced for every event from this device.
     pub permissions: DevicePermissions,
+    /// Unix timestamp (seconds) of the original pairing; preserved when the
+    /// device re-registers.
     pub registered_at: u64,
+    /// Unix timestamp (seconds) of the most recent successful authentication,
+    /// if the device has connected before.
     pub last_connected_at: Option<u64>,
 }
 
+/// A single-use pairing credential handed to the user (for example as a QR
+/// code) so a remote client can register. Held only in memory; generating a
+/// new token replaces any previous one.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistrationToken {
+    /// Opaque UUID v4 string the client must present in its `register`
+    /// message.
     pub token: String,
+    /// Unix timestamp (seconds) at which the token was generated.
     pub created_at: u64,
+    /// Unix timestamp (seconds) after which the token is rejected.
     pub expires_at: u64,
+    /// Marks the token as consumed so it cannot pair a second device.
     pub is_used: bool,
 }
 
+/// User-facing switches for remote control, persisted at
+/// `config/remote-access.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteAccessSettings {
+    /// Master switch. When false, new WebSocket connections are rejected and
+    /// every live external session is closed.
     pub remote_enabled: bool,
+    /// Whether A/V transmission (streaming) is allowed while remote access is
+    /// enabled.
     pub transmission_enabled: bool,
 }
 
@@ -95,87 +154,144 @@ impl Default for RemoteAccessSettings {
     }
 }
 
+/// An authenticated WebSocket connection bound to a registered device.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebSocketSession {
+    /// Random identifier for this connection; also used as the streaming
+    /// session key.
     pub session_id: String,
+    /// The registered device that owns this connection.
     pub device_id: String,
+    /// Permission snapshot taken at session creation; the client is notified
+    /// of later changes via the `permissions_updated` frame.
     pub permissions: DevicePermissions,
+    /// Unix timestamp (seconds) when the session was established.
     pub connected_at: u64,
+    /// Unix timestamp (seconds) of the last message received; refreshed by
+    /// [`touch_session`].
     pub last_activity_at: u64,
+    /// Channel half used to enqueue outbound WebSocket messages; excluded
+    /// from serialization.
     #[serde(skip)]
     pub sender: Option<UnboundedSender<Message>>,
 }
 
+/// Tauri-managed application state holding the in-memory mirror of the device
+/// database plus live session bookkeeping.
 pub struct DeviceState {
+    /// Registered devices keyed by device id, kept in sync with the
+    /// `devices` table.
     pub devices: Mutex<HashMap<String, Device>>,
+    /// Live WebSocket sessions keyed by session id.
     pub sessions: Mutex<HashMap<String, WebSocketSession>>,
+    /// The one outstanding registration token, if any.
     pub pending_token: Mutex<Option<RegistrationToken>>,
+    /// Cached copy of the persisted remote-access switches.
     pub remote_settings: Mutex<RemoteAccessSettings>,
 }
 
+/// Subset of [`RegistrationToken`] returned to the frontend after a token is
+/// generated.
 #[derive(Serialize)]
 pub struct RegistrationTokenPayload {
+    /// The pairing code the client must present.
     pub token: String,
+    /// Unix timestamp (seconds) at which the token stops being accepted.
     pub expires_at: u64,
 }
 
+/// `auth_ok` frame sent to a client after successful registration or
+/// authentication.
 #[derive(Serialize)]
 pub struct AuthOkResponse {
+    /// Always `"auth_ok"`; discriminates the frame on the client.
     pub event: &'static str,
+    /// Identifier of the newly created WebSocket session.
     pub session_id: String,
+    /// Display name of this desktop, shown on the remote client.
     pub desktop_name: String,
+    /// Permission set granted to this session.
     pub permissions: DevicePermissions,
+    /// Newly minted access token; present only when registering (omitted when
+    /// re-authenticating).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
 }
 
+/// `auth_fail` frame carrying a machine-readable failure reason.
 #[derive(Serialize)]
 struct AuthFailResponse {
     event: &'static str,
     reason: String,
 }
 
+/// `permissions_updated` frame pushed to a device when its permission set
+/// changes.
 #[derive(Serialize)]
 struct PermissionsUpdatedResponse {
     event: &'static str,
     permissions: DevicePermissions,
 }
 
+/// `permission_denied` frame sent when an event requires a permission the
+/// device does not hold.
 #[derive(Serialize)]
 struct PermissionDeniedResponse {
     event: &'static str,
     feature: String,
 }
 
+/// Generic event wrapper broadcast from the desktop to remote clients. The
+/// `event` field names the action; every other JSON field is forwarded
+/// untouched as the payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteSyncEnvelope {
+    /// Event name understood by remote clients (for example
+    /// `lyrics_changed`).
     pub event: String,
+    /// Event-specific data flattened into the top level of the JSON frame.
     #[serde(flatten)]
     pub payload: Value,
 }
 
+/// Body of the `register` WebSocket message used to pair a new device.
 #[derive(Debug, Clone, Deserialize)]
 pub struct RegisterPayload {
+    /// Registration token previously generated on the desktop.
     pub token: String,
+    /// Client-chosen stable identifier for this device.
     pub device_id: String,
+    /// Human-readable name for UI display.
     pub device_name: String,
+    /// Coarse client kind (for example phone or tablet).
     pub device_type: String,
+    /// Operating system reported by the client.
     pub os: String,
+    /// App version reported by the client.
     pub version: String,
 }
 
+/// Body of the `auth` WebSocket message used by an already-registered device
+/// to open a new session.
 #[derive(Debug, Clone, Deserialize)]
 pub struct AuthPayload {
+    /// Identifier the device registered with.
     pub device_id: String,
+    /// Secret access token issued during registration.
     pub access_token: String,
 }
 
+/// `device_deactivated` frame sent to a client right before its registration
+/// is revoked.
 #[derive(Serialize)]
 struct DeviceDeactivatedResponse {
     event: &'static str,
     device_id: String,
 }
 
+/// Current wall-clock time as Unix seconds.
+///
+/// Falls back to `0` if the system clock is earlier than the epoch.
 pub fn now_ts() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -183,6 +299,10 @@ pub fn now_ts() -> u64 {
         .as_secs()
 }
 
+/// Display name for this machine, shown in the client's "connected to" UI.
+///
+/// Prefers the `COMPUTERNAME` or `HOSTNAME` environment variables, then falls
+/// back to the app's package name, and finally to `"Lumen Desktop"`.
 pub fn resolve_desktop_name(app: &AppHandle) -> String {
     for key in ["COMPUTERNAME", "HOSTNAME"] {
         if let Ok(value) = std::env::var(key) {
@@ -201,6 +321,15 @@ pub fn resolve_desktop_name(app: &AppHandle) -> String {
     }
 }
 
+/// Ensures the device database and config directory exist, then (re)loads
+/// persisted devices and remote-access settings into [`DeviceState`].
+///
+/// Called once during app setup so the state is warm before any WebSocket
+/// connection arrives.
+///
+/// # Errors
+///
+/// Returns an error string on filesystem, SQLite, JSON or lock failures.
 pub fn ensure_remote_access_ready(app: &AppHandle) -> Result<RemoteAccessSettings, String> {
     ensure_device_storage()?;
     ensure_devices_table()?;
@@ -220,6 +349,7 @@ pub fn ensure_remote_access_ready(app: &AppHandle) -> Result<RemoteAccessSetting
     Ok(settings)
 }
 
+/// Builds an empty [`DeviceState`] suitable for `app.manage(...)`.
 pub fn default_device_state() -> DeviceState {
     DeviceState {
         devices: Mutex::new(HashMap::new()),
@@ -229,6 +359,16 @@ pub fn default_device_state() -> DeviceState {
     }
 }
 
+/// Returns the LAN address of this machine so the frontend can render the
+/// pairing URL or QR code.
+///
+/// Frontend API: invoke `get_local_ip` with no arguments; resolves with the
+/// IP address as a string.
+///
+/// # Errors
+///
+/// Returns an error string when no local address can be determined (for
+/// example when the machine is fully offline).
 #[tauri::command]
 pub fn get_local_ip() -> Result<String, String> {
     local_ip()
@@ -236,6 +376,15 @@ pub fn get_local_ip() -> Result<String, String> {
         .map_err(|error| error.to_string())
 }
 
+/// Generates a fresh single-use pairing token, replacing any previous one.
+///
+/// Frontend API: invoke `gen_reg_token` with no arguments; resolves with
+/// `{ token, expiresAt }`. The token is valid for 15 minutes and must be
+/// presented by the client in its `register` WebSocket message.
+///
+/// # Errors
+///
+/// Returns an error string if the token lock is poisoned.
 #[tauri::command]
 pub fn gen_reg_token(state: State<'_, DeviceState>) -> Result<RegistrationTokenPayload, String> {
     let created_at = now_ts();
@@ -257,6 +406,14 @@ pub fn gen_reg_token(state: State<'_, DeviceState>) -> Result<RegistrationTokenP
     Ok(payload)
 }
 
+/// Lists every registered device, sorted case-insensitively by name.
+///
+/// Frontend API: invoke `get_devices` with no arguments; resolves with an
+/// array of device objects.
+///
+/// # Errors
+///
+/// Returns an error string if the device lock is poisoned.
 #[tauri::command]
 pub fn get_devices(state: State<'_, DeviceState>) -> Result<Vec<Device>, String> {
     let devices = state.devices.lock().map_err(|e| e.to_string())?;
@@ -269,6 +426,14 @@ pub fn get_devices(state: State<'_, DeviceState>) -> Result<Vec<Device>, String>
     Ok(values)
 }
 
+/// Reads the current remote-access switches.
+///
+/// Frontend API: invoke `get_remote_access_settings` with no arguments;
+/// resolves with `{ remoteEnabled, transmissionEnabled }`.
+///
+/// # Errors
+///
+/// Returns an error string if the settings lock is poisoned.
 #[tauri::command]
 pub fn get_remote_access_settings(
     state: State<'_, DeviceState>,
@@ -280,6 +445,17 @@ pub fn get_remote_access_settings(
         .map_err(|e| e.to_string())
 }
 
+/// Persists new remote-access switches and applies them immediately.
+///
+/// Frontend API: invoke `update_remote_access_settings` with the
+/// `remoteEnabled` and `transmissionEnabled` booleans; resolves with the
+/// updated settings. Turning remote access off closes every live external
+/// session with WebSocket code `4001` and emits `remote_access_disabled` to
+/// the frontend.
+///
+/// # Errors
+///
+/// Returns an error string on filesystem, serialization or lock failures.
 #[tauri::command]
 pub fn update_remote_access_settings(
     app: AppHandle,
@@ -310,6 +486,16 @@ pub fn update_remote_access_settings(
     Ok(next)
 }
 
+/// Activates or deactivates a registered device.
+///
+/// Frontend API: invoke `toggle_device` with `deviceId` and `isActive`.
+/// Deactivating a device immediately closes its live sessions with WebSocket
+/// code `4005`. Emits `device_updated` to the frontend on success.
+///
+/// # Errors
+///
+/// Returns an error string if the device does not exist or a lock/database
+/// operation fails.
 #[tauri::command]
 pub fn toggle_device(
     app: AppHandle,
@@ -330,6 +516,16 @@ pub fn toggle_device(
     Ok(())
 }
 
+/// Replaces the permission set of a registered device.
+///
+/// Frontend API: invoke `update_device_permissions` with `deviceId` and a
+/// `permissions` object. The device's live sessions receive a
+/// `permissions_updated` frame, and the frontend receives `device_updated`.
+///
+/// # Errors
+///
+/// Returns an error string if the device is unknown or a lock/database
+/// operation fails.
 #[tauri::command]
 pub fn update_device_permissions(
     app: AppHandle,
@@ -352,6 +548,16 @@ pub fn update_device_permissions(
     Ok(())
 }
 
+/// Forgets a paired device entirely.
+///
+/// Frontend API: invoke `remove_device` with `deviceId`. The device is
+/// deleted from the database, its live sessions are closed with WebSocket
+/// code `4003`, and the frontend receives `device_removed`.
+///
+/// # Errors
+///
+/// Returns an error string if the device is unknown or a lock/database
+/// operation fails.
 #[tauri::command]
 pub fn remove_device(
     app: AppHandle,
@@ -376,6 +582,18 @@ pub fn remove_device(
     Ok(())
 }
 
+/// Sends a JSON event to every connected device that holds the required
+/// permission.
+///
+/// Frontend API: invoke `broadcast_remote_event` with an `envelope`
+/// (`{ event, ...payload }`) and an optional `requiredPermission` (one of
+/// `player`, `lyrics`, `bible`, `media`, `streaming`, `chat`). Sessions that
+/// lack the permission are skipped silently.
+///
+/// # Errors
+///
+/// Returns an error string if the payload fails to serialize or the session
+/// lock is poisoned.
 #[tauri::command]
 pub fn broadcast_remote_event(
     state: State<'_, DeviceState>,
@@ -385,6 +603,21 @@ pub fn broadcast_remote_event(
     broadcast_remote_event_inner(&state, &envelope, required_permission.as_deref())
 }
 
+/// Pairs a new device (or re-pairs a known one) using the pending
+/// registration token.
+///
+/// Consumes the token, upserts the device in memory and in SQLite, opens a
+/// WebSocket session for `sender`, and notifies the frontend with
+/// `device_registered` (new device) or `device_updated` (re-registration),
+/// plus `device_authenticated` in both cases. Re-registering a known
+/// `device_id` keeps its permissions and original `registered_at` but issues
+/// a new access token.
+///
+/// # Errors
+///
+/// Returns a machine-readable reason on failure: `"token_expired"` (missing,
+/// expired or mismatched token), `"token_used"`, or a database/lock error
+/// string.
 pub fn register_device(
     app: &AppHandle,
     state: &State<'_, DeviceState>,
@@ -465,6 +698,18 @@ pub fn register_device(
     })
 }
 
+/// Validates an existing device's access token and opens a new session.
+///
+/// Rejects the attempt when remote access is disabled or when the device is
+/// unknown, holds a stale token, or has been deactivated. On success the
+/// device's `last_connected_at` is refreshed, a session is registered for
+/// `sender`, and `device_authenticated` is emitted to the frontend. The
+/// response omits `access_token` because the client already owns it.
+///
+/// # Errors
+///
+/// Returns one of `"unauthorized"`, `"not_registered"`, `"invalid_token"`,
+/// `"not_active"`, or a database/lock error string.
 pub fn authenticate_device(
     app: &AppHandle,
     state: &State<'_, DeviceState>,
@@ -523,6 +768,13 @@ pub fn authenticate_device(
     })
 }
 
+/// Marks a device inactive and closes all of its live sessions with WebSocket
+/// code `4005`, emitting `device_updated` to the frontend.
+///
+/// # Errors
+///
+/// Returns an error string if the device is unknown or a lock/database
+/// operation fails.
 pub fn deactivate_device_registration(
     app: &AppHandle,
     state: &State<'_, DeviceState>,
@@ -539,6 +791,14 @@ pub fn deactivate_device_registration(
     Ok(())
 }
 
+/// Refreshes `last_activity_at` for a live session and returns a copy of it.
+///
+/// Returns `Ok(None)` when the session id is unknown (for example because it
+/// was closed concurrently).
+///
+/// # Errors
+///
+/// Returns an error string if the session lock is poisoned.
 pub fn touch_session(
     state: &State<'_, DeviceState>,
     session_id: &str,
@@ -551,12 +811,22 @@ pub fn touch_session(
     Ok(None)
 }
 
+/// Drops a session from the live-session table, if present.
+///
+/// # Errors
+///
+/// Returns an error string if the session lock is poisoned.
 pub fn remove_session(state: &State<'_, DeviceState>, session_id: &str) -> Result<(), String> {
     let mut sessions = state.sessions.lock().map_err(|e| e.to_string())?;
     sessions.remove(session_id);
     Ok(())
 }
 
+/// Reports whether the master remote-access switch is currently on.
+///
+/// # Errors
+///
+/// Returns an error string if the settings lock is poisoned.
 pub fn is_remote_access_enabled(state: &State<'_, DeviceState>) -> Result<bool, String> {
     state
         .remote_settings
@@ -565,6 +835,12 @@ pub fn is_remote_access_enabled(state: &State<'_, DeviceState>) -> Result<bool, 
         .map_err(|e| e.to_string())
 }
 
+/// Builds the `auth_fail` WebSocket frame carrying a machine-readable
+/// `reason` (for example `"token_expired"` or `"not_active"`).
+///
+/// # Errors
+///
+/// Returns an error string if the frame fails to serialize.
 pub fn auth_fail_message(reason: &str) -> Result<Message, String> {
     json_message(&AuthFailResponse {
         event: "auth_fail",
@@ -572,6 +848,12 @@ pub fn auth_fail_message(reason: &str) -> Result<Message, String> {
     })
 }
 
+/// Builds the `permission_denied` frame sent when a device lacks the
+/// permission required by an event.
+///
+/// # Errors
+///
+/// Returns an error string if the frame fails to serialize.
 pub fn permission_denied_message(feature: &str) -> Result<Message, String> {
     json_message(&PermissionDeniedResponse {
         event: "permission_denied",
@@ -579,6 +861,12 @@ pub fn permission_denied_message(feature: &str) -> Result<Message, String> {
     })
 }
 
+/// Builds the `device_deactivated` frame sent to a client right before its
+/// registration is revoked.
+///
+/// # Errors
+///
+/// Returns an error string if the frame fails to serialize.
 pub fn device_deactivated_message(device_id: &str) -> Result<Message, String> {
     json_message(&DeviceDeactivatedResponse {
         event: "device_deactivated",
@@ -586,6 +874,15 @@ pub fn device_deactivated_message(device_id: &str) -> Result<Message, String> {
     })
 }
 
+/// Implementation shared by the [`broadcast_remote_event`] command and other
+/// server-side callers: serializes `envelope` once and fans it out to every
+/// session whose permissions satisfy `required_permission`. Sessions without
+/// a sender or without the permission are skipped silently.
+///
+/// # Errors
+///
+/// Returns an error string if serialization fails or the session lock is
+/// poisoned.
 pub fn broadcast_remote_event_inner(
     state: &State<'_, DeviceState>,
     envelope: &RemoteSyncEnvelope,
@@ -609,6 +906,7 @@ pub fn broadcast_remote_event_inner(
     Ok(())
 }
 
+/// Pushes a `permissions_updated` frame to every live session of `device_id`.
 fn notify_device_permissions_changed(
     state: &State<'_, DeviceState>,
     device_id: &str,
@@ -631,6 +929,8 @@ fn notify_device_permissions_changed(
     Ok(())
 }
 
+/// Flips `is_active` for a device, persists the change, and returns the
+/// updated device.
 fn set_device_active_state(
     state: &State<'_, DeviceState>,
     device_id: &str,
@@ -645,6 +945,8 @@ fn set_device_active_state(
     Ok(device.clone())
 }
 
+/// Closes the sessions of every connected device (used when remote access is
+/// switched off) and emits `remote_access_disabled` to the frontend.
 fn close_all_external_sessions(
     app: &AppHandle,
     state: &State<'_, DeviceState>,
@@ -675,6 +977,8 @@ fn close_all_external_sessions(
     Ok(())
 }
 
+/// Removes every session of a device, optionally sending it an `auth_fail`
+/// frame and a close frame with `close_code` first.
 fn close_device_sessions(
     state: &State<'_, DeviceState>,
     device_id: &str,
@@ -712,6 +1016,8 @@ fn close_device_sessions(
     Ok(())
 }
 
+/// Registers a fresh session for `device_id`, keyed by a new random session
+/// id, and returns that id.
 fn create_or_replace_session(
     state: &State<'_, DeviceState>,
     device_id: String,
@@ -733,12 +1039,14 @@ fn create_or_replace_session(
     Ok(session_id)
 }
 
+/// Creates the app config directory if it does not exist yet.
 fn ensure_device_storage() -> Result<(), String> {
     let base_dir = app_base_dir()?;
     fs::create_dir_all(base_dir.join("config")).map_err(|e| e.to_string())?;
     Ok(())
 }
 
+/// Creates the `devices` table and applies any pending schema migrations.
 fn ensure_devices_table() -> Result<(), String> {
     let connection = open_device_db()?;
     connection
@@ -748,6 +1056,8 @@ fn ensure_devices_table() -> Result<(), String> {
     Ok(())
 }
 
+/// Adds the `permissions_streaming` and `permissions_chat` columns to older
+/// databases that predate them.
 fn ensure_devices_schema(connection: &Connection) -> Result<(), String> {
     let mut statement = connection
         .prepare("PRAGMA table_info(devices)")
@@ -783,23 +1093,29 @@ fn ensure_devices_schema(connection: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// Opens a connection to the devices database (`lumen.db`).
 fn open_device_db() -> Result<Connection, String> {
     let path = device_db_path()?;
     Connection::open(path).map_err(|e| e.to_string())
 }
 
+/// Resolves the base directory that holds the app database and config.
 fn app_base_dir() -> Result<PathBuf, String> {
     crate::paths::app_base_dir()
 }
 
+/// Full path of the SQLite database that stores registered devices.
 fn device_db_path() -> Result<PathBuf, String> {
     Ok(app_base_dir()?.join("lumen.db"))
 }
 
+/// Full path of the JSON file that stores [`RemoteAccessSettings`].
 fn remote_settings_path() -> Result<PathBuf, String> {
     Ok(app_base_dir()?.join("config").join("remote-access.json"))
 }
 
+/// Loads [`RemoteAccessSettings`] from disk, writing the default settings on
+/// first run.
 fn load_remote_access_settings() -> Result<RemoteAccessSettings, String> {
     let path = remote_settings_path()?;
     if !path.exists() {
@@ -812,12 +1128,14 @@ fn load_remote_access_settings() -> Result<RemoteAccessSettings, String> {
     serde_json::from_str(&content).map_err(|e| e.to_string())
 }
 
+/// Serializes [`RemoteAccessSettings`] to disk as pretty-printed JSON.
 fn save_remote_access_settings(settings: &RemoteAccessSettings) -> Result<(), String> {
     let path = remote_settings_path()?;
     let content = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
     fs::write(path, content).map_err(|e| e.to_string())
 }
 
+/// Reads every registered device from the database, keyed by device id.
 fn load_devices_from_db() -> Result<HashMap<String, Device>, String> {
     let connection = open_device_db()?;
     let mut statement = connection
@@ -877,6 +1195,7 @@ fn load_devices_from_db() -> Result<HashMap<String, Device>, String> {
     Ok(devices)
 }
 
+/// Inserts or replaces a device row, keyed by `device_id`.
 fn insert_or_replace_device_in_db(device: &Device) -> Result<(), String> {
     let connection = open_device_db()?;
     connection
@@ -922,10 +1241,12 @@ fn insert_or_replace_device_in_db(device: &Device) -> Result<(), String> {
     Ok(())
 }
 
+/// Persists changes to an existing device (same as an upsert).
 fn update_device_in_db(device: &Device) -> Result<(), String> {
     insert_or_replace_device_in_db(device)
 }
 
+/// Deletes a device row from the database.
 fn delete_device_from_db(device_id: &str) -> Result<(), String> {
     let connection = open_device_db()?;
     connection
@@ -934,12 +1255,14 @@ fn delete_device_from_db(device_id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Serializes a payload into a WebSocket text message.
 fn json_message<T: Serialize>(payload: &T) -> Result<Message, String> {
     serde_json::to_string(payload)
         .map(Message::Text)
         .map_err(|e| e.to_string())
 }
 
+/// Builds a WebSocket close frame with an application-specific close code.
 fn close_message(code: u16) -> Message {
     Message::Close(Some(tokio_tungstenite::tungstenite::protocol::CloseFrame {
         code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Library(code),
@@ -947,6 +1270,20 @@ fn close_message(code: u16) -> Message {
     }))
 }
 
+/// Maps a remote-control event name to the permission required to emit it.
+///
+/// Returns `None` for events that are either handled before the permission
+/// check (such as `register` and `auth`) or unknown to the desktop.
+///
+/// # Examples
+///
+/// ```ignore
+/// use crate::devices::map_event_permission;
+///
+/// assert_eq!(map_event_permission("play_pause"), Some("player"));
+/// assert_eq!(map_event_permission("chat_send"), Some("chat"));
+/// assert_eq!(map_event_permission("register"), None);
+/// ```
 pub fn map_event_permission(event: &str) -> Option<&'static str> {
     match event {
         "play_pause" | "stop" | "next" | "previous" | "mute" | "set_volume" | "seek"
@@ -962,6 +1299,20 @@ pub fn map_event_permission(event: &str) -> Option<&'static str> {
     }
 }
 
+/// Checks a named permission against a device's permission set.
+///
+/// Unknown permission names are treated as denied.
+///
+/// # Examples
+///
+/// ```ignore
+/// use crate::devices::{DevicePermissions, is_permission_allowed};
+///
+/// let permissions = DevicePermissions::default();
+/// assert!(is_permission_allowed(&permissions, "player"));
+/// assert!(!is_permission_allowed(&permissions, "chat"));
+/// assert!(!is_permission_allowed(&permissions, "bogus"));
+/// ```
 pub fn is_permission_allowed(permissions: &DevicePermissions, permission: &str) -> bool {
     match permission {
         "player" => permissions.player,
