@@ -5,22 +5,36 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
-      - 'Cargo.toml'
+      - 'src-tauri/Cargo.toml'
+      - 'src-tauri/src/**'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   sync-docs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout source repository
         uses: actions/checkout@v4
 
-      - name: Generate Rust documentation
-        if: hashFiles('Cargo.toml') != ''
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system dependencies
         run: |
-          cargo doc --no-deps --document-private-items
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl wget file pkg-config \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev libssl-dev \
+            librsvg2-dev libasound2-dev libv4l-dev \
+            libgtk-3-dev patchelf xdg-utils
+          (sudo apt-get install -y libayatana-appindicator3-dev) || sudo apt-get install -y libappindicator3-dev
+
+      - name: Generate Rust documentation
+        run: cargo doc --no-deps --document-private-items --manifest-path src-tauri/Cargo.toml
 
       - name: Checkout central docs repository
         uses: actions/checkout@v4
@@ -33,16 +47,16 @@ jobs:
         run: |
           REPO_NAME="${{ github.repository }}"
           REPO_NAME="${REPO_NAME#*/}"
-          
+
           mkdir -p "central-docs/${REPO_NAME}"
-          
+
           if [ -d "docs" ]; then
             cp -r docs/* "central-docs/${REPO_NAME}/"
           fi
-          
-          if [ -d "target/doc" ]; then
+
+          if [ -d "src-tauri/target/doc" ]; then
             mkdir -p "central-docs/rust/${REPO_NAME}"
-            cp -r target/doc/* "central-docs/rust/${REPO_NAME}/"
+            cp -r src-tauri/target/doc/* "central-docs/rust/${REPO_NAME}/"
           fi
 
       - name: Commit and push changes
