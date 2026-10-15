@@ -1,3 +1,21 @@
+//! Dependency provisioning: manages external tools under the app's tools
+//! directory.
+//!
+//! The state (installed versions and paths) is persisted as `versions.json` in
+//! `<tools-dir>`. Three tools are provisioned on demand:
+//!
+//! - `yt-dlp` - downloaded from the nightly GitHub releases; updated whenever
+//!   the installed version differs from the latest release.
+//! - `ffmpeg`/`ffprobe` - extracted from BtbN GitHub release ZIPs on Windows
+//!   and Linux. On macOS this module does not download FFmpeg (the
+//!   dependencies install step skips it and expects `ffmpeg` on PATH).
+//! - `node` - downloaded as a Windows x64 ZIP from `nodejs.org/dist/index.json`
+//!   (picks the latest LTS, falling back to the newest release overall).
+//!
+//! Progress/completion notifications are emitted through the Tauri event
+//! system: `dependency-download-progress` and `dependency-download-complete`.
+//! These events are consumed by the frontend UI.
+
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -5,43 +23,72 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use super::github;
 
+/// Information about a single installed tool (version and location).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolInfo {
+    /// Release version string stored at install time.
     pub version: String,
+    /// Absolute path to the tool binary (or directory for multi-file tools).
     pub path: String,
+    /// Unix timestamp (seconds) when the tool was downloaded/installed.
     pub downloaded_at: u64,
 }
 
+/// Installed tool versions persisted to `versions.json`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ToolVersions {
+    /// Information about the installed `yt-dlp`.
     pub ytdlp: Option<ToolInfo>,
+    /// Information about the installed `ffmpeg`/`ffprobe`.
     pub ffmpeg: Option<ToolInfo>,
+    /// Information about the installed `node` runtime.
     pub node: Option<ToolInfo>,
 }
 
+/// Current status of the external dependencies (used by the frontend UI).
 #[derive(Debug, Clone, Serialize)]
 pub struct DependencyStatus {
+    /// Whether `yt-dlp` is present in the tools directory.
     pub ytdlp_installed: bool,
+    /// Installed version string, or `None` if not installed.
     pub ytdlp_version: Option<String>,
+    /// `true` when `yt-dlp` is installed but the latest release tag differs.
     pub ytdlp_outdated: bool,
+    /// Whether `ffmpeg` is present in the tools directory.
     pub ffmpeg_installed: bool,
+    /// Installed version string, or `None` if not installed.
     pub ffmpeg_version: Option<String>,
+    /// Whether `cookies.txt` is present in the tools directory.
     pub cookies_installed: bool,
+    /// Whether the `node` runtime is present.
     pub node_installed: bool,
+    /// Path to the `node` directory, or `None` if not installed.
     pub node_dir: Option<String>,
+    /// Absolute path of the tools directory.
     pub tools_dir: String,
 }
 
+/// Description of a single tool returned by [`list_dependencies`].
 #[derive(Debug, Clone, Serialize)]
 pub struct DependencyInfo {
+    /// Tool name (`yt-dlp` or `ffmpeg`).
     pub name: String,
+    /// Whether the tool is currently installed.
     pub installed: bool,
+    /// Installed version string, or `None` if not installed.
     pub version: Option<String>,
+    /// Absolute path to the tool binary, or `None` if not installed.
     pub path: Option<String>,
+    /// Platform key string (`win_x64`, `linux_x64`, etc.).
     pub platform: String,
 }
 
+/// Resolves the tools directory from the app data path.
+///
+/// # Errors
+///
+/// Returns an error string when the app data directory cannot be resolved.
 fn tools_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let data_dir = app
         .path()
@@ -50,10 +97,12 @@ fn tools_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir.join("tools"))
 }
 
+/// Returns the path to the persisted `versions.json` file.
 fn versions_path(tools_dir: &Path) -> PathBuf {
     tools_dir.join("versions.json")
 }
 
+/// Platform-specific name of the `yt-dlp` binary.
 fn ytdlp_binary_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "yt-dlp.exe"
@@ -62,6 +111,7 @@ fn ytdlp_binary_name() -> &'static str {
     }
 }
 
+/// Platform-specific name of the `ffmpeg` binary.
 fn ffmpeg_binary_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "ffmpeg.exe"
@@ -70,6 +120,7 @@ fn ffmpeg_binary_name() -> &'static str {
     }
 }
 
+/// Platform-specific name of the `ffprobe` binary.
 fn ffprobe_binary_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "ffprobe.exe"
@@ -78,7 +129,9 @@ fn ffprobe_binary_name() -> &'static str {
     }
 }
 
-pub fn load_versions(tools_dir: &Path) -> ToolVersions {
+/// Loads `versions.json` into a [`ToolVersions`] struct, returning defaults
+/// if the file does not exist or cannot be parsed.
+fn load_versions(tools_dir: &Path) -> ToolVersions {
     let path = versions_path(tools_dir);
     if !path.exists() {
         return ToolVersions {
@@ -95,12 +148,26 @@ pub fn load_versions(tools_dir: &Path) -> ToolVersions {
     })
 }
 
+/// Persists `versions` to `versions.json`.
+///
+/// # Errors
+///
+/// Returns an error string when serialization or writing to disk fails.
 pub fn save_versions(tools_dir: &Path, versions: &ToolVersions) -> Result<(), String> {
     let path = versions_path(tools_dir);
     let data = serde_json::to_string_pretty(versions).map_err(|e| e.to_string())?;
     std::fs::write(&path, data).map_err(|e| format!("Failed to save versions.json: {}", e))
 }
 
+/// Reports which dependencies are installed and whether `yt-dlp` is outdated.
+///
+/// When `yt-dlp` is installed this fetches the latest release from GitHub to
+/// set `ytdlp_outdated`; network failures are ignored and the flag remains
+/// `false` in that case.
+///
+/// # Errors
+///
+/// Returns an error string when the tools directory cannot be resolved.
 pub async fn check_dependencies(app: &AppHandle) -> Result<DependencyStatus, String> {
     let dir = tools_dir(app)?;
     let versions = load_versions(&dir);
@@ -147,6 +214,15 @@ pub async fn check_dependencies(app: &AppHandle) -> Result<DependencyStatus, Str
     })
 }
 
+/// Lists installed tools with metadata.
+///
+/// Returns a vector with entries for `yt-dlp` and `ffmpeg` (their install
+/// state, version, path, and platform key). `node` is tracked in
+/// `versions.json` but not listed here.
+///
+/// # Errors
+///
+/// Returns an error string when the tools directory cannot be resolved.
 pub fn list_dependencies(app: &AppHandle) -> Result<Vec<DependencyInfo>, String> {
     let dir = tools_dir(app)?;
     let versions = load_versions(&dir);
@@ -181,6 +257,23 @@ pub fn list_dependencies(app: &AppHandle) -> Result<Vec<DependencyInfo>, String>
     ])
 }
 
+/// Downloads or updates all external tools as needed.
+///
+/// Emits `dependency-download-progress` and `dependency-download-complete`
+/// events on the Tauri app for each step:
+///
+/// - `yt-dlp`: updated only if missing or version differs from latest release
+/// - `ffmpeg`/`ffprobe`: downloaded and extracted on Windows/Linux when missing
+///   (skipped entirely on macOS)
+/// - `node`: downloaded and extracted when missing
+///
+/// On success the temporary `downloads` staging directory is removed.
+///
+/// # Errors
+///
+/// Returns an error string when any step fails (cannot create directories,
+/// fetch a release, download a file, extract an archive, move files, or
+/// persist versions); in that case the staging directory may be left behind.
 pub async fn download_dependencies(app: AppHandle) -> Result<(), String> {
     let dir = tools_dir(&app)?;
     std::fs::create_dir_all(&dir)
@@ -344,6 +437,15 @@ pub async fn download_dependencies(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Streams `url` to `dest`, emitting `dependency-download-progress` events
+/// with `{ tool, progress, bytes_downloaded, total_bytes, status }` whenever
+/// the server reported a content length.
+///
+/// # Errors
+///
+/// Returns an error string when the request fails, the HTTP status is not
+/// successful, the destination file cannot be created, the stream fails, or a
+/// chunk cannot be written to disk.
 async fn download_file(
     url: &str,
     dest: &Path,
@@ -402,6 +504,16 @@ async fn download_file(
     Ok(())
 }
 
+/// Extracts only `ffmpeg` and `ffprobe` from a BtbN release ZIP into
+/// `dest_dir`, skipping every other entry (docs, libraries, plugins).
+///
+/// On Unix the extracted binaries are marked executable (`0o755`).
+///
+/// # Errors
+///
+/// Returns an error string when the ZIP cannot be opened or read, an entry
+/// cannot be extracted or written, or the `ffmpeg` binary is missing from the
+/// archive.
 fn extract_ffmpeg_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
     let zip_file =
         std::fs::File::open(zip_path).map_err(|e| format!("Failed to open ffmpeg zip: {}", e))?;
@@ -457,6 +569,12 @@ fn extract_ffmpeg_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Extracts only `node.exe` from a Node.js release ZIP into `dest_dir`.
+///
+/// # Errors
+///
+/// Returns an error string when the ZIP cannot be opened or read, an entry
+/// cannot be extracted or written, or `node.exe` is missing from the archive.
 fn extract_node_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
     let zip_file =
         std::fs::File::open(zip_path).map_err(|e| format!("Failed to open node zip: {}", e))?;
