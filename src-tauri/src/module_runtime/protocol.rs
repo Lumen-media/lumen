@@ -1,3 +1,23 @@
+//! Custom URI scheme handler that serves module assets.
+//!
+//! Registered in [`crate::main`] as the handler for the `lumen-module://`
+//! scheme (which Tauri also exposes as `http(s)://lumen-module.localhost/` on
+//! platforms where a custom scheme is inconvenient). The webview loads a
+//! module's entry script and assets through this handler, so it acts as the
+//! sandbox boundary: only files that live inside an *enabled* module's
+//! directory are ever returned.
+//!
+//! URL shape:
+//!
+//! ```text
+//! lumen-module://{module_id}/{relative_file_path}
+//! lumen-module://__theme/id/{theme_file_id}
+//! ```
+//!
+//! The `__theme` pseudo-module resolves theme image files stored in the app's
+//! `themes` media directory (see [`crate::module_runtime::themes`]), with a
+//! canonicalized-path check preventing traversal outside that directory.
+
 use std::{fs, path::PathBuf};
 
 use rusqlite::{params, Connection};
@@ -5,6 +25,27 @@ use tauri::{Manager, UriSchemeContext};
 
 use crate::module_runtime::ModuleRuntime;
 
+/// Handles a single `lumen-module://` (or `lumen-module.localhost`) request.
+///
+/// Parses the URI into a module id and a relative file path, then resolves the
+/// file under the module's registry root. Requests are answered with:
+///
+/// * `200` and the file bytes, with a MIME type inferred from the extension and
+///   `Access-Control-Allow-Origin: *`, on success;
+/// * `400` when the URI does not contain both an id and a file segment;
+/// * `403` when the module is unknown, disabled, or a theme path escapes the
+///   themes directory;
+/// * `404` when the file cannot be read.
+///
+/// `module_id == "__theme"` (or a leading `__theme/` segment on the
+/// `.localhost` form) is routed to the theme resolver instead of the module
+/// registry.
+///
+/// # Errors
+///
+/// This function never returns a `Result`; failures are encoded as HTTP status
+/// codes in the returned [`tauri::http::Response`]. A poisoned registry mutex
+/// is treated as "module not found" (HTTP `403`).
 pub fn handle_module_request(
     ctx: UriSchemeContext<'_, tauri::Wry>,
     request: tauri::http::Request<Vec<u8>>,
@@ -68,6 +109,10 @@ pub fn handle_module_request(
     }
 }
 
+/// Serves a theme image by resolving `file_path` through [`resolve_theme_path`].
+///
+/// Returns `200` with the image bytes (MIME inferred from the extension) or the
+/// status/message produced by [`resolve_theme_path`] on failure.
 fn handle_theme_request(file_path: &str) -> tauri::http::Response<Vec<u8>> {
     match resolve_theme_path(file_path) {
         Ok(path) => match fs::read(&path) {
@@ -86,6 +131,17 @@ fn handle_theme_request(file_path: &str) -> tauri::http::Response<Vec<u8>> {
     }
 }
 
+/// Maps a `__theme/id/{id}` path to an absolute, canonicalized image path.
+///
+/// Looks the id up in the `theme_files` table, then verifies that the resolved
+/// file lives inside the `themes` media directory to block path traversal.
+///
+/// # Errors
+///
+/// Returns an HTTP `(status, message)` pair when the path is malformed
+/// (`400`), the id is not numeric (`400`), the database cannot be opened
+/// (`500`), the id does not exist or the file is missing (`404`), or the
+/// canonical path escapes the themes directory (`403`).
 fn resolve_theme_path(file_path: &str) -> Result<PathBuf, (u16, String)> {
     let parts = file_path.split('/').collect::<Vec<_>>();
     if parts.len() != 2 || parts[0] != "id" {
@@ -122,6 +178,7 @@ fn resolve_theme_path(file_path: &str) -> Result<PathBuf, (u16, String)> {
     Ok(canonical_theme_path)
 }
 
+/// Builds a plain-text HTTP response with the given `status` and `body`.
 fn response(status: u16, body: impl Into<String>) -> tauri::http::Response<Vec<u8>> {
     tauri::http::Response::builder()
         .status(status)
@@ -129,6 +186,9 @@ fn response(status: u16, body: impl Into<String>) -> tauri::http::Response<Vec<u
         .unwrap()
 }
 
+/// Returns the MIME type for a file extension (case-insensitive).
+///
+/// Falls back to `application/octet-stream` for unknown extensions.
 fn mime_for_ext(ext: &str) -> &'static str {
     match ext.to_ascii_lowercase().as_str() {
         "js" | "mjs" => "application/javascript",

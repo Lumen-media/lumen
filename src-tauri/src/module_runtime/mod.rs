@@ -1,3 +1,38 @@
+//! Lumen's module (extension) runtime.
+//!
+//! A *module* is an installable bundle - a `.lumenpack` (ZIP with a
+//! `manifest.json`) or a source directory - that extends Lumen with extra UI
+//! and logic. This module owns the whole lifecycle and the two boundaries a
+//! module runs behind:
+//!
+//! * the **install boundary**: [`manifest`] defines the manifest schema and
+//!   [`install`] extracts packs while rejecting path traversal, [`registry`]
+//!   records what is installed, and [`store`] resolves, downloads and installs
+//!   modules from the community catalog;
+//! * the **runtime boundary**: enabled modules get a scoped filesystem
+//!   ([`module_fs_*`](module_fs_read)), a per-module JSON/SQLite data store, a
+//!   permission-checked HTTP proxy ([`net::module_net_request`]) and a sandboxed
+//!   asset origin ([`protocol`]) served over the `lumen-module://` URI scheme.
+//!
+//! Shared state lives in [`ModuleRuntime`], stored via Tauri's managed state,
+//! and the cached SQLite handles live in [`SqliteConnectionCache`]. Every
+//! `#[tauri::command]` in this module (and its children) is part of the
+//! frontend-facing API; each command documents its `module_*`/`store_*` name and
+//! payload shape.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! # use tauri::Manager;
+//! # fn run(app: tauri::AppHandle) -> Result<(), String> {
+//! use crate::module_runtime::ModuleRuntime;
+//! // During app setup:
+//! let runtime = ModuleRuntime::init(&app)?;
+//! app.manage(runtime);
+//! app.manage(crate::module_runtime::SqliteConnectionCache::new());
+//! # Ok(()) }
+//! ```
+
 pub mod dev_server;
 pub mod install;
 pub mod manifest;
@@ -21,14 +56,42 @@ use registry::Registry;
 
 use self::install::Installer;
 
+/// Process-wide state shared by every module command.
+///
+/// Created once by [`ModuleRuntime::init`] and registered as Tauri managed
+/// state. It holds the modules root, the registry connection and a shared HTTP
+/// client with a bounded timeout and redirect policy, plus a small in-memory
+/// manifest cache.
 pub struct ModuleRuntime {
+    /// Root directory holding installed modules (`<app_data_dir>/modules`).
+    ///
+    /// Each module lives in a subdirectory named after its id.
     pub modules_dir: PathBuf,
+    /// SQLite registry of installed modules, guarded by a mutex.
     pub registry: Arc<Mutex<Registry>>,
+    /// Shared HTTP client (60 s timeout, max 5 redirects, `Lumen/0.4.0` UA).
+    ///
+    /// Used for module network requests, store fetches and theme downloads.
     pub http_client: Client,
+    /// In-memory cache of parsed manifests, keyed by module id.
+    ///
+    /// Populated lazily by [`ModuleRuntime::cached_manifest`] and invalidated
+    /// on install/uninstall; avoids re-reading `manifest.json` for the frequent
+    /// `module_list_installed` calls.
     pub manifest_cache: Mutex<HashMap<String, ModuleManifest>>,
 }
 
 impl ModuleRuntime {
+    /// Initializes the runtime for `app`.
+    ///
+    /// Resolves and creates the modules directory, opens the registry database
+    /// at `<app_data_dir>/lumen.sqlite`, and builds the shared HTTP client.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if the app data directory cannot be resolved,
+    /// the modules directory cannot be created, the registry cannot be opened,
+    /// or the HTTP client cannot be built.
     pub fn init(app: &AppHandle) -> Result<Self, String> {
         let data_dir = app
             .path()
@@ -62,6 +125,14 @@ impl ModuleRuntime {
         })
     }
 
+    /// Returns the manifest for `module_id`, loading and caching it on a miss.
+    ///
+    /// The cache is keyed by id only; `path` is where the manifest is read from
+    /// when the id is not cached.
+    ///
+    /// # Errors
+    ///
+    /// Propagates manifest loading errors, or a poisoned-mutex error.
     fn cached_manifest(&self, module_id: &str, path: &std::path::Path) -> Result<ModuleManifest, String> {
         let mut cache = self.manifest_cache.lock().map_err(|e| e.to_string())?;
         if let Some(manifest) = cache.get(module_id) {
@@ -72,6 +143,9 @@ impl ModuleRuntime {
         Ok(manifest)
     }
 
+    /// Drops the cached manifest for `module_id`, if present.
+    ///
+    /// Silently does nothing if the cache mutex is poisoned.
     fn invalidate_manifest_cache(&self, module_id: &str) {
         if let Ok(mut cache) = self.manifest_cache.lock() {
             cache.remove(module_id);
