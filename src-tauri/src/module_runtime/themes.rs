@@ -1,3 +1,17 @@
+//! Theme image imports for modules.
+//!
+//! Modules use backgrounds and other imagery through the shared `theme_files`
+//! table in the main Lumen database. [`module_theme_add`] lets a module import
+//! an image either from a URL (subject to the same network permissions as
+//! [`crate::module_runtime::net`]) or from a path inside its own directory, then
+//! copies it into the `themes` media directory and records a row.
+//!
+//! Imports are content-hashed with BLAKE3: re-importing the exact same bytes
+//! returns the existing row instead of writing a duplicate. Filenames are
+//! sanitized and uniquified on disk. Imported files are served back to the
+//! webview through the `lumen-module://__theme/id/{id}` route (see
+//! [`crate::module_runtime::protocol`]).
+
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -9,31 +23,68 @@ use super::manifest::load_manifest;
 use super::net::check_url_allowed;
 use super::{scoped_module_path, ModuleRuntime};
 
+/// File extensions accepted as theme images (without a leading dot).
 const IMAGE_EXTS: &[&str] = &["gif", "jpg", "jpeg", "png", "webp", "svg", "bmp", "avif"];
+/// Maximum size of an image that may be imported (50 MB).
 const MAX_IMAGE_BYTES: usize = 50_000_000;
 
+/// Where a module theme image is imported from.
+///
+/// Externally tagged by a `type` field: `{"type":"url","url":...}` or
+/// `{"type":"file","path":...}`.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ModuleThemeSource {
+    /// Download the image from a remote URL (checked against the module's
+    /// network permissions).
     Url { url: String },
+    /// Read the image from a path inside the module directory (path-traversal
+    /// protected).
     File { path: String },
 }
 
+/// Input for [`module_theme_add`].
 #[derive(Debug, Deserialize)]
 pub struct ModuleThemeAddInput {
+    /// The image source.
     pub source: ModuleThemeSource,
+    /// Optional preferred base name for the stored file.
     #[serde(default)]
     pub name: Option<String>,
 }
 
+/// Result of [`module_theme_add`], describing the stored image.
 #[derive(Debug, Serialize)]
 pub struct ModuleThemeAddResult {
+    /// Row id in the `theme_files` table, usable in `lumen-module://__theme/id/{id}`.
     pub id: i64,
+    /// Final file name on disk (without directory).
     pub name: String,
+    /// Absolute path to the stored image file.
     pub path: String,
+    /// Lowercase file extension including the leading dot.
     pub extension: String,
 }
 
+/// Tauri command: imports an image into the shared themes store for a module.
+///
+/// # Frontend API
+///
+/// ```text
+/// invoke("module_theme_add", { moduleId, input })
+/// ```
+///
+/// The module must exist and be enabled. For URL sources the download is
+/// subject to the module's network permissions and a size cap; for file sources
+/// the path is scoped to the module directory. The image is content-hashed so
+/// duplicate imports return the existing entry.
+///
+/// # Errors
+///
+/// Returns an error when the module is missing/disabled, its manifest cannot be
+/// loaded, the source is unauthorized or outside the module directory, the
+/// download fails, the image type is unsupported, the size cap is exceeded, or
+/// any filesystem/database operation fails.
 #[tauri::command]
 pub async fn module_theme_add(
     app: AppHandle,
@@ -177,11 +228,13 @@ pub async fn module_theme_add(
     })
 }
 
+/// Returns `true` if `ext` (with or without a leading dot) is an image type.
 fn is_image_ext(ext: &str) -> bool {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
     IMAGE_EXTS.contains(&ext.as_str())
 }
 
+/// Maps an HTTP `Content-Type` to a file extension, ignoring parameters.
 fn mime_to_ext(content_type: Option<&str>) -> Option<String> {
     let ct = content_type?.split(';').next()?.trim().to_ascii_lowercase();
     let ext = match ct.as_str() {
@@ -197,6 +250,7 @@ fn mime_to_ext(content_type: Option<&str>) -> Option<String> {
     Some(ext.to_string())
 }
 
+/// Extracts the lowercased extension (including the dot) from a URL path.
 fn url_extension(url: &str) -> Option<String> {
     let parsed = url::Url::parse(url).ok()?;
     let name = parsed.path().rsplit('/').next()?;
@@ -209,6 +263,9 @@ fn url_extension(url: &str) -> Option<String> {
     }
 }
 
+/// Derives a base file name (without extension) from a URL path.
+///
+/// Falls back to `"background"` when the URL has no usable name.
 fn url_stem(url: &str) -> String {
     let parsed = url::Url::parse(url).ok();
     let path = parsed.as_ref().map(|u| u.path()).unwrap_or(url);
@@ -224,6 +281,7 @@ fn url_stem(url: &str) -> String {
     }
 }
 
+/// Splits a file name into `(stem, extension)`, lowercasing the extension.
 fn split_name(name: &str) -> (String, String) {
     match name.rfind('.') {
         Some(dot) if dot > 0 => (name[..dot].to_string(), name[dot..].to_ascii_lowercase()),
@@ -231,6 +289,8 @@ fn split_name(name: &str) -> (String, String) {
     }
 }
 
+/// Replaces filesystem-unsafe characters in `name` with `-` and trims trailing
+/// dots/spaces. May return an empty string, which callers substitute.
 fn sanitize_filename(name: &str) -> String {
     let mut out = String::new();
     for ch in name.trim().chars() {
@@ -246,6 +306,7 @@ fn sanitize_filename(name: &str) -> String {
     out
 }
 
+/// Finds a non-colliding `(path, file_name)` in `dir` by appending ` (n)`.
 fn unique_destination(dir: &Path, name: &str, ext: &str) -> (PathBuf, String) {
     let mut candidate = format!("{name}{ext}");
     let mut n = 1;
