@@ -1221,6 +1221,28 @@ pub async fn media_get_file_info_by_path(
     Ok(rows.first().map(file_info_from_row))
 }
 
+/// Retrieves full media file info by database id.
+///
+/// # Tauri command (frontend API)
+///
+/// `invoke('media_get_file_info_by_id', { id })` resolves with
+/// `MediaFileInfo | null`. Unlike [`media_get_by_id`] (which returns a
+/// `SearchHit`), this returns the full record including size, folder and
+/// download status.
+///
+/// # Errors
+///
+/// Returns an error string if the database query fails.
+#[tauri::command]
+pub async fn media_get_file_info_by_id(
+    store: State<'_, MediaStore>,
+    id: i64,
+) -> Result<Option<MediaFileInfo>, String> {
+    let conn = store.conn.lock().await;
+    let rows = query_rows(&conn, "SELECT id, name, path, size, modified_at, extension, media_type, duration, artist, content, original_url, thumbnail_path, remote_thumbnail_url, download_status, folder FROM media_files WHERE id = ?1", &[&id])?;
+    Ok(rows.first().map(file_info_from_row))
+}
+
 /// Retrieves media file info by original URL (and optional canonical URL).
 ///
 /// # Tauri command (frontend API)
