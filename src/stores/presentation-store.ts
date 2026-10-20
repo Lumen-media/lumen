@@ -14,14 +14,24 @@ export interface PresentationStore {
   totalSlides: number;
   isActive: boolean;
   slides: PresentationSlide[];
+  isBlackout: boolean;
+  isWallpaper: boolean;
 
   loadPresentation: (filePath: string, options?: { initialSlide?: number }) => Promise<void>;
   setSlide: (index: number) => void;
   nextSlide: () => void;
   prevSlide: () => void;
+  setBlackout: (on: boolean) => void;
+  setWallpaper: (on: boolean) => void;
   clearPresentation: () => void;
   updateFromMediaWindow: (currentSlide: number, totalSlides: number) => void;
   setSlides: (slides: PresentationSlide[]) => void;
+}
+
+interface PresenterDisplayState {
+  wallpaper: boolean;
+  hideLyrics: boolean;
+  blackout: boolean;
 }
 
 export const usePresentationStore = create<PresentationStore>((set, get) => {
@@ -57,9 +67,51 @@ export const usePresentationStore = create<PresentationStore>((set, get) => {
       set({ isActive: false });
     });
 
+    const unlistenDisplayState = await listen<PresenterDisplayState>(
+      'presenter:display-state',
+      (event) => {
+        set({
+          isBlackout: event.payload.blackout,
+          isWallpaper: event.payload.wallpaper,
+        });
+      }
+    );
+
+    const unlistenRemoteNext = await listen('remote-slide-next', () => {
+      const { currentSlide, totalSlides } = get();
+      if (currentSlide < totalSlides - 1) {
+        emitToMedia('presentation:set-slide', { index: currentSlide + 1 });
+      }
+    });
+
+    const unlistenRemotePrev = await listen('remote-slide-prev', () => {
+      const { currentSlide } = get();
+      if (currentSlide > 0) {
+        emitToMedia('presentation:set-slide', { index: currentSlide - 1 });
+      }
+    });
+
+    const unlistenRemoteGoto = await listen<{ index: number }>('remote-slide-goto', (event) => {
+      get().setSlide(event.payload.index);
+    });
+
+    const unlistenRemoteBlackout = await listen<{ on: boolean }>('remote-blackout', (event) => {
+      get().setBlackout(event.payload.on);
+    });
+
+    const unlistenRemoteWallpaper = await listen<{ on: boolean }>('remote-wallpaper', (event) => {
+      get().setWallpaper(event.payload.on);
+    });
+
     unlisteners.push(unlistenSlideChanged);
     unlisteners.push(unlistenThumbnails);
     unlisteners.push(unlistenPresenterClosed);
+    unlisteners.push(unlistenDisplayState);
+    unlisteners.push(unlistenRemoteNext);
+    unlisteners.push(unlistenRemotePrev);
+    unlisteners.push(unlistenRemoteGoto);
+    unlisteners.push(unlistenRemoteBlackout);
+    unlisteners.push(unlistenRemoteWallpaper);
   }
 
   setupListeners();
@@ -71,6 +123,8 @@ export const usePresentationStore = create<PresentationStore>((set, get) => {
     totalSlides: 0,
     isActive: false,
     slides: [],
+    isBlackout: false,
+    isWallpaper: false,
 
     loadPresentation: async (filePath: string, options) => {
       const fileName = filePath.split(/[\\/]/).pop() ?? filePath;
@@ -106,6 +160,16 @@ export const usePresentationStore = create<PresentationStore>((set, get) => {
       }
     },
 
+    setBlackout: (on: boolean) => {
+      if (get().isBlackout === on) return;
+      emitToMedia('presenter:blackout-toggle', {});
+    },
+
+    setWallpaper: (on: boolean) => {
+      if (get().isWallpaper === on) return;
+      emitToMedia('presenter:wallpaper-toggle', {});
+    },
+
     clearPresentation: () => {
       emitToMedia('presentation:clear', {});
       set({
@@ -115,6 +179,8 @@ export const usePresentationStore = create<PresentationStore>((set, get) => {
         totalSlides: 0,
         isActive: false,
         slides: [],
+        isBlackout: false,
+        isWallpaper: false,
       });
     },
 
