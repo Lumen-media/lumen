@@ -787,6 +787,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             media::media_get_by_id,
             media::media_get_by_path,
             media::media_get_file_info_by_path,
+            media::media_get_file_info_by_id,
             media::media_get_file_info_by_original_url,
             media::media_delete,
             media::media_delete_folder,
