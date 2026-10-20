@@ -18,8 +18,8 @@ use crate::chat::store::{self, ChatMessage, decode_base64, validate_message_text
 use crate::devices::{
     AuthPayload, DeviceState, RegisterPayload, auth_fail_message, authenticate_device,
     deactivate_device_registration, device_deactivated_message, is_permission_allowed,
-    is_remote_access_enabled, map_event_permission, permission_denied_message, register_device,
-    remove_session, touch_session,
+    is_remote_access_enabled, map_event_permission, op_fail_message, op_ok_message,
+    permission_denied_message, register_device, remove_session, touch_session,
 };
 use crate::streaming::{
     StreamErrorPayload, WebRtcIceCandidatePayload, add_webrtc_ice_candidate, handle_mobile_offer,
@@ -362,6 +362,18 @@ async fn handle_external_connection(
                             )?);
                         } else if event_name.starts_with("chat_") {
                             let _ = store::send_chat_error(&sender, "no_permission");
+                        } else if event_name.starts_with("queue_") {
+                            let _ = sender.send(op_fail_message(
+                                "queue_op_fail",
+                                request_id_of(&value),
+                                "no_permission",
+                            )?);
+                        } else if is_presentation_event(event_name) {
+                            let _ = sender.send(op_fail_message(
+                                "presentation_op_fail",
+                                request_id_of(&value),
+                                "no_permission",
+                            )?);
                         } else {
                             let _ = sender.send(permission_denied_message(event_name)?);
                         }
@@ -383,6 +395,30 @@ async fn handle_external_connection(
                 }
 
                 if handle_chat_event(
+                    &app,
+                    &sender,
+                    &session.device_id,
+                    event_name,
+                    &value,
+                )
+                .await?
+                {
+                    continue;
+                }
+
+                if handle_queue_event(
+                    &app,
+                    &sender,
+                    &session.device_id,
+                    event_name,
+                    &value,
+                )
+                .await?
+                {
+                    continue;
+                }
+
+                if handle_presentation_event(
                     &app,
                     &sender,
                     &session.device_id,
@@ -1131,6 +1167,180 @@ async fn handle_chat_event(
                 "last_read_id": last_read_id,
             }));
 
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
+}
+
+/// Reports whether an event name belongs to the presentation family.
+fn is_presentation_event(event_name: &str) -> bool {
+    matches!(
+        event_name,
+        "slide_next" | "slide_prev" | "slide_goto" | "blackout" | "wallpaper"
+    )
+}
+
+/// Extracts the optional `request_id` correlation value from an inbound frame.
+fn request_id_of(value: &Value) -> &Value {
+    static NULL: Value = Value::Null;
+    value.get("request_id").unwrap_or(&NULL)
+}
+
+/// Handles a queue-control event from a remote device, returning `true` when
+/// it was recognised.
+///
+/// Translates the request into a Tauri event consumed by the desktop's queue
+/// store (which mutates SQLite and re-broadcasts `queue_sync`) and replies to
+/// the client with `queue_op_ok` / `queue_op_fail` echoing its `request_id`.
+async fn handle_queue_event(
+    app: &AppHandle,
+    sender: &mpsc::UnboundedSender<Message>,
+    _device_id: &str,
+    event_name: &str,
+    value: &Value,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let request_id = request_id_of(value).clone();
+
+    let emit_ack = |result: Result<(), &str>| -> Result<(), String> {
+        match result {
+            Ok(()) => sender.send(op_ok_message("queue_op_ok", &request_id)?).map_err(|e| e.to_string()),
+            Err(reason) => sender
+                .send(op_fail_message("queue_op_fail", &request_id, reason)?)
+                .map_err(|e| e.to_string()),
+        }
+    };
+
+    match event_name {
+        "queue_add" => {
+            let url = value.get("url").and_then(Value::as_str).unwrap_or("");
+            let media_id = value.get("media_id").and_then(Value::as_i64);
+            if url.is_empty() && media_id.is_none() {
+                emit_ack(Err("missing_url_or_media_id"))?;
+                return Ok(true);
+            }
+            app.emit(
+                "remote-queue-add",
+                json!({
+                    "url": if url.is_empty() { Value::Null } else { Value::String(url.to_string()) },
+                    "media_id": media_id,
+                    "position": value.get("position").and_then(Value::as_i64),
+                    "request_id": request_id,
+                }),
+            )
+            .map_err(|e| e.to_string())?;
+            Ok(true)
+        }
+        "queue_remove" => {
+            match value.get("id").and_then(Value::as_i64) {
+                Some(id) => {
+                    app.emit("remote-queue-remove", json!({ "id": id }))
+                        .map_err(|e| e.to_string())?;
+                    emit_ack(Ok(()))?;
+                }
+                None => emit_ack(Err("missing_id"))?,
+            }
+            Ok(true)
+        }
+        "queue_move" => {
+            let id = value.get("id").and_then(Value::as_i64);
+            let position = value.get("position").and_then(Value::as_i64);
+            match (id, position) {
+                (Some(id), Some(position)) => {
+                    app.emit("remote-queue-move", json!({ "id": id, "position": position }))
+                        .map_err(|e| e.to_string())?;
+                    emit_ack(Ok(()))?;
+                }
+                _ => emit_ack(Err("missing_id_or_position"))?,
+            }
+            Ok(true)
+        }
+        "queue_jump" => {
+            match value.get("id").and_then(Value::as_i64) {
+                Some(id) => {
+                    app.emit("remote-queue-jump", json!({ "id": id }))
+                        .map_err(|e| e.to_string())?;
+                    emit_ack(Ok(()))?;
+                }
+                None => emit_ack(Err("missing_id"))?,
+            }
+            Ok(true)
+        }
+        "queue_shuffle" => {
+            app.emit("remote-queue-shuffle", json!({})).map_err(|e| e.to_string())?;
+            emit_ack(Ok(()))?;
+            Ok(true)
+        }
+        "queue_clear" => {
+            app.emit("remote-queue-clear", json!({})).map_err(|e| e.to_string())?;
+            emit_ack(Ok(()))?;
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
+}
+
+/// Handles a presentation-control event from a remote device, returning `true`
+/// when it was recognised.
+///
+/// Translates the request into a Tauri event consumed by the desktop's
+/// presentation store and replies with `presentation_op_ok` /
+/// `presentation_op_fail` echoing the client's `request_id`.
+async fn handle_presentation_event(
+    app: &AppHandle,
+    sender: &mpsc::UnboundedSender<Message>,
+    _device_id: &str,
+    event_name: &str,
+    value: &Value,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let request_id = request_id_of(value).clone();
+
+    let emit_ack = |result: Result<(), &str>| -> Result<(), String> {
+        match result {
+            Ok(()) => sender
+                .send(op_ok_message("presentation_op_ok", &request_id)?)
+                .map_err(|e| e.to_string()),
+            Err(reason) => sender
+                .send(op_fail_message("presentation_op_fail", &request_id, reason)?)
+                .map_err(|e| e.to_string()),
+        }
+    };
+
+    match event_name {
+        "slide_next" => {
+            app.emit("remote-slide-next", json!({})).map_err(|e| e.to_string())?;
+            emit_ack(Ok(()))?;
+            Ok(true)
+        }
+        "slide_prev" => {
+            app.emit("remote-slide-prev", json!({})).map_err(|e| e.to_string())?;
+            emit_ack(Ok(()))?;
+            Ok(true)
+        }
+        "slide_goto" => match value.get("index").and_then(Value::as_i64) {
+            Some(index) => {
+                app.emit("remote-slide-goto", json!({ "index": index }))
+                    .map_err(|e| e.to_string())?;
+                emit_ack(Ok(()))?;
+                Ok(true)
+            }
+            None => {
+                emit_ack(Err("missing_index"))?;
+                Ok(true)
+            }
+        },
+        "blackout" => {
+            let on = value.get("on").and_then(Value::as_bool).unwrap_or(false);
+            app.emit("remote-blackout", json!({ "on": on }))
+                .map_err(|e| e.to_string())?;
+            emit_ack(Ok(()))?;
+            Ok(true)
+        }
+        "wallpaper" => {
+            let on = value.get("on").and_then(Value::as_bool).unwrap_or(false);
+            app.emit("remote-wallpaper", json!({ "on": on }))
+                .map_err(|e| e.to_string())?;
+            emit_ack(Ok(()))?;
             Ok(true)
         }
         _ => Ok(false),
