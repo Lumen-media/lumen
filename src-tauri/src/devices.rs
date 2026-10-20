@@ -23,7 +23,7 @@ use std::{
 use local_ip_address::local_ip;
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_tungstenite::tungstenite::Message;
@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS devices (
     permissions_media INTEGER NOT NULL DEFAULT 1,
     permissions_streaming INTEGER NOT NULL DEFAULT 0,
     permissions_chat INTEGER NOT NULL DEFAULT 0,
+    permissions_presentation INTEGER NOT NULL DEFAULT 0,
     registered_at INTEGER NOT NULL,
     last_connected_at INTEGER
 )
@@ -71,6 +72,9 @@ pub struct DevicePermissions {
     /// Participating in the live chat: send, files, history, reactions,
     /// typing and read markers.
     pub chat: bool,
+    /// Controlling the presentation stage: slide next/prev/goto, blackout and
+    /// wallpaper.
+    pub presentation: bool,
 }
 
 impl Default for DevicePermissions {
@@ -82,6 +86,7 @@ impl Default for DevicePermissions {
             media: true,
             streaming: false,
             chat: false,
+            presentation: false,
         }
     }
 }
@@ -252,6 +257,38 @@ pub struct RemoteSyncEnvelope {
     /// Event-specific data flattened into the top level of the JSON frame.
     #[serde(flatten)]
     pub payload: Value,
+}
+
+/// Correlation identifier attached by a remote client to a request it wants
+/// acknowledged. Echoed back verbatim in the matching `*_op_ok` / `*_op_fail`
+/// frame so the client can pair the response with its request.
+#[derive(Debug, Clone, Serialize)]
+pub struct OpAck {
+    /// Always the ack event name (for example `queue_op_ok`).
+    pub event: &'static str,
+    /// Correlation id copied from the originating request.
+    pub request_id: Value,
+}
+
+/// Builds a success acknowledgement frame (`{ event, request_id }`).
+pub fn op_ok_message(event: &'static str, request_id: &Value) -> Result<Message, String> {
+    json_message(&OpAck {
+        event,
+        request_id: request_id.clone(),
+    })
+}
+
+/// Builds a failure acknowledgement frame (`{ event, request_id, reason }`).
+pub fn op_fail_message(
+    event: &'static str,
+    request_id: &Value,
+    reason: &str,
+) -> Result<Message, String> {
+    json_message(&json!({
+        "event": event,
+        "request_id": request_id.clone(),
+        "reason": reason,
+    }))
 }
 
 /// Body of the `register` WebSocket message used to pair a new device.
@@ -587,8 +624,8 @@ pub fn remove_device(
 ///
 /// Frontend API: invoke `broadcast_remote_event` with an `envelope`
 /// (`{ event, ...payload }`) and an optional `requiredPermission` (one of
-/// `player`, `lyrics`, `bible`, `media`, `streaming`, `chat`). Sessions that
-/// lack the permission are skipped silently.
+/// `player`, `lyrics`, `bible`, `media`, `streaming`, `chat`,
+/// `presentation`). Sessions that lack the permission are skipped silently.
 ///
 /// # Errors
 ///
@@ -1056,8 +1093,8 @@ fn ensure_devices_table() -> Result<(), String> {
     Ok(())
 }
 
-/// Adds the `permissions_streaming` and `permissions_chat` columns to older
-/// databases that predate them.
+/// Adds the `permissions_streaming`, `permissions_chat` and
+/// `permissions_presentation` columns to older databases that predate them.
 fn ensure_devices_schema(connection: &Connection) -> Result<(), String> {
     let mut statement = connection
         .prepare("PRAGMA table_info(devices)")
@@ -1085,6 +1122,19 @@ fn ensure_devices_schema(connection: &Connection) -> Result<(), String> {
         connection
             .execute(
                 "ALTER TABLE devices ADD COLUMN permissions_chat INTEGER NOT NULL DEFAULT 0",
+                [],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
+    let has_permissions_presentation = columns
+        .iter()
+        .any(|c| c == "permissions_presentation");
+
+    if !has_permissions_presentation {
+        connection
+            .execute(
+                "ALTER TABLE devices ADD COLUMN permissions_presentation INTEGER NOT NULL DEFAULT 0",
                 [],
             )
             .map_err(|e| e.to_string())?;
@@ -1155,6 +1205,7 @@ fn load_devices_from_db() -> Result<HashMap<String, Device>, String> {
                 permissions_media,
                 permissions_streaming,
                 permissions_chat,
+                permissions_presentation,
                 registered_at,
                 last_connected_at
             FROM devices
@@ -1179,9 +1230,10 @@ fn load_devices_from_db() -> Result<HashMap<String, Device>, String> {
                     media: row.get::<_, i64>(10)? == 1,
                     streaming: row.get::<_, i64>(11)? == 1,
                     chat: row.get::<_, i64>(12)? == 1,
+                    presentation: row.get::<_, i64>(13)? == 1,
                 },
-                registered_at: row.get::<_, u64>(13)?,
-                last_connected_at: row.get(14)?,
+                registered_at: row.get::<_, u64>(14)?,
+                last_connected_at: row.get(15)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -1215,9 +1267,10 @@ fn insert_or_replace_device_in_db(device: &Device) -> Result<(), String> {
                 permissions_media,
                 permissions_streaming,
                 permissions_chat,
+                permissions_presentation,
                 registered_at,
                 last_connected_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
             "#,
             params![
                 device.device_id,
@@ -1233,6 +1286,7 @@ fn insert_or_replace_device_in_db(device: &Device) -> Result<(), String> {
                 i64::from(device.permissions.media),
                 i64::from(device.permissions.streaming),
                 i64::from(device.permissions.chat),
+                i64::from(device.permissions.presentation),
                 device.registered_at,
                 device.last_connected_at,
             ],
@@ -1295,6 +1349,11 @@ pub fn map_event_permission(event: &str) -> Option<&'static str> {
         | "webrtc_ice_candidate"
         | "mobile_offer" => Some("streaming"),
         "chat_send" | "chat_file_send" | "chat_history" | "chat_reaction" | "chat_typing" | "chat_read" => Some("chat"),
+        "queue_add" | "queue_remove" | "queue_move" | "queue_jump" | "queue_shuffle"
+        | "queue_clear" => Some("player"),
+        "slide_next" | "slide_prev" | "slide_goto" | "blackout" | "wallpaper" => {
+            Some("presentation")
+        }
         _ => None,
     }
 }
@@ -1321,6 +1380,7 @@ pub fn is_permission_allowed(permissions: &DevicePermissions, permission: &str) 
         "media" => permissions.media,
         "streaming" => permissions.streaming,
         "chat" => permissions.chat,
+        "presentation" => permissions.presentation,
         _ => false,
     }
 }
