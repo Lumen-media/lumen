@@ -7,6 +7,7 @@ export interface DevicePermissions {
   bible: boolean;
   media: boolean;
   streaming: boolean;
+  chat: boolean;
 }
 
 export interface Device {
