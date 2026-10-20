@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import { create } from 'zustand';
 import { queueDbService } from '@/services/queue-db-service';
+import { type QueueSyncItem, remoteSyncService } from '@/services/remote-sync-service';
 import type { FileInfo } from '@/services/types';
 import { urlMediaService } from '@/services/url-media-service';
 
@@ -15,7 +16,7 @@ interface QueueStore {
   loadFromDb: () => Promise<void>;
   addToQueue: (file: FileInfo) => Promise<void>;
   playNext: (file: FileInfo) => Promise<void>;
-  addUrlToQueue: (url: string, duration?: number) => Promise<void>;
+  addUrlToQueue: (url: string, duration?: number) => Promise<number | undefined>;
   playUrlNext: (url: string, duration?: number) => Promise<void>;
   removeFromQueue: (id: number) => Promise<void>;
   markPlayed: (id: number) => Promise<void>;
@@ -76,11 +77,12 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     const already = await queueDbService.exists(file.path);
     if (already) {
       toast.info('Already in queue', { description: file.name });
-      return;
+      return undefined;
     }
 
     const id = await queueDbService.addToQueue(file);
     set((s) => ({ queue: [...s.queue, { id, file, played: false }] }));
+    return id;
   },
 
   playUrlNext: async (url, duration) => {
@@ -181,3 +183,60 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     }));
   },
 }));
+
+/**
+ * Returns the path of the media item currently loaded in the player, so the
+ * queue sync can compute `current_index`. Registered by the player store at
+ * import time to avoid a circular dependency between the two stores.
+ */
+let currentPathProvider: () => string | null = () => null;
+
+export function setQueueCurrentPathProvider(provider: () => string | null) {
+  currentPathProvider = provider;
+}
+
+function toSyncItem(item: QueueItem, currentPath: string | null): QueueSyncItem {
+  return {
+    id: item.id,
+    title: item.file.title ?? item.file.name,
+    artist: item.file.artist,
+    type: item.file.extension,
+    is_playing: currentPath !== null && item.file.path === currentPath,
+    is_played: item.played,
+    duration: item.file.duration,
+  };
+}
+
+/**
+ * Broadcasts the current queue to remote clients. Coalesced with a trailing
+ * debounce so bursty mutations (drag-drop reorders) collapse into one frame.
+ *
+ * # Errors
+ * Swallowed: the caller is a UI mutation that must not fail because the
+ * remote channel is unavailable.
+ */
+let queueSyncTimeout: ReturnType<typeof setTimeout> | null = null;
+const QUEUE_SYNC_DEBOUNCE_MS = 300;
+
+export function broadcastQueueSync(delay = QUEUE_SYNC_DEBOUNCE_MS): void {
+  if (queueSyncTimeout) {
+    clearTimeout(queueSyncTimeout);
+  }
+  queueSyncTimeout = setTimeout(() => {
+    queueSyncTimeout = null;
+    const currentPath = currentPathProvider();
+    const items = useQueueStore.getState().queue.map((item) => toSyncItem(item, currentPath));
+    const currentIndex = currentPath
+      ? items.findIndex((item) => item.is_playing)
+      : -1;
+    void remoteSyncService
+      .broadcastRaw({ event: 'queue_sync', items, current_index: currentIndex }, 'player')
+      .catch(() => {});
+  }, delay);
+}
+
+useQueueStore.subscribe((state, previous) => {
+  if (state.queue !== previous.queue) {
+    broadcastQueueSync();
+  }
+});
