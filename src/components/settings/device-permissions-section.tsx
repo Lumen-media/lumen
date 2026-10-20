@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, ImagePlus, Loader2, MessageCircle, MonitorPlay, Music, Smartphone, Trash2 } from 'lucide-react';
+import { BookOpen, ImagePlus, Loader2, MessageCircle, MonitorPlay, Music, Presentation, Smartphone, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@/lib/i18n';
@@ -23,6 +23,7 @@ const PERMISSION_FEATURES: Array<{
     { id: 'media', label: 'Media', icon: <ImagePlus className="size-3.5" /> },
     { id: 'streaming', label: 'Streaming', icon: <MonitorPlay className="size-3.5" /> },
     { id: 'chat', label: 'Chat', icon: <MessageCircle className="size-3.5" /> },
+    { id: 'presentation', label: 'Presentation', icon: <Presentation className="size-3.5" /> },
   ];
 
 export function DevicePermissionsSection() {
