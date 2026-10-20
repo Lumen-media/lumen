@@ -12,7 +12,7 @@ import { urlMediaService } from '@/services/url-media-service';
 import { useDownloadStore } from '@/stores/download-store';
 import { usePresentationStore } from '@/stores/presentation-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
-import { useQueueStore } from '@/stores/queue-store';
+import { broadcastQueueSync, setQueueCurrentPathProvider, useQueueStore } from '@/stores/queue-store';
 
 interface PlayerStore {
   localTime: number;
@@ -62,6 +62,9 @@ let seekCommitTimeout: ReturnType<typeof setTimeout> | null = null;
 let pendingMute = false;
 const SOCKET_COMMIT_DEBOUNCE_MS = 150;
 const LIVE_STREAM_MIN_DURATION_SECONDS = 24 * 60 * 60;
+const PLAYER_TICK_INTERVAL_MS = 1000;
+
+setQueueCurrentPathProvider(() => usePlayerStore.getState().currentFilePath);
 
 let audioElement: HTMLAudioElement | null = null;
 let audioBlobUrl: string | null = null;
@@ -326,7 +329,82 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         currentLyricTotalSlides: event.payload.totalSlides,
       });
       void broadcastPlayerSync(get, 'lyric_slide_changed');
+      void broadcastPresentationSync(get);
     });
+
+    const enqueueRemoteAdd = async (
+      payload: { url: string | null; media_id: number | null; position: number | null }
+    ) => {
+      try {
+        if (payload.media_id !== null) {
+          const file = await mediaDbService.getFileInfoById(payload.media_id);
+          if (!file) return;
+          await useQueueStore.getState().addToQueue(file);
+        } else if (payload.url) {
+          const id = await useQueueStore.getState().addUrlToQueue(payload.url);
+          if (payload.position !== null && id !== undefined) {
+            await useQueueStore.getState().reorderQueue(
+              reorderForInsert(useQueueStore.getState().queue, payload.position)
+            );
+          }
+        }
+      } catch {}
+      broadcastQueueSync(0);
+    };
+
+    const unlistenRemoteQueueAdd = listen<{
+      url: string | null;
+      media_id: number | null;
+      position: number | null;
+    }>('remote-queue-add', (event) => {
+      void enqueueRemoteAdd({
+        url: event.payload.url ?? null,
+        media_id: event.payload.media_id ?? null,
+        position: event.payload.position ?? null,
+      });
+    });
+
+    const unlistenRemoteQueueRemove = listen<{ id: number }>('remote-queue-remove', (event) => {
+      void useQueueStore.getState().removeFromQueue(event.payload.id).catch(() => {});
+      broadcastQueueSync(0);
+    });
+
+    const unlistenRemoteQueueMove = listen<{ id: number; position: number }>(
+      'remote-queue-move',
+      (event) => {
+        const { queue } = useQueueStore.getState();
+        const from = queue.findIndex((item) => item.id === event.payload.id);
+        if (from === -1) return;
+        const reordered = [...queue];
+        const [moved] = reordered.splice(from, 1);
+        reordered.splice(Math.max(0, Math.min(event.payload.position, reordered.length)), 0, moved);
+        void useQueueStore.getState().reorderQueue(reordered.map((item) => item.id)).catch(() => {});
+        broadcastQueueSync(0);
+      }
+    );
+
+    const unlistenRemoteQueueJump = listen<{ id: number }>('remote-queue-jump', (event) => {
+      const item = useQueueStore.getState().queue.find((entry) => entry.id === event.payload.id);
+      if (item) {
+        void get().loadFile(item.file.path);
+      }
+    });
+
+    const unlistenRemoteQueueShuffle = listen('remote-queue-shuffle', () => {
+      void useQueueStore.getState().shuffleQueue().catch(() => {});
+      broadcastQueueSync(0);
+    });
+
+    const unlistenRemoteQueueClear = listen('remote-queue-clear', () => {
+      void useQueueStore.getState().clearQueue().catch(() => {});
+      broadcastQueueSync(0);
+    });
+
+    const tickTimer = setInterval(() => {
+      if (get().isPlaying) {
+        void broadcastPlayerTick(get);
+      }
+    }, PLAYER_TICK_INTERVAL_MS);
 
     return () => {
       unlistenProgress.then((f) => f());
@@ -341,6 +419,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       unlistenPlaybackError.then((f) => f());
       unlistenLoadLyric.then((f) => f());
       unlistenLyricSlideChanged.then((f) => f());
+      unlistenRemoteQueueAdd.then((f) => f());
+      unlistenRemoteQueueRemove.then((f) => f());
+      unlistenRemoteQueueMove.then((f) => f());
+      unlistenRemoteQueueJump.then((f) => f());
+      unlistenRemoteQueueShuffle.then((f) => f());
+      unlistenRemoteQueueClear.then((f) => f());
+      clearInterval(tickTimer);
     };
   },
 
@@ -676,6 +761,76 @@ function nowUnixSeconds() {
   return Math.floor(Date.now() / 1000);
 }
 
+function nowUnixMillis() {
+  return Date.now();
+}
+
+/**
+ * Returns a new id order where `id` has been moved to `position`, or the
+ * original order when `id` is not present.
+ */
+function reorderForInsert(queue: Array<{ id: number }>, position: number): number[] {
+  const ids = queue.map((item) => item.id);
+  if (ids.length === 0) return ids;
+  const last = ids.pop() as number;
+  const clamped = Math.max(0, Math.min(position, ids.length));
+  ids.splice(clamped, 0, last);
+  return ids;
+}
+
+async function broadcastPlayerTick(get: () => PlayerStore): Promise<void> {
+  const state = get();
+  await remoteSyncService
+    .broadcastRaw(
+      {
+        event: 'player_tick',
+        position: state.localTime,
+        duration: state.localDuration,
+        is_playing: state.isPlaying,
+        sent_at_ms: nowUnixMillis(),
+      },
+      'player'
+    )
+    .catch(() => {});
+}
+
+async function broadcastPresentationSync(get: () => PlayerStore): Promise<void> {
+  const state = get();
+  const presentation = usePresentationStore.getState();
+
+  let kind: 'lyrics' | 'presentation' | 'module' | 'none' = 'none';
+  let slideIndex = 0;
+  let totalSlides = 0;
+  let currentDeck: string | undefined;
+
+  if (state.currentLyricPath) {
+    kind = 'lyrics';
+    slideIndex = state.currentLyricSlideIndex;
+    totalSlides = state.currentLyricTotalSlides;
+    currentDeck = state.currentLyricPath;
+  } else if (presentation.isActive) {
+    kind = 'presentation';
+    slideIndex = presentation.currentSlide;
+    totalSlides = presentation.totalSlides;
+    currentDeck = presentation.filePath ?? undefined;
+  }
+
+  await remoteSyncService
+    .broadcastRaw(
+      {
+        event: 'presentation_sync',
+        kind,
+        current_deck: currentDeck,
+        slide_index: slideIndex,
+        total_slides: totalSlides,
+        is_black: presentation.isBlackout,
+        is_wallpaper: presentation.isWallpaper,
+      },
+      'presentation'
+    )
+    .catch(() => {});
+}
+
 async function broadcastPlayerSync(get: () => PlayerStore, action?: string): Promise<void> {
   const state = get();
   await remoteSyncService.broadcast(
@@ -711,3 +866,27 @@ async function broadcastPlayerSync(get: () => PlayerStore, action?: string): Pro
     undefined
   );
 }
+
+usePlayerStore.subscribe((state, previous) => {
+  if (
+    state.currentFilePath !== previous.currentFilePath ||
+    state.isPlaying !== previous.isPlaying
+  ) {
+    broadcastQueueSync(0);
+  }
+});
+
+usePresentationStore.subscribe((state, previous) => {
+  if (
+    state.currentSlide !== previous.currentSlide ||
+    state.totalSlides !== previous.totalSlides ||
+    state.isActive !== previous.isActive ||
+    state.filePath !== previous.filePath ||
+    state.isBlackout !== previous.isBlackout ||
+    state.isWallpaper !== previous.isWallpaper
+  ) {
+    void broadcastPresentationSync(() => usePlayerStore.getState());
+  }
+});
+
+
