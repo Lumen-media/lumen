@@ -8,6 +8,7 @@ export interface DevicePermissions {
   media: boolean;
   streaming: boolean;
   chat: boolean;
+  presentation: boolean;
 }
 
 export interface Device {
