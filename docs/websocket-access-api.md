@@ -197,10 +197,47 @@ Connection remains open.
 
 | Permission | Protected Events |
 |---|---|
-| `player` | `play_pause`, `stop`, `next`, `previous`, `mute`, `set_volume`, `seek`, `set_loop`, `load_url`, `metadata`, `progress` |
+| `player` | `play_pause`, `stop`, `next`, `previous`, `mute`, `set_volume`, `seek`, `set_loop`, `load_url`, `metadata`, `progress`, `queue_add`, `queue_remove`, `queue_move`, `queue_jump`, `queue_shuffle`, `queue_clear` |
 | `lyrics` | `load_lyric` |
 | `bible` | reserved |
 | `media` | reserved |
+| `streaming` | `subscribe_stream`, `unsubscribe_stream`, `webrtc_answer`, `webrtc_ice_candidate`, `mobile_offer` |
+| `chat` | `chat_send`, `chat_file_send`, `chat_history`, `chat_reaction`, `chat_typing`, `chat_read` |
+| `presentation` | `slide_next`, `slide_prev`, `slide_goto`, `blackout`, `wallpaper` |
+
+### Queue & Presentation Operation Acks
+
+Queue and presentation control events accept an optional `request_id` and are
+answered with a matching acknowledgement frame echoing it verbatim:
+
+```json
+{ "event": "queue_add", "request_id": 7, "url": "https://..." }
+{ "event": "queue_op_ok", "request_id": 7 }
+```
+
+`queue_add` accepts either `url` (resolved via the media resolver) or
+`media_id` (an id from the media pool / `media_files`, added verbatim). An
+optional `position` inserts at that index. Supply one of `url` / `media_id`;
+using both is an error.
+
+On failure a `reason` is included instead:
+
+```json
+{ "event": "queue_op_fail", "request_id": 7, "reason": "no_permission" }
+```
+
+Presentation events use `presentation_op_ok` / `presentation_op_fail`. Failure
+reasons: `no_permission`, `missing_url_or_media_id`, `missing_id`,
+`missing_id_or_position`, `missing_index`.
+
+### Sync Events Pushed To Devices
+
+| Event | Permission | Payload |
+|---|---|---|
+| `player_sync` | none | Full player state (`media`, `playback`, `state`, `lyric`) |
+| `player_tick` | `player` | `{ position, duration, is_playing, sent_at_ms }` — re-anchor sent ~1s during playback |
+| `queue_sync` | `player` | `{ items: [{ id, title, artist, type, is_playing, is_played, duration }], current_index }` |
+| `presentation_sync` | `presentation` | `{ kind, current_deck, slide_index, total_slides, is_black, is_wallpaper }` |
 
 ---
 
