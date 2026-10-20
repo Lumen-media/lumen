@@ -270,6 +270,11 @@ class MediaDbService {
     return raw ? toFileInfo(raw) : null;
   }
 
+  async getFileInfoById(id: number): Promise<FileInfo | null> {
+    const raw = await invoke<RawFileInfo | null>('media_get_file_info_by_id', { id });
+    return raw ? toFileInfo(raw) : null;
+  }
+
   async getFileInfoByOriginalUrl(
     originalUrl: string,
     canonicalUrl?: string
