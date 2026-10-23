@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { ipc } from '@/lib/ipc';
 
 export const MAX_MESSAGE_LENGTH = 4000;
 
@@ -48,15 +48,15 @@ export interface ChatReactionResult {
 
 class ChatService {
   async getMessages(limit?: number): Promise<ChatMessage[]> {
-    return invoke<ChatMessage[]>('get_chat_messages', limit != null ? { limit } : {});
+    return ipc('get_chat_messages', limit != null ? { limit } : {});
   }
 
   async sendMessage(text: string, replyToId?: number): Promise<ChatMessage> {
-    return invoke<ChatMessage>('send_chat_message', { text, replyToId: replyToId ?? null });
+    return ipc('send_chat_message', { text, replyToId: replyToId ?? null });
   }
 
   async sendFile(filePath: string, text?: string, replyToId?: number): Promise<ChatMessage> {
-    return invoke<ChatMessage>('send_chat_file', {
+    return ipc('send_chat_file', {
       filePath,
       text: text ?? null,
       replyToId: replyToId ?? null,
@@ -64,27 +64,27 @@ class ChatService {
   }
 
   async sendReaction(messageId: number, emoji: string): Promise<ChatReactionResult> {
-    return invoke<ChatReactionResult>('send_chat_reaction', { messageId, emoji });
+    return ipc('send_chat_reaction', { messageId, emoji });
   }
 
   async getConfig(): Promise<ChatConfig> {
-    return invoke<ChatConfig>('get_chat_config');
+    return ipc('get_chat_config');
   }
 
   async setConfig(config: ChatConfig): Promise<void> {
-    await invoke('set_chat_config', { config });
+    await ipc('set_chat_config', { config });
   }
 
   async clearHistory(): Promise<void> {
-    await invoke('clear_chat_history');
+    await ipc('clear_chat_history');
   }
 
   async sendTyping(isTyping: boolean): Promise<void> {
-    await invoke('send_chat_typing', { isTyping });
+    await ipc('send_chat_typing', { isTyping });
   }
 
   async deleteMessage(messageId: number): Promise<void> {
-    await invoke('delete_chat_message', { messageId });
+    await ipc('delete_chat_message', { messageId });
   }
 }
 

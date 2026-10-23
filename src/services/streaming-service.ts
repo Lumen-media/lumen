@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { ipc } from '@/lib/ipc';
 
 export interface StreamingConfig {
   preview_enabled: boolean;
@@ -24,31 +24,31 @@ export interface StreamingStatus {
 
 class StreamingService {
   async getConfig(): Promise<StreamingConfig> {
-    return invoke<StreamingConfig>('get_streaming_config');
+    return ipc('get_streaming_config');
   }
 
   async updateConfig(config: StreamingConfig): Promise<StreamingConfig> {
-    return invoke<StreamingConfig>('update_streaming_config', { config });
+    return ipc('update_streaming_config', { config });
   }
 
   async getStatus(): Promise<StreamingStatus> {
-    return invoke<StreamingStatus>('get_streaming_status');
+    return ipc('get_streaming_status');
   }
 
   async setContentProtected(isProtected: boolean): Promise<void> {
-    await invoke('set_stream_content_protected', { isProtected });
+    await ipc('set_stream_content_protected', { isProtected });
   }
 
   async setMasterVolume(volume: number): Promise<number> {
-    return invoke<number>('set_stream_master_volume', { volume });
+    return ipc('set_stream_master_volume', { volume });
   }
 
   async setDeviceVolume(deviceId: string, volume: number): Promise<number> {
-    return invoke<number>('set_stream_device_volume', { deviceId, volume });
+    return ipc('set_stream_device_volume', { deviceId, volume });
   }
 
   async pushBlank(): Promise<void> {
-    await invoke('push_stream_blank');
+    await ipc('push_stream_blank');
   }
 }
 

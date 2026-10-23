@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { ipc } from '@/lib/ipc';
 import type { FileInfo } from './types';
 
 export type UrlMediaMetadata = {
@@ -56,7 +56,7 @@ class UrlMediaService {
       throw new Error('Only YouTube URLs are supported');
     }
 
-    return invoke<UrlMediaMetadata>('resolve_youtube', { url });
+    return ipc('resolve_youtube', { url });
   }
 
   async createYouTubeFileInfo(url: string, duration?: number): Promise<FileInfo> {

@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { ipc, type ModuleListEntry } from '@/lib/ipc';
 import { createHost } from './host';
 import { importModuleCode, readModuleEntry } from './module-loader';
 import { useModuleStore } from './store';
@@ -52,7 +52,7 @@ function installGlobalErrorHandlers() {
 
 function scopeModuleStyles(moduleId: string) {
   const styleEl = document.head.querySelector<HTMLStyleElement>(
-    `style[data-module="${CSS.escape(moduleId)}"]`,
+    `style[data-module="${CSS.escape(moduleId)}"]`
   );
   if (styleEl?.textContent) {
     styleEl.textContent = `@scope ([data-module-scope="${moduleId}"]) {\n${styleEl.textContent}\n}`;
@@ -72,12 +72,10 @@ export async function bootModules() {
     globalHandlersInstalled = true;
   }
 
-  let manifests: Array<{ manifest: ModuleManifest; source: string }> = [];
+  let manifests: ModuleListEntry[] = [];
 
   try {
-    manifests = await invoke<Array<{ manifest: ModuleManifest; source: string }>>(
-      'module_list_installed',
-    );
+    manifests = await ipc('module_list_installed');
   } catch (err) {
     console.error('[injector] failed to list modules:', err);
     return;
@@ -102,18 +100,21 @@ function startModuleEventListeners() {
   if (eventListenersStarted) return;
   eventListenersStarted = true;
 
-  listen<{ manifest: ModuleManifest; source: string; enabled: boolean }>('module:installed', (event) => {
-    const { manifest, source } = event.payload;
-    const store = useModuleStore.getState();
-    if (store.modules.has(manifest.id)) return;
-    store.registerModule({
-      manifest,
-      status: 'loading',
-      errorCount: 0,
-      source: source as 'bundled' | 'store' | 'sideload' | 'dev',
-    });
-    loadModule(manifest);
-  });
+  listen<{ manifest: ModuleManifest; source: string; enabled: boolean }>(
+    'module:installed',
+    (event) => {
+      const { manifest, source } = event.payload;
+      const store = useModuleStore.getState();
+      if (store.modules.has(manifest.id)) return;
+      store.registerModule({
+        manifest,
+        status: 'loading',
+        errorCount: 0,
+        source: source as 'bundled' | 'store' | 'sideload' | 'dev',
+      });
+      loadModule(manifest);
+    }
+  );
 
   listen<string>('module:reload', (event) => {
     reloadModule(event.payload);
@@ -155,11 +156,11 @@ export async function loadModule(manifest: ModuleManifest) {
     try {
       mod = await importModuleCode(
         code,
-        `lumen-module://${manifest.id}/${manifest.entry || 'main.js'}`,
+        `lumen-module://${manifest.id}/${manifest.entry || 'main.js'}`
       );
     } catch (err) {
       throw new Error(
-        `failed to evaluate module ${manifest.id}: ${err instanceof Error ? err.message : String(err)}`,
+        `failed to evaluate module ${manifest.id}: ${err instanceof Error ? err.message : String(err)}`
       );
     }
     const PluginClass = (mod as { default: new () => LumenPlugin }).default;
@@ -180,11 +181,7 @@ export async function loadModule(manifest: ModuleManifest) {
     store.setStatus(manifest.id, 'active');
   } catch (err) {
     console.error(`[injector] failed to load module ${manifest.id}:`, err);
-    store.setStatus(
-      manifest.id,
-      'faulted',
-      err instanceof Error ? err.message : String(err),
-    );
+    store.setStatus(manifest.id, 'faulted', err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -212,7 +209,7 @@ export async function unloadModule(id: string) {
 
   loaded.delete(id);
   try {
-    await invoke('module_data_sqlite_close', { moduleId: id });
+    await ipc('module_data_sqlite_close', { moduleId: id });
   } catch {
     // connection may not have been opened
   }
@@ -235,9 +232,7 @@ export async function reloadModule(id: string) {
  * loads it. `devMode` keeps it sideloaded so it survives updates.
  */
 export async function installModule(path: string, devMode = false) {
-  const result = await invoke<{ manifest: ModuleManifest; source: string; enabled: boolean }>(
-    'module_install', { path, devMode }
-  );
+  const result = await ipc('module_install', { path, devMode });
   if (!result) return;
 
   useModuleStore.getState().registerModule({
@@ -252,12 +247,12 @@ export async function installModule(path: string, devMode = false) {
 /** Unloads the module and marks it disabled in the persisted module list. */
 export async function disableModule(id: string) {
   await unloadModule(id);
-  await invoke('module_disable', { id });
+  await ipc('module_disable', { id });
 }
 
 /** Clears the disabled flag and loads the module again. */
 export async function enableModule(id: string) {
-  await invoke('module_enable', { id });
+  await ipc('module_enable', { id });
   const record = useModuleStore.getState().modules.get(id);
   if (record) {
     useModuleStore.getState().setStatus(id, 'loading');
@@ -268,7 +263,7 @@ export async function enableModule(id: string) {
 /** Unloads the module and removes it and its data from disk. */
 export async function uninstallModule(id: string) {
   await unloadModule(id);
-  await invoke('module_uninstall', { id });
+  await ipc('module_uninstall', { id });
   useModuleStore.getState().removeModule(id);
 }
 
@@ -284,19 +279,18 @@ function recordError(id: string) {
   if (entry.errorTimestamps.length >= CRASH_THRESHOLD) {
     console.error(`[injector] crash quota exceeded for ${id}, auto-disabling`);
     unloadModule(id).then(() => {
-      useModuleStore.getState().setStatus(
-        id,
-        'faulted',
-        `Auto-disabled: ${CRASH_THRESHOLD} errors in ${CRASH_WINDOW_MS / 1000}s`,
-      );
+      useModuleStore
+        .getState()
+        .setStatus(
+          id,
+          'faulted',
+          `Auto-disabled: ${CRASH_THRESHOLD} errors in ${CRASH_WINDOW_MS / 1000}s`
+        );
     });
   }
 }
 
-function wrapCallback<T extends (...args: never[]) => unknown>(
-  id: string,
-  fn: T,
-): T {
+function wrapCallback<T extends (...args: never[]) => unknown>(id: string, fn: T): T {
   return ((...args: Parameters<T>) => {
     try {
       return fn(...args);
@@ -322,7 +316,7 @@ function wrapDisposable(id: string, d: Disposable): Disposable {
 
 function wrapHostForTracking(
   host: ReturnType<typeof createHost> extends Promise<infer T> ? T : never,
-  disposables: Disposable[],
+  disposables: Disposable[]
 ) {
   const id = host.meta.id;
 
@@ -344,9 +338,7 @@ function wrapHostForTracking(
     commands: {
       ...host.commands,
       add(spec: Parameters<typeof host.commands.add>[0]) {
-        const wrappedSpec = spec.run
-          ? { ...spec, run: wrapCallback(id, spec.run) }
-          : spec;
+        const wrappedSpec = spec.run ? { ...spec, run: wrapCallback(id, spec.run) } : spec;
         return track(host.commands.add(wrappedSpec));
       },
     },

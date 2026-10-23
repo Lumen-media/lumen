@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import { join } from '@tauri-apps/api/path';
+import { ipc } from '@/lib/ipc';
 import type { MediaType } from './types';
 
 export interface AppPaths {
@@ -12,7 +12,7 @@ let _paths: AppPaths | null = null;
 
 export async function getAppPaths(): Promise<AppPaths> {
   if (!_paths) {
-    _paths = await invoke<AppPaths>('get_app_paths');
+    _paths = await ipc('get_app_paths');
   }
   return _paths;
 }
