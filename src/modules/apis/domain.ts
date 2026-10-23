@@ -1,7 +1,7 @@
-import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type React from 'react';
+import { ipc } from '@/lib/ipc';
 import { lumenUrl } from '@/services/lumen-url';
 import { lyricService } from '@/services/lyric-service';
 import { mediaDbService } from '@/services/media-db-service';
@@ -359,7 +359,10 @@ async function hideMainForOverlay() {
   if (mainHiddenForOverlay) return;
   const main = await WebviewWindow.getByLabel('main').catch(() => null);
   if (!main) return;
-  const ok = await main.hide().then(() => true).catch(() => false);
+  const ok = await main
+    .hide()
+    .then(() => true)
+    .catch(() => false);
   if (ok) mainHiddenForOverlay = true;
 }
 
@@ -376,7 +379,7 @@ async function restoreMainAfterOverlay() {
 async function ensureOverlayWindow() {
   let win = await WebviewWindow.getByLabel('module-overlay-window').catch(() => null);
   if (!win) {
-    await invoke('create_overlay_window', {
+    await ipc('create_overlay_window', {
       label: 'module-overlay-window',
       title: 'Module Overlay',
       route: '/module-overlay-window',
@@ -421,8 +424,9 @@ async function ensureOverlayWindow() {
 }
 
 function applyOverlayWindowOptions(win: WebviewWindow, props: unknown) {
-  const cfg = (props as { windowConfig?: { maximized?: boolean; fullscreen?: boolean } } | undefined)
-    ?.windowConfig;
+  const cfg = (
+    props as { windowConfig?: { maximized?: boolean; fullscreen?: boolean } } | undefined
+  )?.windowConfig;
   if (!cfg) return;
   if (cfg.maximized || cfg.fullscreen) {
     win.maximize().catch(() => {});
@@ -436,17 +440,18 @@ function syncSurfaceProjection(moduleId: string): Promise<void> {
   const state = useModuleStore.getState().getSurfaceWindow(moduleId);
   if (!state) return Promise.resolve();
   const label = surfaceWindowLabel(moduleId);
-  return invoke('set_surface_state', {
+  return ipc('set_surface_state', {
     label,
     stateJson: JSON.stringify(state),
-  }).then(() => undefined).catch(() => {});
+  }).catch(() => {});
 }
 
 const surfaceWindowInflight = new Map<string, Promise<{ created: boolean }>>();
 
 async function applySurfaceWindowOptions(win: WebviewWindow, options?: SurfaceWindowOptions) {
   if (options?.title) await win.setTitle(options.title).catch(() => {});
-  if (options?.decorations !== undefined) await win.setDecorations(options.decorations).catch(() => {});
+  if (options?.decorations !== undefined)
+    await win.setDecorations(options.decorations).catch(() => {});
   if (options?.resizable !== undefined) await win.setResizable(options.resizable).catch(() => {});
   if (options?.maximized || options?.fullscreen) await win.maximize().catch(() => {});
 }
@@ -479,7 +484,7 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
 
       timer = setTimeout(finish, 8000);
 
-      await invoke('create_surface_window', {
+      await ipc('create_surface_window', {
         label,
         title: options?.title ?? 'Module Window',
         route: '/module-surface-window',
@@ -655,7 +660,7 @@ export function createOverlayHostAPI(): OverlayHostAPI {
 async function ensureMediaWindow() {
   let win = await WebviewWindow.getByLabel('media-window').catch(() => null);
   if (!win) {
-    await invoke('create_window', { label: 'media-window', title: 'Media Player' }).catch(() => {});
+    await ipc('create_window', { label: 'media-window', title: 'Media Player' }).catch(() => {});
 
     await new Promise<void>((resolve) => {
       let settled = false;
@@ -741,7 +746,7 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
       const pending = pendingBackgrounds.get(key);
       if (pending) return pending;
 
-      const promise = invoke<ThemeAddResult>('module_theme_add', { moduleId, input }).finally(() => {
+      const promise = ipc('module_theme_add', { moduleId, input }).finally(() => {
         pendingBackgrounds.delete(key);
       });
       pendingBackgrounds.set(key, promise);
@@ -760,7 +765,7 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
       return { src: lumenUrl(src), type: profileBg.type, name: profileBg.name };
     },
     onDefaultBackgroundChange(handler) {
-      let lastSrc: string | null | undefined ;
+      let lastSrc: string | null | undefined;
 
       const fire = (
         bg: { src: string; type: 'theme' | 'image' | 'video'; name: string } | null
@@ -808,7 +813,3 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
     },
   };
 }
-
-
-
-

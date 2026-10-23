@@ -1,5 +1,4 @@
 import { useDraggable } from '@dnd-kit/core';
-import { invoke } from '@tauri-apps/api/core';
 import {
   Download,
   File,
@@ -29,6 +28,7 @@ import {
 import { getFileIcon } from '@/lib/file-icons';
 import { formatDate, formatFileSize } from '@/lib/format';
 import { useTranslation } from '@/lib/i18n';
+import { ipc } from '@/lib/ipc';
 import type { FileInfo, MediaType } from '@/services';
 import { lumenUrl } from '@/services/lumen-url';
 import { useDeleteFileStore } from '@/stores/delete-file-store';
@@ -142,12 +142,12 @@ export function FileListItem({
   onAddToQueue,
   isFocused,
 }: FileListItemProps) {
-    const { t } = useTranslation();
-    const { openDeleteDialog } = useDeleteFileStore();
+  const { t } = useTranslation();
+  const { openDeleteDialog } = useDeleteFileStore();
   const { startDownload, checkDeps, installDeps, dependencyStatus, openCookiesDialog } =
     useDownloadStore();
-const urlMedia = isUrlMedia(file);
-    const statusLabel = downloadStatusLabel(file, t);
+  const urlMedia = isUrlMedia(file);
+  const statusLabel = downloadStatusLabel(file, t);
   const fileSizeLabel = formatFileSize(file.size);
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -172,7 +172,7 @@ const urlMedia = isUrlMedia(file);
     if (urlMedia && file.downloadStatus !== 'downloaded') return;
     try {
       const folderPath = file.path.substring(0, file.path.lastIndexOf('\\'));
-      await invoke('open_folder', { path: folderPath });
+      await ipc('open_folder', { path: folderPath });
     } catch (error) {
       console.error('Failed to open folder:', error);
       toast.error('Failed to open folder');
@@ -193,7 +193,12 @@ const urlMedia = isUrlMedia(file);
         deps = await checkDeps();
       }
 
-      if (!deps.ytdlpInstalled || !deps.ffmpegInstalled || deps.ytdlpOutdated || !deps.nodeInstalled) {
+      if (
+        !deps.ytdlpInstalled ||
+        !deps.ffmpegInstalled ||
+        deps.ytdlpOutdated ||
+        !deps.nodeInstalled
+      ) {
         await toast.promise(installDeps(), {
           loading: 'Installing/updating download tools (includes Node.js)...',
           success: 'Download tools ready',

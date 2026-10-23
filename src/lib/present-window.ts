@@ -1,6 +1,6 @@
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { ipc } from '@/lib/ipc';
 import { usePresentationStore } from '@/stores/presentation-store';
 
 export async function getMediaWindow(): Promise<WebviewWindow | null> {
@@ -20,7 +20,7 @@ export async function ensureMediaWindow(): Promise<WebviewWindow | null> {
       }).catch(() => {});
     });
 
-    await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+    await ipc('create_window', { label: 'media-window', title: 'Media Player' });
     await readyPromise;
 
     return getMediaWindow();

@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { ipc } from '@/lib/ipc';
 import { loadModule, unloadModule } from '@/modules/injector';
 import { useModuleStore } from '@/modules/store';
 import type { ModuleManifest, ModuleRecord } from '@/modules/types';
@@ -79,11 +79,11 @@ export interface StoreDownloadProgressPayload {
 
 class StoreService {
   async fetchCatalog(): Promise<StoreCatalogResponse> {
-    return invoke<StoreCatalogResponse>('store_fetch_catalog');
+    return ipc('store_fetch_catalog');
   }
 
   async getRelease(repo: string, force = false): Promise<StoreReleaseResponse> {
-    return invoke<StoreReleaseResponse>('store_get_release', { repo, force });
+    return ipc('store_get_release', { repo, force });
   }
 
   async getReadme(
@@ -91,7 +91,7 @@ class StoreService {
     locale?: string,
     branch?: string
   ): Promise<StoreReadmeResponse | null> {
-    return invoke<StoreReadmeResponse | null>('store_get_readme', {
+    return ipc('store_get_readme', {
       repo,
       locale: locale ?? null,
       branch: branch ?? null,
@@ -99,18 +99,18 @@ class StoreService {
   }
 
   async getManifest(repo: string, branch?: string): Promise<ModuleManifest | null> {
-    return invoke<ModuleManifest | null>('store_get_manifest', {
+    return ipc('store_get_manifest', {
       repo,
       branch: branch ?? null,
     });
   }
 
   async downloadModule(repo: string, tag: string): Promise<string> {
-    return invoke<string>('store_download_module', { repo, tag });
+    return ipc('store_download_module', { repo, tag });
   }
 
   async installModule(repo: string, tag: string): Promise<StoreInstallResult> {
-    return invoke<StoreInstallResult>('store_install', { repo, tag });
+    return ipc('store_install', { repo, tag });
   }
 
   onDownloadProgress(callback: (payload: StoreDownloadProgressPayload) => void): UnlistenFn {

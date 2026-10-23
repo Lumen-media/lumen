@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import { useEffect, useState } from 'react';
+import { ipc } from '@/lib/ipc';
 
 const FALLBACK_FONTS = [
   'Arial',
@@ -29,7 +29,7 @@ export function useLocalFonts() {
   const [fonts, setFonts] = useState<string[]>(FALLBACK_FONTS);
 
   useEffect(() => {
-    invoke<string[]>('get_system_fonts')
+    ipc('get_system_fonts')
       .then((families) => {
         if (families.length > 0) setFonts(families);
       })

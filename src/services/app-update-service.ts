@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { ipc } from '@/lib/ipc';
 
 export type UpdatePhase =
   | 'idle'
@@ -38,13 +38,13 @@ export function onUpdateProgress(handler: (progress: UpdateProgress) => void): P
   return listen<UpdateProgress>(PROGRESS_EVENT, (event) => handler(event.payload));
 }
 
-export const getUpdateProgress = (): Promise<UpdateProgress> => invoke('app_update_progress_state');
+export const getUpdateProgress = (): Promise<UpdateProgress> => ipc('app_update_progress_state');
 
-export const bootUpdate = (): Promise<BootUpdateState> => invoke('app_update_boot');
+export const bootUpdate = (): Promise<BootUpdateState> => ipc('app_update_boot');
 
 export const checkForUpdate = (force = false): Promise<UpdateInfo | null> =>
-  invoke('check_app_update', { force });
+  ipc('check_app_update', { force });
 
-export const installUpdate = (): Promise<void> => invoke('install_app_update');
+export const installUpdate = (): Promise<void> => ipc('install_app_update');
 
-export const deferUpdate = (): Promise<void> => invoke('defer_app_update');
+export const deferUpdate = (): Promise<void> => ipc('defer_app_update');

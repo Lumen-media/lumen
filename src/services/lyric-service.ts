@@ -1,6 +1,6 @@
-import { invoke } from '@tauri-apps/api/core';
 import { dirname, join } from '@tauri-apps/api/path';
 import { exists, mkdir, readTextFile, rename, stat, writeTextFile } from '@tauri-apps/plugin-fs';
+import { ipc } from '@/lib/ipc';
 import { getNoticesPath, getQuickPresentationPath } from './app-paths';
 import { fileInitService } from './file-init-service';
 import { mediaDbService } from './media-db-service';
@@ -30,16 +30,16 @@ export interface LyricData {
 }
 
 export async function buildLyricSearchContent(data: LyricData): Promise<string> {
-  return invoke<string>('lyric_build_search_content', { data });
+  return ipc('lyric_build_search_content', { data });
 }
 
 export async function parseLyricFile(content: string): Promise<LyricData> {
-  return invoke<LyricData>('lyric_parse', { content });
+  return ipc('lyric_parse', { content });
 }
 
 class LyricService {
   private async serialize(data: LyricData): Promise<string> {
-    return invoke<string>('lyric_serialize', { data });
+    return ipc('lyric_serialize', { data });
   }
 
   async save(data: LyricData, existingPath?: string): Promise<string> {

@@ -1,9 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Toaster } from '@/components/ui/sonner';
+import { ipc } from '@/lib/ipc';
 import { SurfaceWindowSlot } from '@/modules/components/SurfaceWindowSlot';
 import { bootSingleModule } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
@@ -17,7 +17,7 @@ interface SurfaceProjectState {
 }
 
 async function waitForSurfaceState(label: string): Promise<SurfaceProjectState | null> {
-  const json = await invoke<string | null>('get_surface_state', { label }).catch(() => null);
+  const json = await ipc('get_surface_state', { label }).catch(() => null);
   return json ? (JSON.parse(json) as SurfaceProjectState) : null;
 }
 
@@ -41,7 +41,7 @@ function ModuleSurfaceWindow() {
     } catch {
       return;
     }
-    emit('module:surface-ready', { label }).catch(() => { });
+    emit('module:surface-ready', { label }).catch(() => {});
   }, []);
 
   const closeWindow = useCallback(async () => {
@@ -65,14 +65,14 @@ function ModuleSurfaceWindow() {
           emit('module:surface-window-closed', {
             moduleId,
             panelId: state?.panelId,
-          }).catch(() => { });
+          }).catch(() => {});
         })
       )
       .then((unlisten) => {
         if (!cancelled) detachCloseListener = unlisten;
         else unlisten();
       })
-      .catch(() => { });
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -145,7 +145,7 @@ function ModuleSurfaceWindow() {
         if (!cancelled) detachClearListener = fn;
         else fn();
       })
-      .catch(() => { });
+      .catch(() => {});
 
     return () => {
       cancelled = true;

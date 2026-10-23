@@ -1,17 +1,12 @@
-import { invoke } from '@tauri-apps/api/core';
 import { arch, platform, version } from '@tauri-apps/plugin-os';
 import { useEffect, useState } from 'react';
+import { ipc } from '@/lib/ipc';
 
 export interface SystemInfo {
   os: string;
   arch: string;
   memory: string;
   gpu: string;
-}
-
-interface SystemHardwareInfo {
-  total_memory_gb: number;
-  gpu_name: string;
 }
 
 function formatOs(p: string, v: string): string {
@@ -49,7 +44,7 @@ export function useSystemInfo(): SystemInfo {
 
     setInfo((prev) => ({ ...prev, os, arch: architecture }));
 
-    invoke<SystemHardwareInfo>('get_system_info')
+    ipc('get_system_info')
       .then(({ total_memory_gb, gpu_name }) => {
         setInfo((prev) => ({
           ...prev,

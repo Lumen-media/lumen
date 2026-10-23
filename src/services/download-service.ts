@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { ipc } from '@/lib/ipc';
 import type {
   CookieValidation,
   DependencyInfo,
@@ -21,17 +21,7 @@ class DownloadService {
   private listeners: UnlistenFn[] = [];
 
   async checkDependencies(): Promise<DependencyStatus> {
-    const result = await invoke<{
-      ytdlp_installed: boolean;
-      ytdlp_version: string | null;
-      ytdlp_outdated: boolean;
-      ffmpeg_installed: boolean;
-      ffmpeg_version: string | null;
-      cookies_installed: boolean;
-      node_installed: boolean;
-      node_dir: string | null;
-      tools_dir: string;
-    }>('check_dependencies');
+    const result = await ipc('check_dependencies');
 
     return {
       ytdlpInstalled: result.ytdlp_installed,
@@ -47,20 +37,11 @@ class DownloadService {
   }
 
   async installDependencies(): Promise<void> {
-    await invoke('download_dependencies');
+    await ipc('download_dependencies');
   }
 
   async listDependencies(): Promise<DependencyInfo[]> {
-    const result =
-      await invoke<
-        Array<{
-          name: string;
-          installed: boolean;
-          version: string | null;
-          path: string | null;
-          platform: string;
-        }>
-      >('list_dependencies');
+    const result = await ipc('list_dependencies');
 
     return result.map((item) => ({
       name: item.name,
@@ -77,13 +58,7 @@ class DownloadService {
     quality: DownloadQuality,
     maxHeight?: number
   ): Promise<DownloadResult> {
-    const result = await invoke<{
-      download_id: string;
-      file_path: string;
-      file_size: number;
-      media_type: string;
-      file_extension: string;
-    }>('download_video', {
+    const result = await ipc('download_video', {
       url,
       provider,
       quality,
@@ -100,30 +75,21 @@ class DownloadService {
   }
 
   async cancelDownload(downloadId: string): Promise<void> {
-    await invoke('cancel_download', { downloadId });
+    await ipc('cancel_download', { downloadId });
   }
 
   async getDownloadStatus(
     downloadId: string
-  ): Promise<{ status: string; progress?: number } | null> {
-    const result = await invoke<{ status: string; progress?: number } | null>(
-      'get_download_status',
-      {
-        downloadId,
-      }
-    );
-    return result;
+  ): Promise<{ status: string; progress?: number | null } | null> {
+    return ipc('get_download_status', { downloadId });
   }
 
   async installCookiesFile(sourcePath: string): Promise<string> {
-    const result = await invoke<string>('install_cookies_file', {
-      sourcePath,
-    });
-    return result;
+    return ipc('install_cookies_file', { sourcePath });
   }
 
   async validateCookies(): Promise<CookieValidation> {
-    return await invoke<CookieValidation>('validate_cookies');
+    return await ipc('validate_cookies');
   }
 
   onDependencyProgress(

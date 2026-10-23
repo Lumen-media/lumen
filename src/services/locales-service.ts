@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { ipc, type RawLocaleStatus } from '@/lib/ipc';
 
 export interface LanguageRef {
   code: string;
@@ -22,33 +22,17 @@ export interface LocaleStatus {
   languages: LocaleInfo[];
 }
 
-interface RawLocaleInfo {
-  code: string;
-  name: string;
-  native_name: string;
-  installed: boolean;
-  path: string | null;
-}
-
-interface RawLocaleStatus {
-  latest_tag: string | null;
-  last_synced_tag: string | null;
-  synced_at: number | null;
-  locales_dir: string;
-  languages: RawLocaleInfo[];
-}
-
 class LocalesService {
   async checkLocales(): Promise<LocaleStatus> {
-    return unmap(await invoke<RawLocaleStatus>('check_locales'));
+    return unmap(await ipc('check_locales'));
   }
 
   async syncLocales(): Promise<LocaleStatus> {
-    return unmap(await invoke<RawLocaleStatus>('sync_locales'));
+    return unmap(await ipc('sync_locales'));
   }
 
   async listLocales(): Promise<LocaleInfo[]> {
-    const result = await invoke<RawLocaleInfo[]>('list_locales');
+    const result = await ipc('list_locales');
     return result.map((item) => ({
       code: item.code,
       name: item.name,
@@ -59,7 +43,7 @@ class LocalesService {
   }
 
   async applyLocale(lang: string): Promise<string> {
-    return await invoke<string>('apply_locale', { lang });
+    return await ipc('apply_locale', { lang });
   }
 }
 
