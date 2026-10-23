@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebounceCallback, useInterval } from 'usehooks-ts';
@@ -8,6 +7,7 @@ import { PptxPresentation } from '@/components/reveal-presentation';
 import { Videoplayer } from '@/components/ui/videoplayer';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useStreamPreview } from '@/hooks/use-stream-preview';
+import { ipc } from '@/lib/ipc';
 import { useScopedShortcuts } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
 import { PresenterSlot } from '@/modules/components/PresenterSlot';
@@ -93,7 +93,7 @@ function MediaWindowComponent() {
       wallpaper: useProfileWallpaper,
       hideLyrics,
       blackout: isBlackoutActive,
-    }).catch(() => { });
+    }).catch(() => {});
   }, [hideLyrics, isBlackoutActive, useProfileWallpaper]);
 
   const clearPresentedContent = useCallback(() => {
@@ -105,31 +105,30 @@ function MediaWindowComponent() {
     setImageSrc(undefined);
     setPresentationPath(null);
     if (hadPresentation) {
-      emit('presentation:presenter-closed').catch(() => { });
+      emit('presentation:presenter-closed').catch(() => {});
     }
     resetPresenterDisplayModes();
     useModuleStore.getState().clearPresenter();
-    invoke('push_stream_blank').catch(() => { });
-    emit('module:presenter-clear').catch(() => { });
+    ipc('push_stream_blank').catch(() => {});
+    emit('module:presenter-clear').catch(() => {});
     emit('stage-backdrop-change', {
       active: false,
       source: null,
       mediaType: null,
       id: null,
       name: null,
-    }).catch(() => { });
+    }).catch(() => {});
   }, [presentationPath, resetPresenterDisplayModes]);
 
   const saveCurrentPosition = useCallback(async () => {
     try {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-      const { invoke } = await import('@tauri-apps/api/core');
 
       const window = getCurrentWebviewWindow();
       if (window) {
         const position = await window.innerPosition();
 
-        await invoke('save_window_position', {
+        await ipc('save_window_position', {
           label: 'media-window',
           x: position.x,
           y: position.y,
@@ -224,15 +223,15 @@ function MediaWindowComponent() {
     let detachCloseListener: (() => void) | undefined;
 
     const notifyPresenterClosed = () => {
-      emit('presentation:presenter-closed').catch(() => { });
-      emit('module:presenter-window-closed').catch(() => { });
+      emit('presentation:presenter-closed').catch(() => {});
+      emit('module:presenter-window-closed').catch(() => {});
       emit('stage-backdrop-change', {
         active: false,
         source: null,
         mediaType: null,
         id: null,
         name: null,
-      }).catch(() => { });
+      }).catch(() => {});
     };
 
     import('@tauri-apps/api/window')
@@ -253,7 +252,7 @@ function MediaWindowComponent() {
 
   useEffect(() => {
     bootPresenterModules()
-      .then(() => emit('module:presenter-ready').catch(() => { }))
+      .then(() => emit('module:presenter-ready').catch(() => {}))
       .catch(console.error);
 
     const unlistenProject = listen<{ viewId: string; props: unknown }>(
@@ -270,7 +269,7 @@ function MediaWindowComponent() {
         mediaType: null,
         id: null,
         name: null,
-      }).catch(() => { });
+      }).catch(() => {});
     });
 
     return () => {
@@ -294,7 +293,7 @@ function MediaWindowComponent() {
       'media.blackout': () =>
         setIsBlackoutActive((active) => {
           const next = !active;
-          if (next) invoke('push_stream_blank').catch(() => {});
+          if (next) ipc('push_stream_blank').catch(() => {});
           return next;
         }),
       'media.escape': () => {
@@ -346,7 +345,7 @@ function MediaWindowComponent() {
       setLyricPath(event.payload.url);
       setImagePath(null);
       emit('stage-backdrop-change', { active: true, source: 'lyrics', mediaType: 'lyrics' }).catch(
-        () => { }
+        () => {}
       );
     });
 
@@ -357,9 +356,9 @@ function MediaWindowComponent() {
     const unlistenLoadUrl = listen('load-url', () => {
       resetPresenterDisplayModes();
       setMode('video');
-      invoke('push_stream_blank').catch(() => { });
+      ipc('push_stream_blank').catch(() => {});
       emit('stage-backdrop-change', { active: true, source: 'player', mediaType: 'video' }).catch(
-        () => { }
+        () => {}
       );
     });
 
@@ -368,7 +367,7 @@ function MediaWindowComponent() {
       setImagePath(event.payload.url);
       setMode('video');
       emit('stage-backdrop-change', { active: true, source: 'media', mediaType: 'image' }).catch(
-        () => { }
+        () => {}
       );
     });
 
@@ -379,7 +378,7 @@ function MediaWindowComponent() {
     const unlistenBlackout = listen('presenter:blackout-toggle', () => {
       setIsBlackoutActive((active) => {
         const next = !active;
-        if (next) invoke('push_stream_blank').catch(() => { });
+        if (next) ipc('push_stream_blank').catch(() => {});
         return next;
       });
     });
@@ -396,21 +395,24 @@ function MediaWindowComponent() {
 
     const unlistenExit = listen('presenter:exit', exitPresentedContent);
 
-    const unlistenPresentationLoad = listen<{ filePath: string; initialSlide?: number }>('presentation:load', (event) => {
-      resetPresenterDisplayModes();
-      setMode('video');
-      setLyricPath('');
-      setImagePath(null);
-      setImageSrc(undefined);
-      setPresentationInitialSlide(event.payload.initialSlide ?? 0);
-      setPresentationPath(event.payload.filePath);
-      emit('stage-backdrop-change', {
-        active: true,
-        source: 'scene',
-        mediaType: 'unknown',
-        name: event.payload.filePath.split(/[\\/]/).pop(),
-      }).catch(() => {});
-    });
+    const unlistenPresentationLoad = listen<{ filePath: string; initialSlide?: number }>(
+      'presentation:load',
+      (event) => {
+        resetPresenterDisplayModes();
+        setMode('video');
+        setLyricPath('');
+        setImagePath(null);
+        setImageSrc(undefined);
+        setPresentationInitialSlide(event.payload.initialSlide ?? 0);
+        setPresentationPath(event.payload.filePath);
+        emit('stage-backdrop-change', {
+          active: true,
+          source: 'scene',
+          mediaType: 'unknown',
+          name: event.payload.filePath.split(/[\\/]/).pop(),
+        }).catch(() => {});
+      }
+    );
 
     const unlistenPresentationClear = listen('presentation:clear', () => {
       setPresentationInitialSlide(0);
@@ -438,7 +440,7 @@ function MediaWindowComponent() {
       unlistenPresentationLoad,
       unlistenPresentationClear,
       unlistenSlideChanged,
-    ]).then(() => emit('media-window-ready').catch(() => { }));
+    ]).then(() => emit('media-window-ready').catch(() => {}));
 
     return () => {
       unlistenLyric.then((f) => f());
@@ -465,7 +467,9 @@ function MediaWindowComponent() {
 
   return (
     <div className="fixed inset-0 h-dvh w-dvw overflow-hidden bg-black">
-      {!(presentationPath || imagePath || lyricPath) && <Videoplayer className="h-full w-full" url="" autoplay muted={false} interactive={false} />}
+      {!(presentationPath || imagePath || lyricPath) && (
+        <Videoplayer className="h-full w-full" url="" autoplay muted={false} interactive={false} />
+      )}
       {imageSrc && mode !== 'lyric' && (
         <div className="absolute inset-0 z-10 w-dvw h-dvh bg-black">
           <img src={imageSrc} alt="" className="w-full h-full object-contain" />

@@ -1,5 +1,12 @@
-import { invoke } from '@tauri-apps/api/core';
-import type { NetAPI, NetError, NetQueryValue, NetRequest, NetRequestBody, NetResponse } from '../types';
+import { ipc } from '@/lib/ipc';
+import type {
+  NetAPI,
+  NetError,
+  NetQueryValue,
+  NetRequest,
+  NetRequestBody,
+  NetResponse,
+} from '../types';
 
 function normalizeQueryValue(v: NetQueryValue | NetQueryValue[]): string[] {
   if (Array.isArray(v)) return v.map(String);
@@ -22,7 +29,7 @@ export function createNetAPI(moduleId: string): NetAPI {
       if (input.method) normalized.method = input.method;
       if (input.query) {
         normalized.query = Object.fromEntries(
-          Object.entries(input.query).map(([k, v]) => [k, normalizeQueryValue(v)]),
+          Object.entries(input.query).map(([k, v]) => [k, normalizeQueryValue(v)])
         );
       }
       if (input.headers) normalized.headers = input.headers;
@@ -32,15 +39,16 @@ export function createNetAPI(moduleId: string): NetAPI {
       if (input.maxBytes !== undefined) normalized.maxBytes = input.maxBytes;
       if (input.followRedirects !== undefined) normalized.followRedirects = input.followRedirects;
 
-      return invoke<NetResponse<T>>('module_net_request', {
+      const response = await ipc('module_net_request', {
         moduleId,
-        input: normalized,
+        input: normalized as unknown as NetRequest,
       });
+      return response as NetResponse<T>;
     },
 
     async get<T = unknown>(
       url: string,
-      opts?: Omit<NetRequest, 'url' | 'method' | 'body'>,
+      opts?: Omit<NetRequest, 'url' | 'method' | 'body'>
     ): Promise<T> {
       const response = await this.request<T>({ ...opts, url, method: 'GET' });
       if (!response.ok) {
@@ -56,7 +64,7 @@ export function createNetAPI(moduleId: string): NetAPI {
     async post<T = unknown>(
       url: string,
       body?: NetRequestBody | unknown,
-      opts?: Omit<NetRequest, 'url' | 'method' | 'body'>,
+      opts?: Omit<NetRequest, 'url' | 'method' | 'body'>
     ): Promise<T> {
       let normalizedBody = body;
       if (body !== undefined && !(typeof body === 'object' && body !== null && 'type' in body)) {

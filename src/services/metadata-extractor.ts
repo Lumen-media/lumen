@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { ipc } from '@/lib/ipc';
 
 export interface MediaMetadata {
   duration?: number;
@@ -8,9 +8,7 @@ export interface MediaMetadata {
 
 export async function extractMetadata(filePath: string): Promise<MediaMetadata> {
   try {
-    const result = await invoke<{ duration?: number | null }>('extract_metadata', {
-      path: filePath,
-    });
+    const result = await ipc('extract_metadata', { path: filePath });
     return {
       duration: result.duration ?? undefined,
     };

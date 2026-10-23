@@ -1,17 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { invoke } from '@tauri-apps/api/core';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import {
-  CircleDot,
-  Monitor,
-  Settings2,
-  Smartphone,
-  Square,
-  Volume2,
-  Wifi,
-} from 'lucide-react';
+import { CircleDot, Monitor, Settings2, Smartphone, Square, Volume2, Wifi } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +25,7 @@ import { Separator } from '@/components/ui/separator';
 import { Slider } from '@/components/ui/slider';
 import { useDeviceAudioMixer } from '@/hooks/use-device-audio-mixer';
 import { useStreamPreview } from '@/hooks/use-stream-preview';
+import { ipc } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useStreamingStore } from '@/stores/streaming-store';
@@ -76,7 +67,7 @@ function RouteComponent() {
   const videoOrientationRef = useRef<VideoOrientation | null>(null);
 
   useEffect(() => {
-    init().catch(() => { });
+    init().catch(() => {});
   }, [init]);
 
   const devices = useMemo(() => Object.values(mobileStreams), [mobileStreams]);
@@ -96,7 +87,7 @@ function RouteComponent() {
   }, [devices, mobileStreams, selectedDeviceId]);
 
   useEffect(() => {
-    invoke('set_mobile_preview_device', { deviceId: selectedDeviceId ?? null }).catch(() => { });
+    ipc('set_mobile_preview_device', { deviceId: selectedDeviceId ?? null }).catch(() => {});
   }, [selectedDeviceId]);
 
   useEffect(() => {
@@ -158,9 +149,7 @@ function RouteComponent() {
     };
   }, []);
 
-  const previewLabel = selectedDevice
-    ? selectedDevice.device_name
-    : 'Stage Display A';
+  const previewLabel = selectedDevice ? selectedDevice.device_name : 'Stage Display A';
   const previewSurfaceClass =
     videoOrientation === 'portrait' ? 'mx-auto aspect-[9/16] h-full max-w-full' : 'h-full w-full';
 
@@ -169,19 +158,17 @@ function RouteComponent() {
 
     let win = await WebviewWindow.getByLabel('media-window');
     if (!win) {
-      await invoke('create_window', { label: 'media-window', title: 'Media Player' }).catch(
-        () => { }
-      );
+      await ipc('create_window', { label: 'media-window', title: 'Media Player' }).catch(() => {});
       await new Promise((r) => setTimeout(r, 1500));
       win = await WebviewWindow.getByLabel('media-window');
     }
 
     if (win) {
       const visible = await win.isVisible().catch(() => false);
-      if (!visible) await win.show().catch(() => { });
+      if (!visible) await win.show().catch(() => {});
     }
 
-    await invoke('set_stream_overlay', { active: next }).catch(() => { });
+    await ipc('set_stream_overlay', { active: next }).catch(() => {});
     setStreamOverlayActive(next);
   };
 
@@ -278,9 +265,7 @@ function RouteComponent() {
                           onValueChange={([value]) =>
                             handleDeviceVolumeChange(device.device_id, value)
                           }
-                          onValueCommit={([value]) =>
-                            commitDeviceVolume(device.device_id, value)
-                          }
+                          onValueCommit={([value]) => commitDeviceVolume(device.device_id, value)}
                         />
                         <span className="w-7 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                           {shownDeviceVolume(device.device_id)}

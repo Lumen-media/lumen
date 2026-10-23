@@ -1,6 +1,5 @@
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from '@aiden0z/pptx-renderer';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { invoke } from '@tauri-apps/api/core';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { animate } from 'animejs';
 import { toJpeg } from 'html-to-image';
@@ -20,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown, type MarkdownComponents } from '@/components/markdown';
 import { formatDuration, formatFileSize } from '@/lib/format';
 import { useTranslation } from '@/lib/i18n';
+import { ipc } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import type { ChatMessage, Reaction } from '@/services/chat-service';
 import { MAX_MESSAGE_LENGTH } from '@/services/chat-service';
@@ -81,7 +81,7 @@ function getCachedSenderColor(name: string): string {
 }
 
 function openChatFile(filePath: string): void {
-  invoke('open_folder', { path: filePath }).catch((err) =>
+  ipc('open_folder', { path: filePath }).catch((err) =>
     console.error('[chat] open file failed:', err)
   );
 }
@@ -299,7 +299,13 @@ function FilePreview({
   );
 }
 
-function ChatMarkdown({ text, onYouTubeLink }: { text: string; onYouTubeLink?: (url: string) => void }) {
+function ChatMarkdown({
+  text,
+  onYouTubeLink,
+}: {
+  text: string;
+  onYouTubeLink?: (url: string) => void;
+}) {
   const components = useMemo<MarkdownComponents>(
     () => ({
       a: ({ href, children, ...props }: { href?: string; children?: React.ReactNode }) => {
@@ -325,7 +331,9 @@ function ChatMarkdown({ text, onYouTubeLink }: { text: string; onYouTubeLink?: (
             rel="noreferrer"
             className={cn(
               'underline underline-offset-4',
-              safe ? 'text-blue-400 hover:text-blue-300' : 'text-muted-foreground cursor-not-allowed'
+              safe
+                ? 'text-blue-400 hover:text-blue-300'
+                : 'text-muted-foreground cursor-not-allowed'
             )}
             onClick={safe ? undefined : (e) => e.preventDefault()}
             {...props}
@@ -480,7 +488,7 @@ function ChatFileDialog({
         .then((url) => {
           if (!cancelled) setSrc(url);
         })
-        .catch(() => { })
+        .catch(() => {})
         .finally(() => {
           if (!cancelled) setLoading(false);
         });
@@ -643,7 +651,7 @@ function MessageBubble({
     try {
       await animate(el, { opacity: [1, 0], translateY: [0, -8], duration: 160, ease: 'inQuad' });
       await animate(el, { height: [el.offsetHeight, 0], duration: 180, ease: 'inOutQuad' });
-    } catch { }
+    } catch {}
     deleteMessage(message.id).catch((err) => console.error('[chat] delete failed:', err));
   }, [message.id, deleteMessage]);
 
@@ -885,7 +893,7 @@ async function getPptThumbnail(filePath: string): Promise<string | null> {
     if (th?.element) {
       try {
         dataUrl = await toJpeg(th.element, { quality: 0.7, pixelRatio: 2 });
-      } catch { }
+      } catch {}
     }
     th?.dispose();
     viewer.destroy();

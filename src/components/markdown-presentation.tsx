@@ -1,10 +1,10 @@
-import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 import { animate, stagger } from 'animejs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
 import { useProfiles } from '@/hooks/use-profiles';
+import { ipc } from '@/lib/ipc';
 import { useScopedShortcuts } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
 import { lumenUrl } from '@/services/lumen-url';
@@ -109,7 +109,7 @@ export function MarkdownPresentation({
       : slide?.background || lyricData.metadata.globalBackground || profileBackground || undefined;
 
     if (blackoutActive) {
-      invoke('push_stream_blank').catch(() => { });
+      ipc('push_stream_blank').catch(() => {});
       return;
     }
 
@@ -126,9 +126,9 @@ export function MarkdownPresentation({
       alignment: lyricData.metadata.alignment || 'center',
       background,
       active: true,
-    }).catch(() => { });
+    }).catch(() => {});
 
-    invoke('push_stream_slide', {
+    ipc('push_stream_slide', {
       update: {
         lines,
         font: lyricData.metadata.font || null,
@@ -139,7 +139,7 @@ export function MarkdownPresentation({
         total_slides: lyricData.slides.length,
         active: true,
       },
-    }).catch(() => { });
+    }).catch(() => {});
   }, [
     blackoutActive,
     currentSlide,
@@ -294,10 +294,7 @@ export function MarkdownPresentation({
       : lyricData?.metadata.globalBackground || profileBackground,
     winW
   );
-  const slideBgSrc = useSlideBgSrc(
-    useProfileWallpaper ? undefined : slide?.background,
-    winW
-  );
+  const slideBgSrc = useSlideBgSrc(useProfileWallpaper ? undefined : slide?.background, winW);
 
   if (!lyricData || !slide) {
     return <div className="h-full w-full bg-black" />;
@@ -347,10 +344,10 @@ export function MarkdownPresentation({
               <div key={`${currentSlide}-${i}`}>
                 {animation === 'typewriter'
                   ? line.split('').map((ch, j) => (
-                    <span key={`${currentSlide}-${i}-${j}`} className="md-char">
-                      {ch}
-                    </span>
-                  ))
+                      <span key={`${currentSlide}-${i}-${j}`} className="md-char">
+                        {ch}
+                      </span>
+                    ))
                   : line}
               </div>
             ))}

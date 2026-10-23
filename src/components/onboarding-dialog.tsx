@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
 import { Sparkles } from 'lucide-react';
 import * as React from 'react';
 import { ModuleIcon } from '@/app/store/module-icon';
@@ -18,6 +17,7 @@ import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from '@/lib/i18n';
+import { ipc } from '@/lib/ipc';
 import { useModuleStore } from '@/modules/store';
 import type { StoreCatalogModule } from '@/services/store-service';
 import { useModulesStore } from '@/stores/modules-store';
@@ -62,10 +62,7 @@ function ModuleRow({
         onCheckedChange={(next) => onToggle(next === true)}
         aria-label={module.name}
       />
-      <label
-        htmlFor={checkboxId}
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3"
-      >
+      <label htmlFor={checkboxId} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
         <ModuleIcon
           name={module.name}
           icon={module.icon}
@@ -122,7 +119,7 @@ export function OnboardingDialog() {
       return;
     }
 
-    invoke<Array<{ manifest: { id: string }; source: string }>>('module_list_installed')
+    ipc('module_list_installed')
       .then((installed) => {
         if (!alive) return;
         if (installed.length > 0) {
@@ -155,8 +152,7 @@ export function OnboardingDialog() {
   );
 
   const selectableIds = React.useMemo(
-    () =>
-      modules.filter((m) => !useModuleStore.getState().modules.has(m.id)).map((m) => m.id),
+    () => modules.filter((m) => !useModuleStore.getState().modules.has(m.id)).map((m) => m.id),
     [modules]
   );
 
@@ -262,12 +258,7 @@ export function OnboardingDialog() {
               {t('{{count}} selected', { count: selected.size })}
             </span>
             {modules.length > 0 ? (
-              <Button
-                variant="ghost"
-                size="xs"
-                disabled={installing}
-                onClick={handleSelectAll}
-              >
+              <Button variant="ghost" size="xs" disabled={installing} onClick={handleSelectAll}>
                 {allSelected ? t('Clear') : t('Select all')}
               </Button>
             ) : null}

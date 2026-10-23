@@ -1,7 +1,8 @@
-import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
 import { create } from 'zustand';
+import { ipc } from '@/lib/ipc';
 import { ensureMediaWindow, getMediaWindow } from '@/lib/present-window';
 import { createStreamSocket } from '@/lib/stream-socket';
 import { useModuleStore } from '@/modules/store';
@@ -12,7 +13,11 @@ import { urlMediaService } from '@/services/url-media-service';
 import { useDownloadStore } from '@/stores/download-store';
 import { usePresentationStore } from '@/stores/presentation-store';
 import { useQueueEntriesStore } from '@/stores/queue-entries-store';
-import { broadcastQueueSync, setQueueCurrentPathProvider, useQueueStore } from '@/stores/queue-store';
+import {
+  broadcastQueueSync,
+  setQueueCurrentPathProvider,
+  useQueueStore,
+} from '@/stores/queue-store';
 
 interface PlayerStore {
   localTime: number;
@@ -243,7 +248,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       set({ isPlaying: false, isScreenOpen: false });
       saveSetting('last_time', '0').catch(() => {});
       void broadcastPlayerSync(get, 'stop');
-      invoke('push_stream_blank').catch(() => {});
+      ipc('push_stream_blank').catch(() => {});
 
       const result = useQueueEntriesStore.getState().advanceQueue(get().currentFilePath);
       if (result.type === 'play') {
@@ -332,9 +337,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       void broadcastPresentationSync(get);
     });
 
-    const enqueueRemoteAdd = async (
-      payload: { url: string | null; media_id: number | null; position: number | null }
-    ) => {
+    const enqueueRemoteAdd = async (payload: {
+      url: string | null;
+      media_id: number | null;
+      position: number | null;
+    }) => {
       try {
         if (payload.media_id !== null) {
           const file = await mediaDbService.getFileInfoById(payload.media_id);
@@ -343,9 +350,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         } else if (payload.url) {
           const id = await useQueueStore.getState().addUrlToQueue(payload.url);
           if (payload.position !== null && id !== undefined) {
-            await useQueueStore.getState().reorderQueue(
-              reorderForInsert(useQueueStore.getState().queue, payload.position)
-            );
+            await useQueueStore
+              .getState()
+              .reorderQueue(reorderForInsert(useQueueStore.getState().queue, payload.position));
           }
         }
       } catch {}
@@ -365,7 +372,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
 
     const unlistenRemoteQueueRemove = listen<{ id: number }>('remote-queue-remove', (event) => {
-      void useQueueStore.getState().removeFromQueue(event.payload.id).catch(() => {});
+      void useQueueStore
+        .getState()
+        .removeFromQueue(event.payload.id)
+        .catch(() => {});
       broadcastQueueSync(0);
     });
 
@@ -378,7 +388,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         const reordered = [...queue];
         const [moved] = reordered.splice(from, 1);
         reordered.splice(Math.max(0, Math.min(event.payload.position, reordered.length)), 0, moved);
-        void useQueueStore.getState().reorderQueue(reordered.map((item) => item.id)).catch(() => {});
+        void useQueueStore
+          .getState()
+          .reorderQueue(reordered.map((item) => item.id))
+          .catch(() => {});
         broadcastQueueSync(0);
       }
     );
@@ -391,12 +404,18 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
 
     const unlistenRemoteQueueShuffle = listen('remote-queue-shuffle', () => {
-      void useQueueStore.getState().shuffleQueue().catch(() => {});
+      void useQueueStore
+        .getState()
+        .shuffleQueue()
+        .catch(() => {});
       broadcastQueueSync(0);
     });
 
     const unlistenRemoteQueueClear = listen('remote-queue-clear', () => {
-      void useQueueStore.getState().clearQueue().catch(() => {});
+      void useQueueStore
+        .getState()
+        .clearQueue()
+        .catch(() => {});
       broadcastQueueSync(0);
     });
 
@@ -463,7 +482,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const existing = await getMediaWindow();
     if (!existing) {
       try {
-        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+        await ipc('create_window', { label: 'media-window', title: 'Media Player' });
         set({ isPlaying: true });
       } catch {}
       return;
@@ -488,7 +507,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set({ localTime: 0, isPlaying: false });
     saveSetting('last_time', '0').catch(() => {});
     void broadcastPlayerSync(get, 'stop');
-    invoke('push_stream_blank').catch(() => {});
+    ipc('push_stream_blank').catch(() => {});
 
     const win = await getMediaWindow();
     if (win) {
@@ -557,7 +576,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (!existing) {
       if (localMediaType !== 'video') return;
       try {
-        await invoke('create_window', { label: 'media-window', title: 'Media Player' });
+        await ipc('create_window', { label: 'media-window', title: 'Media Player' });
         const win = await getMediaWindow();
         if (win) {
           await win.show();
@@ -574,7 +593,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const hasOtherContent = currentLyricPath || currentImagePath || hasPresenter;
 
       if (hasOtherContent) {
-        invoke('push_stream_blank').catch(() => {});
+        ipc('push_stream_blank').catch(() => {});
         set({ isScreenOpen: false });
       } else {
         await existing.hide();
@@ -629,8 +648,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         ) {
           source = fileInfo.path;
         }
-      } catch {
-      }
+      } catch {}
     }
 
     const ext = source.split('.').pop()?.toLowerCase() ?? '';
@@ -888,5 +906,3 @@ usePresentationStore.subscribe((state, previous) => {
     void broadcastPresentationSync(() => usePlayerStore.getState());
   }
 });
-
-

@@ -1,12 +1,6 @@
-import { invoke } from '@tauri-apps/api/core';
+import { ipc } from '@/lib/ipc';
 import { extractMetadata } from './metadata-extractor';
-import type {
-  DownloadStatus,
-  FileInfo,
-  MediaFolder,
-  MediaPoolListing,
-  MediaType,
-} from './types';
+import type { DownloadStatus, FileInfo, MediaPoolListing, MediaType } from './types';
 import { urlMediaService } from './url-media-service';
 
 export interface SearchHit {
@@ -31,7 +25,7 @@ export interface UploadResult {
   error: string | null;
 }
 
-interface MediaFileInput {
+export interface MediaFileInput {
   name: string;
   path: string;
   size: number;
@@ -47,7 +41,7 @@ interface MediaFileInput {
   content?: string | null;
 }
 
-interface RawFileInfo {
+export interface RawFileInfo {
   id: number;
   name: string;
   path: string;
@@ -64,7 +58,7 @@ interface RawFileInfo {
   downloadStatus: string;
 }
 
-interface RawThemeFile {
+export interface RawThemeFile {
   id: number;
   name: string;
   path: string;
@@ -78,7 +72,8 @@ function toMediaFileInput(file: FileInfo): MediaFileInput {
     name: file.name,
     path: file.path,
     size: file.size,
-    modifiedAt: file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
+    modifiedAt:
+      file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
     extension: file.extension,
     folder: file.folder ?? '',
     duration: file.duration ?? null,
@@ -119,7 +114,7 @@ function toFileInfo(raw: RawFileInfo): FileInfo {
 
 class MediaDbService {
   async initialize(): Promise<void> {
-    await invoke('media_initialize');
+    await ipc('media_initialize');
   }
 
   async syncMediaType(mediaType: MediaType, fsFiles: FileInfo[]): Promise<void> {
@@ -141,19 +136,16 @@ class MediaDbService {
         content,
       });
     }
-    await invoke('media_sync_type', { mediaType, files });
+    await ipc('media_sync_type', { mediaType, files });
   }
 
   async listFiles(mediaType: MediaType): Promise<FileInfo[]> {
-    const rows = await invoke<RawFileInfo[]>('media_list', { mediaType });
+    const rows = await ipc('media_list', { mediaType });
     return rows.map(toFileInfo);
   }
 
   async listFolder(mediaType: MediaType, folder: string): Promise<MediaPoolListing> {
-    const raw = await invoke<{ folders: MediaFolder[]; files: RawFileInfo[] }>(
-      'media_list_folder',
-      { mediaType, folder }
-    );
+    const raw = await ipc('media_list_folder', { mediaType, folder });
     return {
       folders: raw.folders,
       files: raw.files.map(toFileInfo),
@@ -161,7 +153,7 @@ class MediaDbService {
   }
 
   async searchFiles(mediaType: MediaType, query: string): Promise<FileInfo[]> {
-    const rows = await invoke<RawFileInfo[]>('media_search_files', { mediaType, query });
+    const rows = await ipc('media_search_files', { mediaType, query });
     return rows.map(toFileInfo);
   }
 
@@ -177,7 +169,7 @@ class MediaDbService {
       content = (await extractPresentationContent(file.path)) ?? undefined;
     }
 
-    await invoke('media_insert', {
+    await ipc('media_insert', {
       file: {
         ...toMediaFileInput(file),
         duration: metadata.duration ?? file.duration ?? null,
@@ -197,7 +189,7 @@ class MediaDbService {
       throw new Error('Only YouTube URLs are supported');
     }
 
-    const raw = await invoke<RawFileInfo>('media_insert_url', {
+    const raw = await ipc('media_insert_url', {
       url,
       refreshMetadata: opts.refreshMetadata ?? false,
       duration: opts.duration ?? null,
@@ -210,7 +202,7 @@ class MediaDbService {
     opts: { mediaType?: MediaType; fullContent?: boolean; limit?: number } = {}
   ): Promise<SearchHit[]> {
     if (!query.trim()) return [];
-    return invoke<SearchHit[]>('media_search', {
+    return ipc('media_search', {
       query,
       fullContent: opts.fullContent ?? false,
       mediaType: opts.mediaType ?? null,
@@ -226,7 +218,7 @@ class MediaDbService {
       limitPerGroup?: number;
     } = {}
   ): Promise<SearchHit[]> {
-    return invoke<SearchHit[]>('media_search_multi', {
+    return ipc('media_search_multi', {
       query,
       fullContent: opts.fullContent ?? false,
       mediaTypes: opts.mediaTypes ?? [],
@@ -239,9 +231,7 @@ class MediaDbService {
     filePaths: string[],
     folder: string = ''
   ): Promise<UploadResult[]> {
-    const results = await invoke<
-      Array<{ path: string; file: RawFileInfo | null; error: string | null }>
-    >('media_upload_files', { mediaType, folder, filePaths });
+    const results = await ipc('media_upload_files', { mediaType, folder, filePaths });
     return results.map((r) => ({
       sourcePath: r.path,
       file: r.file ? toFileInfo(r.file) : null,
@@ -250,28 +240,28 @@ class MediaDbService {
   }
 
   async deleteFolder(mediaType: MediaType, folder: string): Promise<void> {
-    await invoke('media_delete_folder', { mediaType, folder });
+    await ipc('media_delete_folder', { mediaType, folder });
   }
 
   async listByType(mediaType: MediaType, limit = 50): Promise<SearchHit[]> {
-    return invoke<SearchHit[]>('media_list_by_type', { mediaType, limit });
+    return ipc('media_list_by_type', { mediaType, limit });
   }
 
   async getById(id: number): Promise<SearchHit | null> {
-    return invoke<SearchHit | null>('media_get_by_id', { id });
+    return ipc('media_get_by_id', { id });
   }
 
   async getByPath(path: string): Promise<SearchHit | null> {
-    return invoke<SearchHit | null>('media_get_by_path', { path });
+    return ipc('media_get_by_path', { path });
   }
 
   async getFileInfoByPath(path: string): Promise<FileInfo | null> {
-    const raw = await invoke<RawFileInfo | null>('media_get_file_info_by_path', { path });
+    const raw = await ipc('media_get_file_info_by_path', { path });
     return raw ? toFileInfo(raw) : null;
   }
 
   async getFileInfoById(id: number): Promise<FileInfo | null> {
-    const raw = await invoke<RawFileInfo | null>('media_get_file_info_by_id', { id });
+    const raw = await ipc('media_get_file_info_by_id', { id });
     return raw ? toFileInfo(raw) : null;
   }
 
@@ -279,7 +269,7 @@ class MediaDbService {
     originalUrl: string,
     canonicalUrl?: string
   ): Promise<FileInfo | null> {
-    const raw = await invoke<RawFileInfo | null>('media_get_file_info_by_original_url', {
+    const raw = await ipc('media_get_file_info_by_original_url', {
       originalUrl,
       canonicalUrl: canonicalUrl ?? null,
     });
@@ -287,7 +277,7 @@ class MediaDbService {
   }
 
   async deleteFile(path: string): Promise<void> {
-    await invoke('media_delete', { path });
+    await ipc('media_delete', { path });
   }
 
   async updateDownloadStatus(
@@ -298,7 +288,7 @@ class MediaDbService {
     newMediaType?: string,
     newExtension?: string
   ): Promise<void> {
-    await invoke('media_update_download_status', {
+    await ipc('media_update_download_status', {
       originalUrl,
       status,
       newPath: newPath ?? null,
@@ -309,11 +299,11 @@ class MediaDbService {
   }
 
   async syncThemes(fsFiles: FileInfo[]): Promise<void> {
-    await invoke('media_sync_themes', { files: fsFiles.map(toMediaFileInput) });
+    await ipc('media_sync_themes', { files: fsFiles.map(toMediaFileInput) });
   }
 
   async listThemes(): Promise<FileInfo[]> {
-    const rows = await invoke<RawThemeFile[]>('media_list_themes');
+    const rows = await ipc('media_list_themes');
     return rows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -325,24 +315,20 @@ class MediaDbService {
   }
 
   async insertTheme(file: FileInfo, contentHash?: string): Promise<void> {
-    await invoke('media_insert_theme', {
+    await ipc('media_insert_theme', {
       file: toMediaFileInput(file),
       contentHash: contentHash ?? null,
     });
   }
 
   async deleteTheme(path: string): Promise<void> {
-    await invoke('media_delete_theme', { path });
+    await ipc('media_delete_theme', { path });
   }
 }
 
 async function extractPresentationContent(path: string): Promise<string | null> {
   try {
-    const meta = await invoke<{
-      slide_count: number;
-      slides: Array<{ index: number; text: string }>;
-      title?: string;
-    }>('extract_presentation_metadata', { path });
+    const meta = await ipc('extract_presentation_metadata', { path });
 
     const parts = meta.slides.filter((s) => s.text.trim().length > 0).map((s) => s.text.trim());
 

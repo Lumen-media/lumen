@@ -1,17 +1,8 @@
-import { invoke } from '@tauri-apps/api/core';
 import { exists, mkdir } from '@tauri-apps/plugin-fs';
+import { ipc, type ScannedFile } from '@/lib/ipc';
 import { getAppBasePath, getMediaTypePath as getResolvedMediaTypePath } from './app-paths';
 import { mediaDbService } from './media-db-service';
 import type { FileInfo, MediaType } from './types';
-
-interface ScannedFile {
-  name: string;
-  path: string;
-  folder: string;
-  size: number;
-  modifiedAt: number;
-  extension: string;
-}
 
 function toFileInfo(scanned: ScannedFile): FileInfo {
   return {
@@ -87,7 +78,7 @@ class FileInitServiceImpl implements FileInitService {
   }
 
   private async readFolderFiles(mediaType: MediaType): Promise<FileInfo[]> {
-    const scanned = await invoke<ScannedFile[]>('scan_media_files', { mediaType });
+    const scanned = await ipc('scan_media_files', { mediaType });
     return scanned.map(toFileInfo);
   }
 
@@ -107,7 +98,7 @@ class FileInitServiceImpl implements FileInitService {
   }
 
   async getFolderFiles(mediaType: MediaType): Promise<FileInfo[]> {
-    const scanned = await invoke<ScannedFile[]>('scan_media_files', { mediaType });
+    const scanned = await ipc('scan_media_files', { mediaType });
     return scanned.map(toFileInfo);
   }
 }

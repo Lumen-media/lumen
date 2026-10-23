@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
 import { ExternalLink, FolderOpen, FolderPlus, ListPlus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,6 +7,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { ipc } from '@/lib/ipc';
 import { cn } from '@/lib/utils';
 import type { MediaFolder } from '@/services';
 import { useDeleteFolderStore } from '@/stores/delete-folder-store';
@@ -29,7 +29,7 @@ export function FolderListItem({ folder, isFocused, onClick, onAddToQueue }: Fol
 
   const handleOpenFolder = async () => {
     try {
-      await invoke('open_folder', { path: folder.absolutePath });
+      await ipc('open_folder', { path: folder.absolutePath });
     } catch (error) {
       console.error('Failed to open folder:', error);
     }

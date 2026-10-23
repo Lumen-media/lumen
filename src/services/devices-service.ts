@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { ipc } from '@/lib/ipc';
 
 export interface DevicePermissions {
   player: boolean;
@@ -36,43 +36,38 @@ export interface RegistrationTokenPayload {
 
 class DevicesService {
   async getDevices(): Promise<Device[]> {
-    return invoke<Device[]>('get_devices');
+    return ipc('get_devices');
   }
 
   async getRemoteAccessSettings(): Promise<RemoteAccessSettings> {
-    return invoke<RemoteAccessSettings>('get_remote_access_settings');
+    return ipc('get_remote_access_settings');
   }
 
-  async updateRemoteAccessSettings(
-    settings: RemoteAccessSettings
-  ): Promise<RemoteAccessSettings> {
-    return invoke<RemoteAccessSettings>('update_remote_access_settings', {
+  async updateRemoteAccessSettings(settings: RemoteAccessSettings): Promise<RemoteAccessSettings> {
+    return ipc('update_remote_access_settings', {
       remoteEnabled: settings.remote_enabled,
       transmissionEnabled: settings.transmission_enabled,
     });
   }
 
   async getLocalIp(): Promise<string> {
-    return invoke<string>('get_local_ip');
+    return ipc('get_local_ip');
   }
 
   async generateRegistrationToken(): Promise<RegistrationTokenPayload> {
-    return invoke<RegistrationTokenPayload>('gen_reg_token');
+    return ipc('gen_reg_token');
   }
 
   async toggleDevice(deviceId: string, isActive: boolean): Promise<void> {
-    await invoke('toggle_device', { deviceId, isActive });
+    await ipc('toggle_device', { deviceId, isActive });
   }
 
-  async updateDevicePermissions(
-    deviceId: string,
-    permissions: DevicePermissions
-  ): Promise<void> {
-    await invoke('update_device_permissions', { deviceId, permissions });
+  async updateDevicePermissions(deviceId: string, permissions: DevicePermissions): Promise<void> {
+    await ipc('update_device_permissions', { deviceId, permissions });
   }
 
   async removeDevice(deviceId: string): Promise<void> {
-    await invoke('remove_device', { deviceId });
+    await ipc('remove_device', { deviceId });
   }
 
   async onDeviceRegistered(handler: (device: Device) => void): Promise<UnlistenFn> {

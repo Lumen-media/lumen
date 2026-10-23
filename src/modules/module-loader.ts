@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { ipc } from '@/lib/ipc';
 import type { ModuleManifest } from './types';
 
 /** Decodes the byte shapes the Rust side can return for a module entry. */
@@ -24,7 +24,7 @@ export async function readModuleEntry(manifest: ModuleManifest): Promise<string>
     return res.text();
   }
 
-  const bytes = await invoke<ArrayBuffer | number[]>('module_fs_read', {
+  const bytes = await ipc('module_fs_read', {
     moduleId: manifest.id,
     path: entry,
   });
@@ -37,10 +37,7 @@ export async function readModuleEntry(manifest: ModuleManifest): Promise<string>
  * `sourceUrl` is appended as a `//# sourceURL` comment so devtools shows a
  * meaningful name instead of a blob url. The object URL is always revoked.
  */
-export async function importModuleCode(
-  code: string,
-  sourceUrl?: string,
-): Promise<unknown> {
+export async function importModuleCode(code: string, sourceUrl?: string): Promise<unknown> {
   const blobSource = sourceUrl ? `${code}\n//# sourceURL=${sourceUrl}` : code;
   const blob = new Blob([blobSource], { type: 'application/javascript' });
   const blobUrl = URL.createObjectURL(blob);

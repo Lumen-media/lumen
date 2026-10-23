@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { ipc } from '@/lib/ipc';
 
 export interface Profile {
   id: string;
@@ -15,13 +15,13 @@ export interface Profile {
 }
 
 export async function listProfiles(): Promise<Profile[]> {
-  return invoke<Profile[]>('profile_list');
+  return ipc('profile_list');
 }
 
 export async function saveProfile(profile: Profile): Promise<void> {
-  await invoke('profile_save', { profile });
+  await ipc('profile_save', { profile });
 }
 
 export async function deleteProfile(id: string): Promise<void> {
-  await invoke('profile_delete', { id });
+  await ipc('profile_delete', { id });
 }

@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { ipc, type RemotePermission } from '@/lib/ipc';
 import { streamingService } from './streaming-service';
 
 export interface PlayerSyncPayload {
@@ -79,7 +79,10 @@ class RemoteSyncService {
    * Broadcasts a full player state envelope. Content protection is applied
    * along the way because video payloads must blank the stream for remotes.
    */
-  async broadcast(payload: PlayerSyncPayload, requiredPermission?: string): Promise<void> {
+  async broadcast(
+    payload: PlayerSyncPayload,
+    requiredPermission?: RemotePermission
+  ): Promise<void> {
     const mediaType = payload.media.type;
     const isProtected = mediaType === 'video';
     await streamingService.setContentProtected(isProtected);
@@ -91,10 +94,13 @@ class RemoteSyncService {
    * Broadcasts any remote-sync envelope without touching content protection.
    * Used for `player_tick`, `queue_sync` and `presentation_sync`.
    */
-  async broadcastRaw(payload: RemoteSyncPayload, requiredPermission?: string): Promise<void> {
-    await invoke('broadcast_remote_event', {
+  async broadcastRaw(
+    payload: RemoteSyncPayload,
+    requiredPermission?: RemotePermission
+  ): Promise<void> {
+    await ipc('broadcast_remote_event', {
       envelope: payload,
-      required_permission: requiredPermission ?? null,
+      requiredPermission: requiredPermission ?? null,
     });
   }
 }

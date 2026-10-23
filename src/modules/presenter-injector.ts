@@ -1,13 +1,13 @@
-import { invoke } from '@tauri-apps/api/core';
+import { type InstalledModuleRecord, ipc, type ModuleListEntry } from '@/lib/ipc';
 import { importModuleCode, readModuleEntry } from './module-loader';
 import { createPresenterHost } from './presenter-host';
 import type { LumenPlugin, ModuleManifest } from './types';
 
 export async function bootPresenterModules(window: 'presenter' | 'surface' = 'presenter') {
-  let manifests: Array<{ manifest: ModuleManifest }> = [];
+  let manifests: ModuleListEntry[] = [];
 
   try {
-    manifests = await invoke<Array<{ manifest: ModuleManifest; source: string }>>('module_list_installed');
+    manifests = await ipc('module_list_installed');
   } catch (err) {
     console.error('[presenter] failed to list modules:', err);
     return;
@@ -22,11 +22,14 @@ export async function bootPresenterModules(window: 'presenter' | 'surface' = 'pr
   }
 }
 
-export async function bootSingleModule(moduleId: string, window: 'presenter' | 'surface' = 'surface') {
-  let installed: { manifest: ModuleManifest; source: string; enabled: boolean } | null = null;
+export async function bootSingleModule(
+  moduleId: string,
+  window: 'presenter' | 'surface' = 'surface'
+) {
+  let installed: InstalledModuleRecord | null = null;
 
   try {
-    installed = await invoke<{ manifest: ModuleManifest; source: string; enabled: boolean } | null>('module_get', { id: moduleId });
+    installed = await ipc('module_get', { id: moduleId });
   } catch (err) {
     console.error('[surface] failed to get module:', err);
     return;
@@ -50,10 +53,10 @@ async function loadAndBootModule(manifest: ModuleManifest, window: 'presenter' |
   }
 
   try {
-    const mod = await importModuleCode(
+    const mod = (await importModuleCode(
       code,
-      `lumen-module://${manifest.id}/${manifest.entry || 'main.js'}`,
-    ) as { default: new () => LumenPlugin };
+      `lumen-module://${manifest.id}/${manifest.entry || 'main.js'}`
+    )) as { default: new () => LumenPlugin };
     const plugin = new mod.default();
     plugin.manifest = manifest;
     const host = await createPresenterHost(manifest, window);

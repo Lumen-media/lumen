@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { invoke } from '@tauri-apps/api/core';
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { useAppVersion } from '@/hooks/use-app-version';
 import { useTranslation } from '@/lib/i18n';
+import { ipc } from '@/lib/ipc';
 import { bootUpdate, onUpdateProgress } from '@/services/app-update-service';
 import { useAppUpdateStore } from '@/stores/app-update-store';
 import './splash.css';
@@ -96,7 +96,7 @@ function SplashComponent() {
       if (bootResolvedRef.current && elapsed < total) return;
       closedRef.current = true;
       window.clearInterval(timer);
-      invoke('close_splashscreen').catch((error) => {
+      ipc('close_splashscreen').catch((error) => {
         console.error('could not close the splash screen', error);
       });
     }, CLOSE_POLL_MS);

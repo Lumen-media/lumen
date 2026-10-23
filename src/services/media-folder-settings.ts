@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { ipc } from '@/lib/ipc';
 import { getAppPaths, invalidateAppPathsCache } from './app-paths';
 import type { MediaType } from './types';
 
@@ -13,7 +13,7 @@ export async function setMediaFolder(opts: {
   path: string | null;
   migrate?: MigrationMode;
 }): Promise<void> {
-  await invoke('set_media_folder', {
+  await ipc('set_media_folder', {
     mediaType: opts.mediaType,
     path: opts.path,
     migrate: opts.migrate ?? null,
@@ -23,7 +23,7 @@ export async function setMediaFolder(opts: {
 
 export async function restartApp(): Promise<void> {
   try {
-    await invoke('restart_app');
+    await ipc('restart_app');
   } catch {
     // Fallback if invoke fails
   }

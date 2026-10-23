@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { ipc } from '@/lib/ipc';
 import type { FileInfo } from './types';
 
 export interface QueueDbItem extends FileInfo {
@@ -6,7 +6,7 @@ export interface QueueDbItem extends FileInfo {
   played: boolean;
 }
 
-interface QueueRow {
+export interface QueueRow {
   id: number;
   position: number;
   filePath: string;
@@ -24,7 +24,7 @@ interface QueueRow {
   downloadStatus: string | null;
 }
 
-interface QueueFileInput {
+export interface QueueFileInput {
   name: string;
   path: string;
   size: number;
@@ -44,7 +44,8 @@ function toQueueFileInput(file: FileInfo): QueueFileInput {
     name: file.title ?? file.name,
     path: file.path,
     size: file.size,
-    modifiedAt: file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
+    modifiedAt:
+      file.modifiedAt instanceof Date ? file.modifiedAt.getTime() : Number(file.modifiedAt),
     extension: file.extension,
     duration: file.duration ?? null,
     title: file.title ?? null,
@@ -62,12 +63,12 @@ function toDbItem(item: QueueDbItem & { modifiedAt: number }): QueueDbItem {
 
 class QueueDbService {
   async loadQueue(): Promise<QueueDbItem[]> {
-    const items = await invoke<Array<QueueDbItem & { modifiedAt: number }>>('queue_load');
+    const items = await ipc('queue_load');
     return items.map(toDbItem);
   }
 
   async loadAllRows(): Promise<QueueRow[]> {
-    return invoke<QueueRow[]>('queue_load_rows');
+    return ipc('queue_load_rows');
   }
 
   async addTriggerEntry(
@@ -77,47 +78,47 @@ class QueueDbService {
     title: string,
     tag: string
   ): Promise<number> {
-    return invoke<number>('queue_add_trigger_entry', { entryId, triggerId, configJson, title, tag });
+    return ipc('queue_add_trigger_entry', { entryId, triggerId, configJson, title, tag });
   }
 
   async removeTriggerEntry(entryId: string): Promise<void> {
-    await invoke('queue_remove_trigger_entry', { entryId });
+    await ipc('queue_remove_trigger_entry', { entryId });
   }
 
   async toggleTriggerPlayed(entryId: string): Promise<void> {
-    await invoke('queue_toggle_trigger_played', { entryId });
+    await ipc('queue_toggle_trigger_played', { entryId });
   }
 
   async loadTriggerEntries(): Promise<QueueRow[]> {
-    return invoke<QueueRow[]>('queue_load_trigger_entries');
+    return ipc('queue_load_trigger_entries');
   }
 
   async exists(filePath: string): Promise<boolean> {
-    return invoke<boolean>('queue_exists', { filePath });
+    return ipc('queue_exists', { filePath });
   }
 
   async addToQueue(file: FileInfo): Promise<number> {
-    return invoke<number>('queue_add_to_queue', { file: toQueueFileInput(file) });
+    return ipc('queue_add_to_queue', { file: toQueueFileInput(file) });
   }
 
   async playNext(file: FileInfo): Promise<number> {
-    return invoke<number>('queue_play_next', { file: toQueueFileInput(file) });
+    return ipc('queue_play_next', { file: toQueueFileInput(file) });
   }
 
   async addUrlToQueue(url: string): Promise<number> {
-    return invoke<number>('queue_add_url_to_queue', { url });
+    return ipc('queue_add_url_to_queue', { url });
   }
 
   async removeFromQueue(id: number): Promise<void> {
-    await invoke('queue_remove', { id });
+    await ipc('queue_remove', { id });
   }
 
   async markPlayed(id: number): Promise<void> {
-    await invoke('queue_mark_played', { id });
+    await ipc('queue_mark_played', { id });
   }
 
   async togglePlayed(id: number): Promise<void> {
-    await invoke('queue_toggle_played', { id });
+    await ipc('queue_toggle_played', { id });
   }
 
   /**
@@ -125,29 +126,29 @@ class QueueDbService {
    * Marks the found item as played and returns it without deleting it from the queue.
    */
   async shiftQueue(excludePath?: string): Promise<QueueDbItem | null> {
-    const item = await invoke<QueueDbItem | null>('queue_shift', {
+    const item = await ipc('queue_shift', {
       excludePath: excludePath ?? null,
     });
-    return item ? (toDbItem(item as QueueDbItem & { modifiedAt: number }) ?? null) : null;
+    return item ? toDbItem(item) : null;
   }
 
   async clearQueue(): Promise<void> {
-    await invoke('queue_clear');
+    await ipc('queue_clear');
   }
 
   async reorderQueue(orderedIds: number[]): Promise<void> {
-    await invoke('queue_reorder', { orderedIds });
+    await ipc('queue_reorder', { orderedIds });
   }
 
   async updateAllPositions(
     idUpdates: { id: number; position: number }[],
     pathUpdates: { path: string; position: number }[]
   ): Promise<void> {
-    await invoke('queue_update_all_positions', { idUpdates, pathUpdates });
+    await ipc('queue_update_all_positions', { idUpdates, pathUpdates });
   }
 
   async shuffleQueue(): Promise<void> {
-    await invoke('queue_shuffle');
+    await ipc('queue_shuffle');
   }
 
   async updateMetadata(
@@ -160,7 +161,7 @@ class QueueDbService {
       remoteThumbnailUrl?: string;
     }
   ): Promise<void> {
-    await invoke('queue_update_metadata', { filePath, metadata });
+    await ipc('queue_update_metadata', { filePath, metadata });
   }
 }
 
@@ -183,7 +184,7 @@ export function rowToItem(row: QueueRow): QueueDbItem {
     thumbnailPath: row.thumbnailPath ?? undefined,
     remoteThumbnailUrl: row.remoteThumbnailUrl ?? undefined,
     downloadStatus: valid(row.downloadStatus)
-      ? row.downloadStatus as NonNullable<FileInfo['downloadStatus']>
+      ? (row.downloadStatus as NonNullable<FileInfo['downloadStatus']>)
       : row.fileExtension === 'url'
         ? 'not_downloaded'
         : 'downloaded',
