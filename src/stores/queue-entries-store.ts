@@ -3,7 +3,13 @@ import { create } from 'zustand';
 import { useModuleStore } from '@/modules/store';
 import { queueDbService, rowToItem } from '@/services/queue-db-service';
 import type { FileInfo } from '@/services/types';
-import { type QueueItem, useQueueStore } from './queue-store';
+import {
+  broadcastQueueSync,
+  type QueueItem,
+  type QueueSyncEntry,
+  setQueueSyncEntriesProvider,
+  useQueueStore,
+} from './queue-store';
 
 export type TriggerInstance = { id: string; triggerId: string; config: unknown; showLabel: boolean; played: boolean };
 
@@ -28,6 +34,10 @@ interface QueueEntriesStore {
   setDropTargetIndex: (index: number | null) => void;
   setDragFileInfo: (file: FileInfo | null) => void;
   insertFileAtItemIndex: (file: FileInfo, itemIndex: number) => Promise<void>;
+  removeTrigger: (id: string) => Promise<void>;
+  moveEntry: (id: number | string, position: number) => Promise<void>;
+  fireTrigger: (id: string) => Promise<boolean>;
+  clearAll: () => Promise<void>;
   advanceQueue: (currentFilePath: string | null) => AdvanceResult;
 }
 
@@ -164,6 +174,57 @@ export const useQueueEntriesStore = create<QueueEntriesStore>((set, get) => ({
     await queueDbService.reorderQueue(orderedIds);
   },
 
+  removeTrigger: async (id) => {
+    set((state) => ({
+      entries: state.entries.filter((e) => !(e.kind === 'trigger' && e.id === id)),
+    }));
+    await queueDbService.removeTriggerEntry(id).catch(() => {});
+  },
+
+  moveEntry: async (id, position) => {
+    const { entries, setEntries: setLocalEntries, persistOrder } = get();
+    const from = entries.findIndex((e) => e.id === String(id));
+    if (from === -1) return;
+    const next = [...entries];
+    const [moved] = next.splice(from, 1);
+    const clamped = Math.max(0, Math.min(position, next.length));
+    next.splice(clamped, 0, moved);
+    setLocalEntries(next);
+    await persistOrder().catch(() => {});
+    await useQueueStore.getState().loadFromDb().catch(() => {});
+  },
+
+  fireTrigger: async (id) => {
+    const entry = get().entries.find(
+      (e): e is Extract<ListEntry, { kind: 'trigger' }> =>
+        e.kind === 'trigger' && e.id === id
+    );
+    if (!entry) return false;
+
+    const moduleStore = useModuleStore.getState();
+    const spec =
+      moduleStore.getQueueTriggerSpecs().find((s) => s.id === entry.inst.triggerId) ??
+      moduleStore.getQueueActionSpecs().find((s) => s.id === entry.inst.triggerId);
+    if (!spec) return false;
+
+    spec.onFire(entry.inst.config);
+
+    if (!entry.inst.played) {
+      set((state) => ({
+        entries: state.entries.map((e) =>
+          e.kind === 'trigger' && e.id === id ? { ...e, inst: { ...e.inst, played: true } } : e
+        ),
+      }));
+      queueDbService.toggleTriggerPlayed(id).catch(() => {});
+    }
+    return true;
+  },
+
+  clearAll: async () => {
+    set({ entries: [] });
+    await useQueueStore.getState().clearQueue().catch(() => {});
+  },
+
   advanceQueue: (currentFilePath) => {
     const { entries, pendingIndex } = get();
 
@@ -219,3 +280,31 @@ export const useQueueEntriesStore = create<QueueEntriesStore>((set, get) => ({
     return { type: 'end' };
   },
 }));
+
+function triggerLabel(triggerId: string): string {
+  return (
+    useModuleStore.getState().getQueueTriggerSpecs().find((spec) => spec.id === triggerId)
+      ?.label ?? triggerId
+  );
+}
+
+setQueueSyncEntriesProvider(() =>
+  useQueueEntriesStore.getState().entries.map(
+    (entry): QueueSyncEntry =>
+      entry.kind === 'item'
+        ? { id: entry.item.id, kind: 'media' }
+        : {
+            id: entry.id,
+            kind: 'trigger',
+            title: triggerLabel(entry.inst.triggerId),
+            isPlayed: entry.inst.played,
+            showLabel: entry.inst.showLabel,
+          }
+  )
+);
+
+useQueueEntriesStore.subscribe((state, previous) => {
+  if (state.entries !== previous.entries) {
+    broadcastQueueSync();
+  }
+});

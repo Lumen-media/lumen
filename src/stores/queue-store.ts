@@ -195,9 +195,30 @@ export function setQueueCurrentPathProvider(provider: () => string | null) {
   currentPathProvider = provider;
 }
 
-function toSyncItem(item: QueueItem, currentPath: string | null): QueueSyncItem {
+/**
+ * Ordering hint for the mixed queue list. Media entries only need `id` for
+ * positioning (their data always comes from the authoritative queue); trigger
+ * entries carry their display metadata. Registered by the queue-entries store
+ * to avoid a circular dependency.
+ */
+export interface QueueSyncEntry {
+  id: number | string;
+  kind: 'media' | 'trigger';
+  title?: string;
+  isPlayed?: boolean;
+  showLabel?: boolean;
+}
+
+let queueSyncEntriesProvider: (() => QueueSyncEntry[]) | null = null;
+
+export function setQueueSyncEntriesProvider(provider: () => QueueSyncEntry[]) {
+  queueSyncEntriesProvider = provider;
+}
+
+function mediaSyncItem(item: QueueItem, currentPath: string | null): QueueSyncItem {
   return {
     id: item.id,
+    kind: 'media',
     title: item.file.title ?? item.file.name,
     artist: item.file.artist,
     type: item.file.extension,
@@ -205,6 +226,61 @@ function toSyncItem(item: QueueItem, currentPath: string | null): QueueSyncItem 
     is_played: item.played,
     duration: item.file.duration,
   };
+}
+
+function triggerSyncItem(entry: QueueSyncEntry): QueueSyncItem {
+  return {
+    id: entry.id,
+    kind: 'trigger',
+    title: entry.title ?? String(entry.id),
+    is_playing: false,
+    is_played: entry.isPlayed ?? false,
+    show_label: entry.showLabel,
+  };
+}
+
+/**
+ * Builds the merged list in playback order. The provider's media slots define
+ * where triggers sit relative to playback, but the media content itself is
+ * taken from the authoritative queue in queue order — so shuffles/reorders are
+ * reflected immediately even before the entries store resyncs. Any media the
+ * provider does not cover yet is appended in queue order.
+ */
+function buildQueueSyncItems(currentPath: string | null): QueueSyncItem[] {
+  const queue = useQueueStore.getState().queue;
+  const provided = queueSyncEntriesProvider?.() ?? [];
+
+  const items: QueueSyncItem[] = [];
+  const seenMedia = new Set<number>();
+  let mediaCursor = 0;
+
+  const takeNextMedia = (): QueueItem | null => {
+    while (mediaCursor < queue.length && seenMedia.has(queue[mediaCursor].id)) {
+      mediaCursor++;
+    }
+    const item = queue[mediaCursor];
+    if (!item) return null;
+    mediaCursor++;
+    seenMedia.add(item.id);
+    return item;
+  };
+
+  for (const entry of provided) {
+    if (entry.kind === 'media') {
+      const item = takeNextMedia();
+      if (item) items.push(mediaSyncItem(item, currentPath));
+    } else {
+      items.push(triggerSyncItem(entry));
+    }
+  }
+
+  for (const item of queue) {
+    if (!seenMedia.has(item.id)) {
+      items.push(mediaSyncItem(item, currentPath));
+    }
+  }
+
+  return items;
 }
 
 /**
@@ -225,7 +301,7 @@ export function broadcastQueueSync(delay = QUEUE_SYNC_DEBOUNCE_MS): void {
   queueSyncTimeout = setTimeout(() => {
     queueSyncTimeout = null;
     const currentPath = currentPathProvider();
-    const items = useQueueStore.getState().queue.map((item) => toSyncItem(item, currentPath));
+    const items = buildQueueSyncItems(currentPath);
     const currentIndex = currentPath
       ? items.findIndex((item) => item.is_playing)
       : -1;
