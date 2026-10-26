@@ -660,6 +660,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const existing = await getMediaWindow();
     if (!existing) {
       if (localMediaType !== 'video') return;
+      const { currentFilePath, localTime } = get();
+      // The window may have been closed while media was loaded; reopen it with
+      // that media instead of spawning an empty player that can never start.
+      if (currentFilePath) {
+        await get().loadFile(currentFilePath, localTime);
+        return;
+      }
       try {
         await ipc('create_window', { label: 'media-window', title: 'Media Player' });
         const win = await getMediaWindow();

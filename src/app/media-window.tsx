@@ -14,7 +14,7 @@ import { PresenterSlot } from '@/modules/components/PresenterSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
 import { lumenUrl } from '@/services/lumen-url';
-import { getMediaTypeFromPath, usePlayerStore } from '@/stores/player-store';
+import { getMediaTypeFromPath } from '@/stores/player-store';
 import { useProfileStore } from '@/stores/profile-store';
 
 function StreamOverlay() {
@@ -97,6 +97,17 @@ function MediaWindowComponent() {
 
   const presentationPathRef = useRef(presentationPath);
   presentationPathRef.current = presentationPath;
+
+  // Esta janela não roda os listeners do player-store, então precisa saber
+  // localmente o que está no palco para decidir o que o "exit" deve fechar.
+  const hasBaseVideoRef = useRef(false);
+  const isBasePlayingRef = useRef(false);
+  const presentedViewRef = useRef({ lyricPath, imagePath, presentationPath });
+  presentedViewRef.current = { lyricPath, imagePath, presentationPath };
+
+  const handlePlayerPlayingChange = useCallback((playing: boolean) => {
+    isBasePlayingRef.current = playing;
+  }, []);
 
   const clearPresentedContent = useCallback(() => {
     const hadPresentation = Boolean(presentationPathRef.current);
@@ -196,12 +207,35 @@ function MediaWindowComponent() {
   }, [saveCurrentPosition]);
 
   const exitPresentedContent = useCallback(() => {
+    const {
+      lyricPath: presentedLyric,
+      imagePath: presentedImage,
+      presentationPath: presentedDeck,
+    } = presentedViewRef.current;
+
+    const hasPresentedContent =
+      Boolean(presentedLyric) ||
+      Boolean(presentedImage) ||
+      Boolean(presentedDeck) ||
+      useModuleStore.getState().presenterViewId !== null;
+
+    if (!hasPresentedContent) {
+      void closeWindow();
+      return;
+    }
+
     clearPresentedContent();
 
-    const hasBaseMedia = Boolean(usePlayerStore.getState().currentFilePath);
-    if (!hasBaseMedia) {
-      void closeWindow();
+    // Cascata: o exit só devolve o palco para a mídia de base se ela estiver
+    // tocando; um vídeo pausado (ou encerrado) não é algo a ser exibido.
+    if (hasBaseVideoRef.current && isBasePlayingRef.current) {
+      emit('stage-backdrop-change', { active: true, source: 'player', mediaType: 'video' }).catch(
+        () => {}
+      );
+      return;
     }
+
+    void closeWindow();
   }, [clearPresentedContent, closeWindow]);
 
   const ensureDefaultWindowMode = useCallback(async () => {
@@ -299,19 +333,7 @@ function MediaWindowComponent() {
           if (next) ipc('push_stream_blank').catch(() => {});
           return next;
         }),
-      'media.escape': () => {
-        const hasPresentedContent =
-          Boolean(lyricPath) ||
-          Boolean(imagePath) ||
-          Boolean(presentationPath) ||
-          useModuleStore.getState().presenterViewId !== null;
-
-        if (hasPresentedContent) {
-          exitPresentedContent();
-        } else {
-          void closeWindow();
-        }
-      },
+      'media.escape': () => exitPresentedContent(),
       'media.next-slide': () => {
         if (presentationCurrentSlide >= presentationTotalSlides - 1) return;
         emit('presentation:set-slide', {
@@ -359,9 +381,11 @@ function MediaWindowComponent() {
       // Audio is rendered by the main window; it must not replace whatever is
       // presented here, otherwise lyrics would vanish when the track changes.
       if (getMediaTypeFromPath(event.payload.url) !== 'video') {
+        hasBaseVideoRef.current = false;
         emit('unload-video').catch(() => {});
         return;
       }
+      hasBaseVideoRef.current = true;
       // A new video owns the stage: clear the presented view before it starts
       // instead of leaving a stale overlay on top of a fresh player.
       clearPresentedContent();
@@ -476,7 +500,14 @@ function MediaWindowComponent() {
     <div className="fixed inset-0 h-dvh w-dvw overflow-hidden bg-black">
       {/* The player is never unmounted: overlays are layers on top of it, so
           playback and play/pause keep working while content is presented. */}
-      <Videoplayer className="h-full w-full" url="" autoplay muted={false} interactive={false} />
+      <Videoplayer
+        className="h-full w-full"
+        url=""
+        autoplay
+        muted={false}
+        interactive={false}
+        onPlayingChange={handlePlayerPlayingChange}
+      />
       {imageSrc && !lyricPath && (
         <div className="absolute inset-0 z-10 w-dvw h-dvh bg-black">
           <img src={imageSrc} alt="" className="w-full h-full object-contain" />
