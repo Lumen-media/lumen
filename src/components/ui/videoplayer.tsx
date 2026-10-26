@@ -12,6 +12,65 @@ import { urlMediaService } from '@/services/url-media-service';
 import { Slider } from './slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 
+type YouTubePlayerApi = {
+  getAvailableQualityLevels?: () => string[];
+  setPlaybackQuality?: (quality: string) => void;
+  setPlaybackQualityRange?: (min: string, max: string) => void;
+  setOption?: (module: string, option: string, value: unknown) => void;
+  addEventListener?: (event: string, listener: (event?: { data?: number }) => void) => void;
+};
+
+type YouTubeVideoElement = HTMLVideoElement & { api?: YouTubePlayerApi };
+
+const YOUTUBE_QUALITY_RANK = [
+  'highres',
+  'hd2880',
+  'hd2160',
+  'hd1440',
+  'hd1080',
+  'hd720',
+  'large',
+  'medium',
+  'small',
+  'tiny',
+];
+
+const YOUTUBE_CONFIG = {
+  cc_load_policy: 0 as const,
+  vq: 'highres',
+};
+
+const guardedYouTubeApis = new WeakSet<YouTubePlayerApi>();
+
+function disableYouTubeCaptions(api: YouTubePlayerApi) {
+  try {
+    api.setOption?.('captions', 'track', {});
+  } catch {}
+}
+
+function guardYouTubePlayer(api: YouTubePlayerApi) {
+  if (guardedYouTubeApis.has(api)) return;
+  guardedYouTubeApis.add(api);
+
+  api.addEventListener?.('onApiChange', () => {
+    disableYouTubeCaptions(api);
+  });
+  api.addEventListener?.('onStateChange', (event) => {
+    if (event?.data === 1 || event?.data === 3) {
+      disableYouTubeCaptions(api);
+    }
+  });
+}
+
+function bestYouTubeQuality(api: YouTubePlayerApi): string | null {
+  const levels = api.getAvailableQualityLevels?.() ?? [];
+  return (
+    YOUTUBE_QUALITY_RANK.find((quality) => levels.includes(quality)) ??
+    levels.find((quality) => quality !== 'auto') ??
+    null
+  );
+}
+
 export type VideoplayerProps = {
   className?: string;
   url?: string;
@@ -73,6 +132,48 @@ export const Videoplayer = ({
   useEffect(() => {
     setMutedState(muted);
   }, [muted]);
+
+  useEffect(() => {
+    if (!activeUrl) return;
+
+    let cancelled = false;
+    let lastApi: YouTubePlayerApi | null = null;
+    let qualityApplied = false;
+    let qualityAttempts = 0;
+
+    const tick = () => {
+      if (cancelled) return;
+      const api = (playerRef.current as YouTubeVideoElement | null)?.api;
+      if (!api) return;
+
+      if (api !== lastApi) {
+        lastApi = api;
+        qualityApplied = false;
+        qualityAttempts = 0;
+        guardYouTubePlayer(api);
+      }
+
+      disableYouTubeCaptions(api);
+
+      if (qualityApplied || qualityAttempts >= 60) return;
+      qualityAttempts++;
+
+      const best = bestYouTubeQuality(api);
+      if (!best) return;
+
+      api.setPlaybackQualityRange?.(best, best);
+      api.setPlaybackQuality?.(best);
+      qualityApplied = true;
+    };
+
+    tick();
+    const interval = window.setInterval(tick, 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeUrl]);
 
   const handlePlayPause = useCallback(() => {
     if (playingRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
@@ -172,6 +273,15 @@ export const Videoplayer = ({
           setPlayed(0);
         }
       }),
+      listen('unload-video', () => {
+        if (!mounted) return;
+        setPlaying(false);
+        setPlayed(0);
+        currentFilePath.current = null;
+        pendingThumbnail.current = null;
+        pendingSeekTime.current = null;
+        setActiveUrl('');
+      }),
       listen<{ url: string; time: number }>('load-url', async (event) => {
         const seq = ++loadSeqRef.current;
         const { url: filePath, time: seekTime } = event.payload;
@@ -221,6 +331,10 @@ export const Videoplayer = ({
     };
   }, [handleMute, handlePlayPause]);
 
+  const youtubeConfig = urlMediaService.parseYouTubeUrl(activeUrl)
+    ? { youtube: YOUTUBE_CONFIG }
+    : undefined;
+
   return (
     <div
       className={cn(
@@ -238,6 +352,7 @@ export const Videoplayer = ({
         playing={playing}
         volume={volume}
         muted={mutedState}
+        config={youtubeConfig}
         onReady={async () => {
           switchingUrlRef.current = false;
           if (pendingSeekTime.current !== null && pendingSeekTime.current > 0) {
@@ -261,7 +376,7 @@ export const Videoplayer = ({
         onTimeUpdate={handleTimeUpdate}
         onEnded={() => {
           if (ws?.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ event: 'stop' }));
+            ws.send(JSON.stringify({ event: 'stop', reason: 'ended' }));
           }
           setPlaying(false);
         }}
