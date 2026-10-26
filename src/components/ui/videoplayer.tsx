@@ -9,6 +9,7 @@ import { createStreamSocket } from '@/lib/stream-socket';
 import { cn } from '@/lib/utils';
 import { lumenUrl } from '@/services/lumen-url';
 import { urlMediaService } from '@/services/url-media-service';
+import { getMediaTypeFromPath } from '@/stores/player-store';
 import { Slider } from './slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 
@@ -285,6 +286,9 @@ export const Videoplayer = ({
       listen<{ url: string; time: number }>('load-url', async (event) => {
         const seq = ++loadSeqRef.current;
         const { url: filePath, time: seekTime } = event.payload;
+        // Audio is played by the main window; loading it here as well would
+        // duplicate the sound and expose the file over the presented content.
+        if (getMediaTypeFromPath(filePath) !== 'video') return;
         if (currentBlobUrl.current) {
           URL.revokeObjectURL(currentBlobUrl.current);
           currentBlobUrl.current = null;
