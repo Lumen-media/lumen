@@ -10,6 +10,13 @@ This document defines the WebSocket access contract for Lumen, with focus on:
 - device deactivation/forget flows
 - expected payloads and close codes
 
+Related references:
+
+- Client-sent events: [websocket-client-events.md](./websocket-client-events.md)
+- Chat events: [chat-websocket-events.md](./chat-websocket-events.md)
+- Streaming/WebRTC: [broadcast-streaming-architecture.md](./architecture/broadcast-streaming-architecture.md)
+- App preview: [desktop-app-preview-webrtc.md](./architecture/desktop-app-preview-webrtc.md)
+
 ---
 
 ## Endpoint
@@ -31,11 +38,17 @@ Internal desktop traffic (first-party app modules) also uses port `8080`, but vi
 - No device authentication required.
 - Used by desktop app modules (player window, media window, lyric window, etc.).
 - Not blocked when remote access is disabled.
+- Scope: raw audio events, streaming signaling and chat only. Queue and
+  presentation control are **external-only**; `register`/`auth`/`forget_device`
+  are also external-only.
 
 ### 2) External (non-loopback network peers)
 
 - Must authenticate before control events are accepted.
 - Enforced by registration/auth/session rules below.
+- Scope: all audio, queue, presentation, streaming and chat events.
+
+Both channel types support ping/pong and ignore non-text frames.
 
 ---
 
@@ -86,7 +99,10 @@ Lumen currently uses `device_id + access_token` auth:
     "player": true,
     "lyrics": true,
     "bible": true,
-    "media": true
+    "media": true,
+    "streaming": false,
+    "chat": false,
+    "presentation": true
   }
 }
 ```
@@ -97,6 +113,12 @@ Lumen currently uses `device_id + access_token` auth:
 { "event": "auth_fail", "reason": "token_expired" }
 { "event": "auth_fail", "reason": "token_used" }
 ```
+
+Registration failures do **not** close the socket (except when remote access is
+disabled, which sends `auth_fail { unauthorized }` and closes with `4001`), so
+the client may retry `register` or fall back to `auth`.
+
+Known register reasons: `unauthorized`, `token_expired`, `token_used`.
 
 ---
 
@@ -123,7 +145,10 @@ Lumen currently uses `device_id + access_token` auth:
     "player": true,
     "lyrics": true,
     "bible": true,
-    "media": true
+    "media": true,
+    "streaming": false,
+    "chat": false,
+    "presentation": true
   }
 }
 ```
@@ -181,6 +206,48 @@ After successful `auth_ok`, external clients may send:
 - `metadata` (`title`, `artist`, `url`)
 - `progress` (`value`, `duration`)
 
+### Queue
+
+- `queue_add` (`url` **or** `media_id`, optional `position`)
+- `queue_remove` (`id`)
+- `queue_move` (`id`, `position`)
+- `queue_jump` (`id`)
+- `queue_shuffle`
+- `queue_clear`
+
+All queue events accept `request_id` and are answered with
+`queue_op_ok` / `queue_op_fail` (see below).
+
+### Presentation
+
+- `slide_next`, `slide_prev`
+- `slide_goto` (`index`)
+- `blackout` (`on: bool`)
+- `wallpaper` (`on: bool`)
+
+All presentation events accept `request_id` and are answered with
+`presentation_op_ok` / `presentation_op_fail` (see below).
+
+### Streaming
+
+- `subscribe_stream` (`stream_type`)
+- `unsubscribe_stream` (`stream_type`)
+- `webrtc_answer` (`stream_type`, `sdp`)
+- `webrtc_ice_candidate` (`stream_type`, `candidate`)
+- `mobile_offer` (`sdp`, optional `video_orientation`)
+
+See [broadcast-streaming-architecture.md](./architecture/broadcast-streaming-architecture.md)
+for the signaling flow and [desktop-app-preview-webrtc.md](./architecture/desktop-app-preview-webrtc.md)
+for `app_preview`.
+
+### Chat
+
+- `chat_send`, `chat_file_send`, `chat_history`, `chat_reaction`,
+  `chat_typing`, `chat_read`
+
+See [chat-websocket-events.md](./chat-websocket-events.md) for payloads,
+limits and errors.
+
 ---
 
 ## Permission Enforcement
@@ -192,6 +259,10 @@ If authenticated but not authorized for a feature:
 ```
 
 Connection remains open.
+
+Queue, presentation, streaming and chat denials use their own frames instead,
+each with reason `no_permission`: `queue_op_fail`, `presentation_op_fail`,
+`stream_error`, and the chat error frame.
 
 ### Permission Mapping
 
@@ -207,28 +278,60 @@ Connection remains open.
 
 ### Queue & Presentation Operation Acks
 
-Queue and presentation control events accept an optional `request_id` and are
-answered with a matching acknowledgement frame echoing it verbatim:
+Queue and presentation control events accept an optional `request_id` (any JSON
+type) and are answered with a matching acknowledgement frame echoing it
+verbatim:
 
 ```json
 { "event": "queue_add", "request_id": 7, "url": "https://..." }
 { "event": "queue_op_ok", "request_id": 7 }
 ```
 
-`queue_add` accepts either `url` (resolved via the media resolver) or
-`media_id` (an id from the media pool / `media_files`, added verbatim). An
-optional `position` inserts at that index. Supply one of `url` / `media_id`;
-using both is an error.
+When `request_id` is omitted the ack carries `"request_id": null`.
 
-On failure a `reason` is included instead:
+#### Queue payloads
+
+| Event | Fields |
+|---|---|
+| `queue_add` | `url` or `media_id`; optional `position` |
+| `queue_remove` | `id` |
+| `queue_move` | `id`, `position` |
+| `queue_jump` | `id` |
+| `queue_shuffle` | — |
+| `queue_clear` | — |
+
+`queue_add` accepts either `url` (resolved via the media resolver) or
+`media_id` (an id from the media pool / `media_files`, added verbatim). If both
+are present, `media_id` wins. `position` is an index **among media items**
+(triggers are not counted). `queue_add` is acknowledged as soon as it is
+accepted; URL resolution and media lookup happen asynchronously on the desktop,
+so `queue_op_ok` does not guarantee the media was resolved.
+
+`queue_remove`, `queue_move` and `queue_jump` address the entry by `id`, which
+is a **number** for media items and a **string** for trigger entries.
+`queue_jump` on a trigger fires it immediately. `queue_clear` removes both media
+items and triggers.
+
+#### Presentation payloads
+
+| Event | Fields |
+|---|---|
+| `slide_next` | — |
+| `slide_prev` | — |
+| `slide_goto` | `index` (0-based) |
+| `blackout` | `on` (bool, defaults to `false`) |
+| `wallpaper` | `on` (bool, defaults to `false`) |
+
+#### Failure frames
 
 ```json
 { "event": "queue_op_fail", "request_id": 7, "reason": "no_permission" }
+{ "event": "presentation_op_fail", "request_id": 7, "reason": "missing_index" }
 ```
 
-Presentation events use `presentation_op_ok` / `presentation_op_fail`. Failure
-reasons: `no_permission`, `missing_url_or_media_id`, `missing_id`,
-`missing_id_or_position`, `missing_index`.
+Queue failure reasons: `no_permission`, `missing_url_or_media_id`,
+`missing_id`, `missing_id_or_position`.
+Presentation failure reasons: `no_permission`, `missing_index`.
 
 ### Sync Events Pushed To Devices
 
@@ -236,8 +339,16 @@ reasons: `no_permission`, `missing_url_or_media_id`, `missing_id`,
 |---|---|---|
 | `player_sync` | none | Full player state (`media`, `playback`, `state`, `lyric`) |
 | `player_tick` | `player` | `{ position, duration, is_playing, sent_at_ms }` — re-anchor sent ~1s during playback |
-| `queue_sync` | `player` | `{ items: [{ id, title, artist, type, is_playing, is_played, duration }], current_index }` |
+| `queue_sync` | `player` | `{ items: [{ id, kind, title, artist?, type?, is_playing, is_played, duration?, show_label? }], current_index }` |
 | `presentation_sync` | `presentation` | `{ kind, current_deck, slide_index, total_slides, is_black, is_wallpaper }` |
+
+`queue_sync` is a full snapshot in playback order (media items and trigger
+entries interleaved). `items[].kind` is `"media"` or `"trigger"`; `id` is a
+number for media and a string for triggers. Reconcile by `id`, not by index.
+
+`player_sync`, `queue_sync` and `presentation_sync` are full snapshots;
+`player_tick` is an incremental re-anchor. `player_sync.playback.sent_at` is Unix
+**seconds**, while `player_tick.sent_at_ms` is Unix **milliseconds**.
 
 ---
 
