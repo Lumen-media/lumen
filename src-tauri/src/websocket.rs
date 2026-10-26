@@ -46,6 +46,7 @@ struct AudioEvent {
     title: Option<String>,
     url: Option<String>,
     artist: Option<String>,
+    reason: Option<String>,
 }
 
 /// Inbound `register` message: pairs a device using a registration token.
@@ -506,7 +507,12 @@ fn handle_audio_event(
         }
         "mute" => app.emit("mute", ()).map_err(|e| e.to_string())?,
         "play_pause" => app.emit("play-pause", ()).map_err(|e| e.to_string())?,
-        "stop" => app.emit("stop", ()).map_err(|e| e.to_string())?,
+        "stop" => app
+            .emit(
+                "stop",
+                serde_json::json!({ "reason": audio_event.reason.clone().unwrap_or_default() }),
+            )
+            .map_err(|e| e.to_string())?,
         "load_url" => {
             app.emit(
                 "load-url",
