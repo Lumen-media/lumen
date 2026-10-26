@@ -43,13 +43,15 @@ export interface PlayerTickPayload {
 }
 
 export interface QueueSyncItem {
-  id: number;
+  id: number | string;
+  kind: 'media' | 'trigger';
   title: string;
   artist?: string;
   type?: string;
   is_playing: boolean;
   is_played: boolean;
   duration?: number;
+  show_label?: boolean;
 }
 
 export interface QueueSyncPayload {
