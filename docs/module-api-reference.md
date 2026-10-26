@@ -775,6 +775,11 @@ await host.net.request({
 - Only `https://` URLs allowed. Localhost, private IPs, and link-local addresses are blocked.
 - Forbidden headers: `Host`, `Content-Length`, `Connection`, `Transfer-Encoding`, `Upgrade`, `Proxy-*`, `Sec-*`.
 
+> **Sockets:** `host.net` is HTTP-only — it does not support WebSocket or SSE
+> upgrades. Module code that needs a WebSocket should open a plain `WebSocket`
+> and close it in `onunload`; Lumen does not proxy or expose its remote-control
+> socket (`ws://<host>:8080`) to modules. Use `host.bus` for cross-window events.
+
 ### Manifest permissions
 
 Modules must declare which URLs they can access in their `manifest.json`:
@@ -1331,6 +1336,21 @@ The trigger is responsible for calling `host.queue.next()` when it's done — th
 4. Trigger instances can be dragged to any position between queue items
 5. Each trigger item has a label toggle (tag icon) — hides or shows the spec label text
 6. `SummaryComponent` (if provided) renders inside the item to show config values compactly
+
+### Remote visibility and control
+
+Trigger instances are part of the same queue snapshot Lumen publishes to paired
+remote-control clients (`queue_sync`). No extra registration is required:
+
+- Each instance appears as an item with `kind: "trigger"` and a **string** `id`
+  (the instance id). Media items keep numeric ids.
+- `title` carries the spec `label`; `show_label` mirrors the per-instance label
+  toggle. Config and `SummaryComponent` content are **not** exposed, so make
+  `label` meaningful on its own. Actions (`registerAction`) have no `label`, so
+  their title falls back to the trigger id.
+- Remote clients can reorder or remove trigger instances, and firing one
+  (`queue_jump`) calls `onFire(config)` immediately and marks it played.
+- `queue_clear` removes both media items and trigger instances.
 
 ### `QueueTriggerSpec<T>`
 
