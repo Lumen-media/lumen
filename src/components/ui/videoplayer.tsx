@@ -78,6 +78,7 @@ export type VideoplayerProps = {
   autoplay?: boolean;
   muted?: boolean;
   interactive?: boolean;
+  onPlayingChange?: (playing: boolean) => void;
 };
 
 export const Videoplayer = ({
@@ -86,6 +87,7 @@ export const Videoplayer = ({
   autoplay = true,
   muted = false,
   interactive = true,
+  onPlayingChange,
 }: VideoplayerProps) => {
   async function fetchMetadata(
     videoUrl: string
@@ -120,6 +122,8 @@ export const Videoplayer = ({
   const [playing, setPlaying] = useState(autoplay);
   const playingRef = useRef(playing);
   playingRef.current = playing;
+  const onPlayingChangeRef = useRef(onPlayingChange);
+  onPlayingChangeRef.current = onPlayingChange;
   const [volume, setVolume] = useState(1);
   const [mutedState, setMutedState] = useState(muted);
   const [played, setPlayed] = useState(0);
@@ -133,6 +137,10 @@ export const Videoplayer = ({
   useEffect(() => {
     setMutedState(muted);
   }, [muted]);
+
+  useEffect(() => {
+    onPlayingChangeRef.current?.(playing);
+  }, [playing]);
 
   useEffect(() => {
     if (!activeUrl) return;
