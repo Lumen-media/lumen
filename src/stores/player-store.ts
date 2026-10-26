@@ -149,6 +149,25 @@ function isLiveLikeYouTubeStream(
   return duration >= LIVE_STREAM_MIN_DURATION_SECONDS;
 }
 
+function hasOtherPresentedContent(): boolean {
+  const state = usePlayerStore.getState();
+  return Boolean(
+    state.currentLyricPath ||
+      state.currentImagePath ||
+      usePresentationStore.getState().isActive ||
+      useModuleStore.getState().presenterViewId !== null
+  );
+}
+
+async function hideMediaWindow(): Promise<void> {
+  const win = await getMediaWindow();
+  if (!win) return;
+  const visible = await win.isVisible().catch(() => false);
+  if (visible) {
+    await win.hide().catch(() => {});
+  }
+}
+
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
   localTime: 0,
   localDuration: 0,
@@ -244,8 +263,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
     );
 
-    const unlistenStop = listen('stop', () => {
-      set({ isPlaying: false, isScreenOpen: false });
+    const unlistenStop = listen<{ reason?: string }>('stop', (event) => {
+      const endedNaturally = event.payload?.reason === 'ended';
+
+      set({ isPlaying: false, ...(endedNaturally ? {} : { isScreenOpen: false }) });
       saveSetting('last_time', '0').catch(() => {});
       void broadcastPlayerSync(get, 'stop');
       ipc('push_stream_blank').catch(() => {});
@@ -253,6 +274,27 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       const result = useQueueEntriesStore.getState().advanceQueue(get().currentFilePath);
       if (result.type === 'play') {
         void get().loadFile(result.path);
+        return;
+      }
+
+      if (!endedNaturally) return;
+
+      if (hasOtherPresentedContent()) {
+        emit('unload-video').catch(() => {});
+        set({
+          currentFilePath: null,
+          localMediaType: undefined,
+          isLiveStream: false,
+          localTime: 0,
+          localDuration: 0,
+          localTitle: '',
+          localArtist: '',
+          localUrl: undefined,
+          restoredFilePath: null,
+          isScreenOpen: true,
+        });
+      } else {
+        void hideMediaWindow().then(() => set({ isScreenOpen: false }));
       }
     });
 
