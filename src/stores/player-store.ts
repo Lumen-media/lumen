@@ -371,52 +371,49 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       });
     });
 
-    const unlistenRemoteQueueRemove = listen<{ id: number }>('remote-queue-remove', (event) => {
-      void useQueueStore
-        .getState()
-        .removeFromQueue(event.payload.id)
-        .catch(() => {});
-      broadcastQueueSync(0);
-    });
-
-    const unlistenRemoteQueueMove = listen<{ id: number; position: number }>(
-      'remote-queue-move',
+    const unlistenRemoteQueueRemove = listen<{ id: number | string }>(
+      'remote-queue-remove',
       (event) => {
-        const { queue } = useQueueStore.getState();
-        const from = queue.findIndex((item) => item.id === event.payload.id);
-        if (from === -1) return;
-        const reordered = [...queue];
-        const [moved] = reordered.splice(from, 1);
-        reordered.splice(Math.max(0, Math.min(event.payload.position, reordered.length)), 0, moved);
-        void useQueueStore
-          .getState()
-          .reorderQueue(reordered.map((item) => item.id))
-          .catch(() => {});
-        broadcastQueueSync(0);
+        const { id } = event.payload;
+        if (typeof id === 'number') {
+          void useQueueStore.getState().removeFromQueue(id).catch(() => {});
+        } else {
+          void useQueueEntriesStore.getState().removeTrigger(id).catch(() => {});
+        }
       }
     );
 
-    const unlistenRemoteQueueJump = listen<{ id: number }>('remote-queue-jump', (event) => {
-      const item = useQueueStore.getState().queue.find((entry) => entry.id === event.payload.id);
-      if (item) {
-        void get().loadFile(item.file.path);
+    const unlistenRemoteQueueMove = listen<{ id: number | string; position: number }>(
+      'remote-queue-move',
+      (event) => {
+        void useQueueEntriesStore
+          .getState()
+          .moveEntry(event.payload.id, event.payload.position)
+          .catch(() => {});
       }
-    });
+    );
+
+    const unlistenRemoteQueueJump = listen<{ id: number | string }>(
+      'remote-queue-jump',
+      (event) => {
+        const { id } = event.payload;
+        if (typeof id === 'number') {
+          const item = useQueueStore.getState().queue.find((entry) => entry.id === id);
+          if (item) {
+            void get().loadFile(item.file.path);
+          }
+        } else {
+          void useQueueEntriesStore.getState().fireTrigger(id).catch(() => {});
+        }
+      }
+    );
 
     const unlistenRemoteQueueShuffle = listen('remote-queue-shuffle', () => {
-      void useQueueStore
-        .getState()
-        .shuffleQueue()
-        .catch(() => {});
-      broadcastQueueSync(0);
+      void useQueueStore.getState().shuffleQueue().catch(() => {});
     });
 
     const unlistenRemoteQueueClear = listen('remote-queue-clear', () => {
-      void useQueueStore
-        .getState()
-        .clearQueue()
-        .catch(() => {});
-      broadcastQueueSync(0);
+      void useQueueEntriesStore.getState().clearAll().catch(() => {});
     });
 
     const tickTimer = setInterval(() => {
