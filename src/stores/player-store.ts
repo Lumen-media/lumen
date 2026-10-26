@@ -65,9 +65,22 @@ interface PlayerStore {
 let volumeCommitTimeout: ReturnType<typeof setTimeout> | null = null;
 let seekCommitTimeout: ReturnType<typeof setTimeout> | null = null;
 let pendingMute = false;
+let pendingPlayPause = false;
 const SOCKET_COMMIT_DEBOUNCE_MS = 150;
 const LIVE_STREAM_MIN_DURATION_SECONDS = 24 * 60 * 60;
 const PLAYER_TICK_INTERVAL_MS = 1000;
+const PLAY_PAUSE_ECHO_TIMEOUT_MS = 500;
+
+/**
+ * Marks a locally issued play/pause command so the `play-pause` event coming
+ * back through the WebSocket is not applied a second time.
+ */
+function markPlayPauseCommand(): void {
+  pendingPlayPause = true;
+  setTimeout(() => {
+    pendingPlayPause = false;
+  }, PLAY_PAUSE_ECHO_TIMEOUT_MS);
+}
 
 setQueueCurrentPathProvider(() => usePlayerStore.getState().currentFilePath);
 
@@ -128,7 +141,9 @@ function normalizeMediaSource(source: string): string {
   return urlMediaService.parseYouTubeUrl(source)?.canonicalUrl ?? source;
 }
 
-function getMediaTypeFromPath(filePath: string | null | undefined): PlayerStore['localMediaType'] {
+export function getMediaTypeFromPath(
+  filePath: string | null | undefined
+): PlayerStore['localMediaType'] {
   if (!filePath) return undefined;
   if (urlMediaService.parseYouTubeUrl(filePath)) return 'video';
   const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
@@ -266,7 +281,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const unlistenStop = listen<{ reason?: string }>('stop', (event) => {
       const endedNaturally = event.payload?.reason === 'ended';
 
-      set({ isPlaying: false, ...(endedNaturally ? {} : { isScreenOpen: false }) });
       saveSetting('last_time', '0').catch(() => {});
       void broadcastPlayerSync(get, 'stop');
       ipc('push_stream_blank').catch(() => {});
@@ -280,17 +294,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       if (!endedNaturally) return;
 
       if (hasOtherPresentedContent()) {
-        emit('unload-video').catch(() => {});
+        // Presented content keeps the window on screen, and the media stays
+        // loaded so play/pause keeps controlling it underneath the overlay.
         set({
-          currentFilePath: null,
-          localMediaType: undefined,
-          isLiveStream: false,
-          localTime: 0,
-          localDuration: 0,
-          localTitle: '',
-          localArtist: '',
-          localUrl: undefined,
-          restoredFilePath: null,
+          isPlaying: false,
           isScreenOpen: true,
         });
       } else {
@@ -316,6 +323,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
 
     const unlistenPlayPause = listen('play-pause', () => {
+      // Local play/pause commands round-trip through the WebSocket, so the
+      // echo must not toggle the state a second time.
+      if (pendingPlayPause) {
+        pendingPlayPause = false;
+        return;
+      }
       set((state) => ({ isPlaying: !state.isPlaying }));
     });
 
@@ -331,14 +344,22 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const unlistenLoadUrl = listen<{ url: string; time: number }>('load-url', (event) => {
       const filePath = normalizeMediaSource(event.payload.url);
       const seekTime = Number(event.payload.time) || 0;
+      const mediaType = getMediaTypeFromPath(filePath);
+      // A visual track replaces whatever was being presented; audio keeps the
+      // current overlay so lyrics remain on screen across tracks.
+      const replacesPresentation = mediaType === 'video';
       set({
         isPlaying: true,
         currentFilePath: filePath,
-        currentLyricPath: null,
-        currentImagePath: null,
-        currentLyricSlideIndex: 0,
-        currentLyricTotalSlides: 0,
-        localMediaType: getMediaTypeFromPath(filePath),
+        ...(replacesPresentation
+          ? {
+              currentLyricPath: null,
+              currentImagePath: null,
+              currentLyricSlideIndex: 0,
+              currentLyricTotalSlides: 0,
+            }
+          : {}),
+        localMediaType: mediaType,
         isLiveStream: false,
         localTime: seekTime,
         localDuration: seekTime > 0 ? get().localDuration : 0,
@@ -363,6 +384,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         currentLyricSlideIndex: 0,
         currentLyricTotalSlides: 0,
       });
+    });
+
+    const unlistenPresentedCleared = listen('presented-content-cleared', () => {
+      set({
+        currentLyricPath: null,
+        currentImagePath: null,
+        currentLyricSlideIndex: 0,
+        currentLyricTotalSlides: 0,
+      });
+      void broadcastPlayerSync(get);
     });
 
     const unlistenLyricSlideChanged = listen<{
@@ -476,6 +507,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       unlistenLoadUrl.then((f) => f());
       unlistenPlaybackError.then((f) => f());
       unlistenLoadLyric.then((f) => f());
+      unlistenPresentedCleared.then((f) => f());
       unlistenLyricSlideChanged.then((f) => f());
       unlistenRemoteQueueAdd.then((f) => f());
       unlistenRemoteQueueRemove.then((f) => f());
@@ -495,18 +527,18 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   handlePlayPause: async () => {
-    const { sendWs, isPlaying, restoredFilePath, localTime, localMediaType } = get();
+    const { sendWs, restoredFilePath, localTime, localMediaType, currentFilePath } = get();
 
     if (localMediaType === 'audio' && audioElement) {
-      if (audioElement.paused) {
+      const nextPlaying = audioElement.paused;
+      if (nextPlaying) {
         await audioElement.play();
-        set({ isPlaying: true });
-        sendWs({ event: 'play_pause' });
       } else {
         audioElement.pause();
-        set({ isPlaying: false });
-        sendWs({ event: 'play_pause' });
       }
+      set({ isPlaying: nextPlaying });
+      markPlayPauseCommand();
+      sendWs({ event: 'play_pause' });
       void broadcastPlayerSync(get, 'play_pause');
       return;
     }
@@ -520,6 +552,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     const existing = await getMediaWindow();
     if (!existing) {
+      // The media window owns video playback: reopen it with the current media
+      // instead of spawning an empty player that can never be started.
+      if (currentFilePath && localMediaType === 'video') {
+        await get().loadFile(currentFilePath, localTime);
+        return;
+      }
       try {
         await ipc('create_window', { label: 'media-window', title: 'Media Player' });
         set({ isPlaying: true });
@@ -529,8 +567,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     saveSetting('last_time', String(localTime)).catch(() => {});
 
-    sendWs({ event: 'play_pause' });
-    set({ isPlaying: !isPlaying });
+    const nextPlaying = !get().isPlaying;
+    markPlayPauseCommand();
+    if (get().ws?.readyState === WebSocket.OPEN) {
+      sendWs({ event: 'play_pause' });
+    } else {
+      // Without a socket the command would be lost; drive the player window
+      // directly so presented content never blocks playback controls.
+      emit('play-pause').catch(() => {});
+    }
+    set({ isPlaying: nextPlaying });
     void broadcastPlayerSync(get, 'play_pause');
   },
 
@@ -737,7 +783,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       isLiveStream: false,
       restoredFilePath: null,
       currentFilePath: source,
-      currentLyricPath: null,
       currentLyricSlideIndex: 0,
       currentLyricTotalSlides: 0,
       localTime: seekTime > 0 ? seekTime : 0,

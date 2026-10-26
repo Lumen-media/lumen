@@ -14,7 +14,7 @@ import { PresenterSlot } from '@/modules/components/PresenterSlot';
 import { bootPresenterModules } from '@/modules/presenter-injector';
 import { useModuleStore } from '@/modules/store';
 import { lumenUrl } from '@/services/lumen-url';
-import { usePlayerStore } from '@/stores/player-store';
+import { getMediaTypeFromPath, usePlayerStore } from '@/stores/player-store';
 import { useProfileStore } from '@/stores/profile-store';
 
 function StreamOverlay() {
@@ -60,7 +60,6 @@ function MediaWindowComponent() {
   const profileBackgroundSrc = useMediaImageSrc(profileBackground);
 
   const [isFullscreen, setIsFullscreen] = useState(true);
-  const [mode, setMode] = useState<'video' | 'lyric'>('video');
   const [lyricPath, setLyricPath] = useState('');
   const [lyricStartIndex, setLyricStartIndex] = useState(0);
   const [imagePath, setImagePath] = useState<string | null>(null);
@@ -96,9 +95,11 @@ function MediaWindowComponent() {
     }).catch(() => {});
   }, [hideLyrics, isBlackoutActive, useProfileWallpaper]);
 
+  const presentationPathRef = useRef(presentationPath);
+  presentationPathRef.current = presentationPath;
+
   const clearPresentedContent = useCallback(() => {
-    const hadPresentation = Boolean(presentationPath);
-    setMode('video');
+    const hadPresentation = Boolean(presentationPathRef.current);
     setLyricPath('');
     setLyricStartIndex(0);
     setImagePath(null);
@@ -111,6 +112,8 @@ function MediaWindowComponent() {
     useModuleStore.getState().clearPresenter();
     ipc('push_stream_blank').catch(() => {});
     emit('module:presenter-clear').catch(() => {});
+    // The overlay is gone: let the main window drop its presented state too.
+    emit('presented-content-cleared').catch(() => {});
     emit('stage-backdrop-change', {
       active: false,
       source: null,
@@ -118,7 +121,7 @@ function MediaWindowComponent() {
       id: null,
       name: null,
     }).catch(() => {});
-  }, [presentationPath, resetPresenterDisplayModes]);
+  }, [resetPresenterDisplayModes]);
 
   const saveCurrentPosition = useCallback(async () => {
     try {
@@ -298,9 +301,9 @@ function MediaWindowComponent() {
         }),
       'media.escape': () => {
         const hasPresentedContent =
-          mode === 'lyric' ||
-          imagePath ||
-          presentationPath ||
+          Boolean(lyricPath) ||
+          Boolean(imagePath) ||
+          Boolean(presentationPath) ||
           useModuleStore.getState().presenterViewId !== null;
 
         if (hasPresentedContent) {
@@ -341,7 +344,6 @@ function MediaWindowComponent() {
   useEffect(() => {
     const unlistenLyric = listen<{ url: string }>('load-lyric', (event) => {
       resetPresenterDisplayModes();
-      setMode('lyric');
       setLyricPath(event.payload.url);
       setImagePath(null);
       emit('stage-backdrop-change', { active: true, source: 'lyrics', mediaType: 'lyrics' }).catch(
@@ -353,10 +355,16 @@ function MediaWindowComponent() {
       setLyricStartIndex(event.payload.startIndex);
     });
 
-    const unlistenLoadUrl = listen('load-url', () => {
-      resetPresenterDisplayModes();
-      setMode('video');
-      ipc('push_stream_blank').catch(() => {});
+    const unlistenLoadUrl = listen<{ url: string; time: number }>('load-url', (event) => {
+      // Audio is rendered by the main window; it must not replace whatever is
+      // presented here, otherwise lyrics would vanish when the track changes.
+      if (getMediaTypeFromPath(event.payload.url) !== 'video') {
+        emit('unload-video').catch(() => {});
+        return;
+      }
+      // A new video owns the stage: clear the presented view before it starts
+      // instead of leaving a stale overlay on top of a fresh player.
+      clearPresentedContent();
       emit('stage-backdrop-change', { active: true, source: 'player', mediaType: 'video' }).catch(
         () => {}
       );
@@ -364,8 +372,8 @@ function MediaWindowComponent() {
 
     const unlistenLoadImage = listen<{ url: string }>('load-image', (event) => {
       resetPresenterDisplayModes();
+      setLyricPath('');
       setImagePath(event.payload.url);
-      setMode('video');
       emit('stage-backdrop-change', { active: true, source: 'media', mediaType: 'image' }).catch(
         () => {}
       );
@@ -399,7 +407,6 @@ function MediaWindowComponent() {
       'presentation:load',
       (event) => {
         resetPresenterDisplayModes();
-        setMode('video');
         setLyricPath('');
         setImagePath(null);
         setImageSrc(undefined);
@@ -456,7 +463,7 @@ function MediaWindowComponent() {
       unlistenPresentationClear.then((f) => f());
       unlistenSlideChanged.then((f) => f());
     };
-  }, [exitPresentedContent, resetPresenterDisplayModes]);
+  }, [clearPresentedContent, exitPresentedContent, resetPresenterDisplayModes]);
 
   useInterval(
     () => {
@@ -467,15 +474,15 @@ function MediaWindowComponent() {
 
   return (
     <div className="fixed inset-0 h-dvh w-dvw overflow-hidden bg-black">
-      {!(presentationPath || imagePath || lyricPath) && (
-        <Videoplayer className="h-full w-full" url="" autoplay muted={false} interactive={false} />
-      )}
-      {imageSrc && mode !== 'lyric' && (
+      {/* The player is never unmounted: overlays are layers on top of it, so
+          playback and play/pause keep working while content is presented. */}
+      <Videoplayer className="h-full w-full" url="" autoplay muted={false} interactive={false} />
+      {imageSrc && !lyricPath && (
         <div className="absolute inset-0 z-10 w-dvw h-dvh bg-black">
           <img src={imageSrc} alt="" className="w-full h-full object-contain" />
         </div>
       )}
-      {mode === 'lyric' && lyricPath && (
+      {lyricPath && (
         <div className="absolute inset-0 z-10">
           <MarkdownPresentation
             filePath={lyricPath}
