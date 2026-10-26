@@ -1187,6 +1187,15 @@ fn request_id_of(value: &Value) -> &Value {
     value.get("request_id").unwrap_or(&NULL)
 }
 
+/// Extracts a queue target id: a number for media items or a string for trigger
+/// entries. Returns a clone so it can be forwarded verbatim in the Tauri event.
+fn queue_target_id(value: &Value) -> Option<Value> {
+    match value.get("id") {
+        Some(v @ Value::Number(_)) | Some(v @ Value::String(_)) => Some(v.clone()),
+        _ => None,
+    }
+}
+
 /// Handles a queue-control event from a remote device, returning `true` when
 /// it was recognised.
 ///
@@ -1225,14 +1234,15 @@ async fn handle_queue_event(
                     "url": if url.is_empty() { Value::Null } else { Value::String(url.to_string()) },
                     "media_id": media_id,
                     "position": value.get("position").and_then(Value::as_i64),
-                    "request_id": request_id,
+                    "request_id": request_id.clone(),
                 }),
             )
             .map_err(|e| e.to_string())?;
+            emit_ack(Ok(()))?;
             Ok(true)
         }
         "queue_remove" => {
-            match value.get("id").and_then(Value::as_i64) {
+            match queue_target_id(value) {
                 Some(id) => {
                     app.emit("remote-queue-remove", json!({ "id": id }))
                         .map_err(|e| e.to_string())?;
@@ -1243,7 +1253,7 @@ async fn handle_queue_event(
             Ok(true)
         }
         "queue_move" => {
-            let id = value.get("id").and_then(Value::as_i64);
+            let id = queue_target_id(value);
             let position = value.get("position").and_then(Value::as_i64);
             match (id, position) {
                 (Some(id), Some(position)) => {
@@ -1256,7 +1266,7 @@ async fn handle_queue_event(
             Ok(true)
         }
         "queue_jump" => {
-            match value.get("id").and_then(Value::as_i64) {
+            match queue_target_id(value) {
                 Some(id) => {
                     app.emit("remote-queue-jump", json!({ "id": id }))
                         .map_err(|e| e.to_string())?;
