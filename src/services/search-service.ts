@@ -60,13 +60,13 @@ function sourceForMediaType(type: string): SearchSource {
 }
 
 function hitToResult(hit: SearchHit): SearchResult {
-  const source = sourceForMediaType(hit.media_type);
+  const source = sourceForMediaType(hit.mediaType);
   return {
     source,
     id: `media:${hit.id}`,
     title: hit.name.replace(/\.[^/.]+$/, ''),
     subtitle: hit.artist ?? undefined,
-    badge: badgeForMediaType(hit.media_type),
+    badge: badgeForMediaType(hit.mediaType),
     path: hit.path,
     artist: hit.artist ?? undefined,
   };
