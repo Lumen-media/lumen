@@ -66,7 +66,7 @@ export function createLyricsHostAPI(): LyricsHostAPI {
       const numId = Number(id);
       if (!Number.isFinite(numId)) return null;
       const hit = await mediaDbService.getById(numId);
-      if (hit?.media_type !== 'lyrics') return null;
+      if (hit?.mediaType !== 'lyrics') return null;
       const data = await lyricService.load(hit.path);
       return {
         id,
@@ -190,7 +190,7 @@ export function createLibraryHostAPI(): LibraryHostAPI {
         id: String(h.id),
         path: h.path,
         name: h.name,
-        type: h.media_type as PublicMediaType,
+        type: h.mediaType as PublicMediaType,
       }));
     },
     async get(id) {
@@ -202,10 +202,10 @@ export function createLibraryHostAPI(): LibraryHostAPI {
         id: String(hit.id),
         path: hit.path,
         name: hit.name,
-        type: hit.media_type as PublicMediaType,
+        type: hit.mediaType as PublicMediaType,
         duration: hit.duration ?? undefined,
         size: 0,
-        modifiedAt: new Date(hit.modified_at).toISOString(),
+        modifiedAt: new Date(hit.modifiedAt).toISOString(),
       } satisfies MediaItem;
     },
     async metadata(_path) {

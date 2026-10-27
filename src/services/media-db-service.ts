@@ -7,16 +7,16 @@ export interface SearchHit {
   id: number;
   name: string;
   path: string;
-  media_type: MediaType;
+  mediaType: MediaType;
   artist: string | null;
   duration: number | null;
-  modified_at: number;
+  modifiedAt: number;
   rank: number;
   title?: string | null;
-  original_url?: string | null;
-  thumbnail_path?: string | null;
-  remote_thumbnail_url?: string | null;
-  download_status?: string | null;
+  originalUrl?: string | null;
+  thumbnailPath?: string | null;
+  remoteThumbnailUrl?: string | null;
+  downloadStatus?: string | null;
 }
 
 export interface UploadResult {

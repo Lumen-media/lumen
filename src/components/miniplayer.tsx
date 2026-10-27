@@ -64,19 +64,19 @@ export function MiniPlayer({ className }: MiniPlayerProps) {
           name: hit.name,
           path: hit.path,
           size: 0,
-          modifiedAt: new Date(hit.modified_at),
-          extension: hit.original_url ? 'url' : (hit.path.split('.').pop() ?? ''),
+          modifiedAt: new Date(hit.modifiedAt),
+          extension: hit.originalUrl ? 'url' : (hit.path.split('.').pop() ?? ''),
           duration: hit.duration ?? undefined,
           artist: hit.artist ?? undefined,
-          originalUrl: hit.original_url ?? undefined,
-          thumbnailPath: hit.thumbnail_path ?? undefined,
-          remoteThumbnailUrl: hit.remote_thumbnail_url ?? undefined,
+          originalUrl: hit.originalUrl ?? undefined,
+          thumbnailPath: hit.thumbnailPath ?? undefined,
+          remoteThumbnailUrl: hit.remoteThumbnailUrl ?? undefined,
           downloadStatus:
-            hit.download_status === 'not_downloaded' ||
-              hit.download_status === 'downloaded' ||
-              hit.download_status === 'missing'
-              ? hit.download_status
-              : hit.original_url
+            hit.downloadStatus === 'not_downloaded' ||
+              hit.downloadStatus === 'downloaded' ||
+              hit.downloadStatus === 'missing'
+              ? hit.downloadStatus
+              : hit.originalUrl
                 ? 'not_downloaded'
                 : 'downloaded',
         });
