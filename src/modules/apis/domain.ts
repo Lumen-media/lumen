@@ -448,12 +448,23 @@ function syncSurfaceProjection(moduleId: string): Promise<void> {
 
 const surfaceWindowInflight = new Map<string, Promise<{ created: boolean }>>();
 
+/**
+ * Mirrors the default applied by `create_surface_window`: a module only picks
+ * the size when it provides both dimensions, otherwise the window opens
+ * maximized so the OS keeps it inside the work area.
+ */
+function wantsMaximized(options?: SurfaceWindowOptions): boolean {
+  if (options?.fullscreen === true) return true;
+  if (options?.maximized !== undefined) return options.maximized;
+  return true;
+}
+
 async function applySurfaceWindowOptions(win: WebviewWindow, options?: SurfaceWindowOptions) {
   if (options?.title) await win.setTitle(options.title).catch(() => {});
   if (options?.decorations !== undefined)
     await win.setDecorations(options.decorations).catch(() => {});
   if (options?.resizable !== undefined) await win.setResizable(options.resizable).catch(() => {});
-  if (options?.maximized || options?.fullscreen) await win.maximize().catch(() => {});
+  if (wantsMaximized(options)) await win.maximize().catch(() => {});
 }
 
 async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOptions) {
@@ -496,8 +507,10 @@ async function ensureSurfaceWindow(moduleId: string, options?: SurfaceWindowOpti
 
       win = await WebviewWindow.getByLabel(label).catch(() => null);
       if (win) {
-        if (options?.maximized || options?.fullscreen) await win.maximize().catch(() => {});
         await win.show().catch(() => {});
+        // Maximize after showing: the flag set on a hidden window does not
+        // always stick on Windows/WebView2.
+        if (wantsMaximized(options)) await win.maximize().catch(() => {});
         await win.setFocus().catch(() => {});
       }
       return { created: true };
@@ -603,6 +616,15 @@ export function createSurfaceHostAPI(moduleId: string): SurfaceHostAPI {
       globalBus.emit('surface:window-opened', { moduleId, panelId });
       await syncSurfaceProjection(moduleId);
       await ensureSurfaceWindow(moduleId, options);
+      const label = surfaceWindowLabel(moduleId);
+      try {
+        const w = await WebviewWindow.getByLabel(label);
+        if (w) {
+          await w.setFocus().catch(() => {});
+        }
+      } catch {
+        /* ignore */
+      }
     },
     clear() {
       const state = useModuleStore.getState().getSurfaceWindow(moduleId);
