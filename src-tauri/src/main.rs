@@ -249,6 +249,13 @@ async fn create_overlay_window(
     Ok(())
 }
 
+/// Inner width a surface window opens with before being maximized, in logical
+/// pixels. Used when the module does not provide both `width` and `height`.
+const SURFACE_WINDOW_DEFAULT_WIDTH: f64 = 960.0;
+/// Inner height a surface window opens with before being maximized, in logical
+/// pixels. Used when the module does not provide both `width` and `height`.
+const SURFACE_WINDOW_DEFAULT_HEIGHT: f64 = 640.0;
+
 /// Optional sizing and chrome overrides accepted by the surface window
 /// command; omitted fields fall back to sensible defaults.
 #[derive(serde::Deserialize, Default)]
@@ -284,25 +291,21 @@ async fn create_surface_window(
     let min_width = options.min_width.unwrap_or(720.0);
     let min_height = options.min_height.unwrap_or(480.0);
 
-    let (width, height) = {
-        let w = options.width;
-        let h = options.height;
-        if w.is_some() && h.is_some() {
-            (w.unwrap(), h.unwrap())
-        } else {
-            match app_handle.primary_monitor().ok().flatten() {
-                Some(monitor) => {
-                    let size = monitor.size();
-                    (w.unwrap_or(size.width as f64), h.unwrap_or(size.height as f64))
-                }
-                None => (w.unwrap_or(960.0), h.unwrap_or(640.0))
-            }
-        }
+    // A module only picks the window size when it provides both dimensions.
+    // Otherwise the window opens maximized, which keeps it inside the work
+    // area (taskbar and dock stay reachable) instead of covering the monitor.
+    let explicit_size = match (options.width, options.height) {
+        (Some(width), Some(height)) => Some((width, height)),
+        _ => None,
     };
+    let (width, height) = explicit_size.unwrap_or((
+        SURFACE_WINDOW_DEFAULT_WIDTH,
+        SURFACE_WINDOW_DEFAULT_HEIGHT,
+    ));
 
-    let maximized = options.maximized.unwrap_or(false) || options.fullscreen.unwrap_or(false);
+    let maximized = options.maximized.unwrap_or(true) || options.fullscreen.unwrap_or(false);
 
-    let _ = tauri::WebviewWindowBuilder::new(
+    let win = tauri::WebviewWindowBuilder::new(
         &app_handle,
         &label,
         tauri::WebviewUrl::App(route.unwrap_or_else(|| "/module-surface-window".to_string()).into()),
@@ -312,11 +315,14 @@ async fn create_surface_window(
     .resizable(options.resizable.unwrap_or(true))
     .inner_size(width, height)
     .min_inner_size(min_width, min_height)
-    .maximized(maximized)
+    .maximized(options.fullscreen.unwrap_or(false))
     .visible(false)
-    .center()
     .build()
     .map_err(|e| format!("Failed to create surface window: {}", e))?;
+    win.show().unwrap();
+    if maximized {
+        let _ = win.maximize();
+    }
 
     Ok(())
 }

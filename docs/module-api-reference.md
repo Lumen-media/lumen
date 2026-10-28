@@ -159,14 +159,16 @@ function ControlWindow({ close }: { close?: () => void }) {
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `title` | `string` | panel title | Native window title |
-| `width` | `number` | `960` | Initial content width |
-| `height` | `number` | `640` | Initial content height |
+| `width` | `number` | `960` | Initial content width. Only honored together with `height` |
+| `height` | `number` | `640` | Initial content height. Only honored together with `width` |
 | `minWidth` | `number` | `720` | Minimum content width |
 | `minHeight` | `number` | `480` | Minimum content height |
 | `resizable` | `boolean` | `true` | Whether the native window can be resized |
 | `decorations` | `boolean` | `true` | Whether OS window decorations are shown |
-| `maximized` | `boolean` | `false` | Open maximized |
+| `maximized` | `boolean` | `true` without `width`+`height` | Open maximized |
 | `fullscreen` | `boolean` | `false` | Open fullscreen |
+
+Omit `width` and `height` (or pass only one) and the window opens maximized, fitted to the OS work area so the taskbar/dock stays visible — it only uses the 960×640 defaults before being maximized. Pass both dimensions for a fixed-size window, and `maximized: false` to opt out of the default maximization.
 
 ### Public bus events
 

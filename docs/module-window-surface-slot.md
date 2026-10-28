@@ -160,14 +160,16 @@ interface SurfaceHostAPI {
 | Field | Type | Description |
 |-------|------|-------------|
 | `title` | `string` | Native window title |
-| `width` | `number` | Initial content width |
-| `height` | `number` | Initial content height |
+| `width` | `number` | Initial content width. Only honored together with `height` |
+| `height` | `number` | Initial content height. Only honored together with `width` |
 | `minWidth` | `number` | Minimum content width |
 | `minHeight` | `number` | Minimum content height |
 | `resizable` | `boolean` | Whether the native window can be resized |
 | `decorations` | `boolean` | Whether OS window decorations are shown |
-| `maximized` | `boolean` | Open maximized |
+| `maximized` | `boolean` | Open maximized. Defaults to `true` when `width`/`height` are not both provided |
 | `fullscreen` | `boolean` | Open fullscreen |
+
+Omitting `width` and `height` (or passing only one of them) opens the window **maximized**: the OS fits it to the work area, so the taskbar/dock stays visible. Pass both dimensions to get a fixed-size window, and `maximized: false` to opt out of the default maximization — the window then opens at the default size (960×640).
 
 Recommended defaults:
 
@@ -184,6 +186,8 @@ Recommended defaults:
   fullscreen: false,
 }
 ```
+
+With both `width` and `height` set, the window opens at that size. Skip them (or send only one) and it opens maximized instead.
 
 ### Slot and window context
 
