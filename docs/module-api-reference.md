@@ -159,16 +159,16 @@ function ControlWindow({ close }: { close?: () => void }) {
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `title` | `string` | panel title | Native window title |
-| `width` | `number` | `960` | Initial content width. Only honored together with `height` |
-| `height` | `number` | `640` | Initial content height. Only honored together with `width` |
-| `minWidth` | `number` | `720` | Minimum content width |
-| `minHeight` | `number` | `480` | Minimum content height |
+| `width` | `number` | `960` | Initial inner width in logical pixels. Only effective together with `height` |
+| `height` | `number` | `640` | Initial inner height in logical pixels. Only effective together with `width` |
+| `minWidth` | `number` | `720` | Smallest inner width the window manager allows |
+| `minHeight` | `number` | `480` | Smallest inner height the window manager allows |
 | `resizable` | `boolean` | `true` | Whether the native window can be resized |
 | `decorations` | `boolean` | `true` | Whether OS window decorations are shown |
 | `maximized` | `boolean` | `true` without `width`+`height` | Open maximized |
 | `fullscreen` | `boolean` | `false` | Open fullscreen |
 
-Omit `width` and `height` (or pass only one) and the window opens maximized, fitted to the OS work area so the taskbar/dock stays visible — it only uses the 960×640 defaults before being maximized. Pass both dimensions for a fixed-size window, and `maximized: false` to opt out of the default maximization.
+Omit `width` and `height` (or pass only one) and the window opens maximized, fitted to the OS work area so the taskbar/dock stays visible — it only uses the 960×640 defaults before being maximized. Pass both dimensions for a fixed-size window, and `maximized: false` to opt out of the default maximization. `fullscreen: true` overrides `maximized` even when `width` and `height` are omitted.
 
 ### Public bus events
 
