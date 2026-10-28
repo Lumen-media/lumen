@@ -1,59 +1,57 @@
 # Module Window Surface Slot - Usage Guide
 
+> **Status:** implemented. The surface window slot is available for modules.
+
 ## Overview
 
-Lumen modules can use the planned `surface.window` slot to render operator-facing UI in a separate native window.
+Lumen modules can use the `surface.window` slot to render operator-facing UI in a separate native window.
 
 This surface is meant for workflows that feel like a modal, but need more room or should stay visible while the main Lumen window remains usable. It is not audience-facing output, and it does not replace the presenter/media window.
 
-> **Status:** implemented. The surface window slot is available for modules.
-
-## How to use
-
-### Registering a window surface
+## Registering a window surface
 
 Register a React component with `host.panels.add()` using `slot: 'surface.window'`.
 
-```tsx
+```ts
 host.panels.add({
   id: 'my-module.control-window',
   slot: 'surface.window',
   title: 'Control Window',
+  icon: 'monitor',
   component: ControlWindow,
 });
 ```
 
-The component is rendered inside the module's own native window when opened through `host.surface.openWindow()`.
-
-### Opening the window
+## Opening a window surface
 
 Open the registered surface from a command, menu item, dialog action, queue trigger, or any other module event.
 
 ```ts
-host.commands.add({
-  id: 'my-module.open-control-window',
-  title: 'Open control window',
-  run: () => {
-    host.surface.openWindow(
-      'my-module.control-window',
-      { mode: 'live' },
-      {
-        title: 'Control Window',
-        width: 960,
-        height: 640,
-        minWidth: 720,
-        minHeight: 480,
-        resizable: true,
-        decorations: true,
-      },
-    );
-  },
-});
+host.surface.openWindow(
+  'my-module.control-window',
+  { mode: 'live' },
+ );
 ```
+
+You can also pass `SurfaceWindowOptions` when opening the window.
+
+```ts
+host.surface.openWindow(
+  'my-module.control-window',
+  { mode: 'live' },
+  {
+    title: 'Control Window',
+    width: 960,
+    height: 640,
+  },
+);
+```
+
+### One window per module
 
 Each module gets one active surface window. Opening another `surface.window` panel from the same module should reuse that module's window and replace the active content. Other modules can have their own surface windows open at the same time.
 
-### Closing the window
+## Window lifecycle
 
 The rendered component receives a `close` callback. Calling it closes only the current module's surface window.
 
@@ -69,217 +67,125 @@ function ControlWindow({ close }: { close?: () => void }) {
 }
 ```
 
-The module can also clear the window from host code:
+To clear a surface window from the module, use:
 
 ```ts
+// Close the module's surface window
 host.surface.clear();
 ```
 
 Native window close, `close()`, and `host.surface.clear()` should all clear the module's active surface state.
 
-### Passing props
-
-The second argument to `openWindow()` is passed directly to the registered component.
+## State API
 
 ```ts
-host.surface.openWindow('my-module.control-window', {
-  title: 'Live controls',
-  initialTab: 'timers',
-});
-```
-
-```tsx
-function ControlWindow({
-  title,
-  initialTab,
-  close,
-}: {
-  title?: string;
-  initialTab?: string;
-  close?: () => void;
-}) {
-  return (
-    <main className="p-6">
-      <h1>{title}</h1>
-      <p>Initial tab: {initialTab}</p>
-      <button type="button" onClick={close}>Close</button>
-    </main>
-  );
-}
-```
-
-### Reacting to state
-
-The planned `host.surface` API mirrors other Lumen output services.
-
-```ts
-const state = host.surface.state();
-const open = host.surface.isWindowOpen();
+const state = host.surface.state();        // 'idle' | 'live'
+const open = host.surface.isWindowOpen();  // boolean
 
 const sub = host.surface.onStateChange((next) => {
-  host.log.info('Surface state changed', next);
+  // 'idle' | 'live'
 });
 
-sub.dispose();
+host.surface.clear();
 ```
 
-`state()` and `isWindowOpen()` are scoped to the current module.
+## Public bus events
 
-### Listening to events
-
-Lumen should emit public bus events when a surface window opens or closes.
+Listen for surface lifecycle events from other modules or the host:
 
 ```ts
 host.bus.on('surface:window-opened', (event) => {
-  // { moduleId: string, panelId: string }
+  // event: { moduleId, panelId }
 });
 
 host.bus.on('surface:window-closed', (event) => {
-  // { moduleId: string, panelId?: string }
+  // event: { moduleId, panelId? }
 });
 ```
 
 Use these events for synchronization and cleanup. Do not use them as the primary way to render the window; rendering is controlled by `host.surface.openWindow()`.
 
-## API reference
+## `host.surface`
 
-### `host.surface`
+- `state()` — `'idle'` or `'live'`, whether this module's surface window is open.
+- `openWindow(panelId, props?, options?)` — opens or reuses the module's surface window with the given panel.
+- `clear()` — closes the module's surface window.
+- `isWindowOpen()` — boolean, same as `state() === 'live'`.
+- `onStateChange(handler)` — subscribe to open/close transitions scoped to this module.
 
-```ts
-interface SurfaceHostAPI {
-  state(): 'idle' | 'live';
-  onStateChange(handler: (state: 'idle' | 'live') => void): Disposable;
-  openWindow(viewId: string, props?: unknown, options?: SurfaceWindowOptions): void;
-  clear(): void;
-  isWindowOpen(): boolean;
-}
-```
+## `SurfaceWindowOptions`
 
-### `SurfaceWindowOptions`
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `title` | `string` | panel title | Native window title |
+| `width` | `number` | `960` | Initial inner width in logical pixels. Only effective together with `height` |
+| `height` | `number` | `640` | Initial inner height in logical pixels. Only effective together with `width` |
+| `minWidth` | `number` | `720` | Smallest inner width the window manager allows |
+| `minHeight` | `number` | `480` | Smallest inner height the window manager allows |
+| `resizable` | `boolean` | `true` | Whether the native window can be resized |
+| `decorations` | `boolean` | `true` | Whether OS window decorations are shown |
+| `maximized` | `boolean` | `true` without `width`+`height` | Open maximized |
+| `fullscreen` | `boolean` | `false` | Open fullscreen |
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `title` | `string` | Native window title |
-| `width` | `number` | Initial content width. Only honored together with `height` |
-| `height` | `number` | Initial content height. Only honored together with `width` |
-| `minWidth` | `number` | Minimum content width |
-| `minHeight` | `number` | Minimum content height |
-| `resizable` | `boolean` | Whether the native window can be resized |
-| `decorations` | `boolean` | Whether OS window decorations are shown |
-| `maximized` | `boolean` | Open maximized. Defaults to `true` when `width`/`height` are not both provided |
-| `fullscreen` | `boolean` | Open fullscreen |
+Omit `width` and `height` (or pass only one) and the window opens maximized, fitted to the OS work area so the taskbar/dock stays visible — it only uses the 960×640 defaults before being maximized. Pass both dimensions for a fixed-size window, and `maximized: false` to opt out of the default maximization. `fullscreen: true` overrides `maximized` even when `width` and `height` are omitted.
 
-Omitting `width` and `height` (or passing only one of them) opens the window **maximized**: the OS fits it to the work area, so the taskbar/dock stays visible. Pass both dimensions to get a fixed-size window, and `maximized: false` to opt out of the default maximization — the window then opens at the default size (960×640).
-
-Recommended defaults:
+## Example: opening a control panel
 
 ```ts
-{
-  title: panel.title ?? module.name,
+host.surface.openWindow('my-module.control-window', { mode: 'live' }, {
+  title: 'Control Window',
   width: 960,
   height: 640,
-  minWidth: 720,
-  minHeight: 480,
-  resizable: true,
-  decorations: true,
-  maximized: false,
-  fullscreen: false,
-}
+});
 ```
 
 With both `width` and `height` set, the window opens at that size. Skip them (or send only one) and it opens maximized instead.
 
-### Slot and window context
+## Slot and window context
 
 | Value | Purpose |
-|-------|---------|
-| `surface.window` | Slot for module content rendered in a native surface window |
+|---|---|
+| `surface.window` | Module-owned operator-facing native window opened through `host.surface.openWindow(id)` |
 | `host.window === 'surface'` | Runtime context inside a surface window |
 
-## Full example
-
-```tsx
-import { LumenPlugin, type LumenHost } from '@lumen-media/module-sdk';
-
-function ControlWindow({
-  title,
-  close,
-}: {
-  title?: string;
-  close?: () => void;
-}) {
-  return (
-    <main className="p-6">
-      <h1>{title ?? 'Module controls'}</h1>
-      <button type="button" onClick={close}>
-        Close
-      </button>
-    </main>
-  );
-}
-
-export default class MyModule extends LumenPlugin {
-  async onload(host: LumenHost) {
-    const panelId = `${host.meta.id}.control-window`;
-
-    host.panels.add({
-      id: panelId,
-      slot: 'surface.window',
-      title: 'Control Window',
-      component: ControlWindow,
-    });
-
-    host.commands.add({
-      id: `${host.meta.id}.open-control-window`,
-      title: 'Open control window',
-      run: () => {
-        host.surface.openWindow(
-          panelId,
-          { title: 'Live control' },
-          { title: 'Live control', width: 960, height: 640 },
-        );
-      },
-    });
-  }
-}
-```
-
-## Notes
-
-- Use `surface.window` for operator-facing module UI.
-- Use `dialog` for small modal flows inside the main Lumen window.
-- Use `presenter.content` and `host.presentation` for audience-facing media output.
-- Use the overlay surface for separate overlay output.
-- Do not call Tauri window APIs directly from modules.
-- The v1 contract intentionally exposes a small window option set instead of the full Tauri `WebviewWindow` API.
-
-## Module lifecycle per window
+## Module loading in surface context
 
 Each window runs its own JavaScript context. When a module registers a `surface.window` panel, the module's `onload()` is called separately in each window (main, presenter, surface).
 
 ```ts
-async onload(host: LumenHost) {
-  // host.window === 'main'     → main UI window
-  // host.window === 'presenter' → presenter/media window
+async onload(host) {
+  // host.window === 'main'      → main app window
+  // host.window === 'presenter' → presenter/media output window
   // host.window === 'surface'  → this module's surface window
-}
-```
 
-### Per-window initialization
-
-Different windows need different initialization. For example, heavy database operations (schema creation, data import) only need to run in the main window:
-
-```ts
-async onload(host: LumenHost) {
-  // Register UI panels — available in all windows
-  host.panels.add({ slot: 'surface.window', ... });
-
-  // Heavy init only in main window
-  if (host.window === 'main') {
-    await initDatabase(db);
-    await downloadData();
+  if (host.window === 'surface') {
+    host.panels.add({
+      id: 'my-module.surface-panel',
+      slot: 'surface.window',
+      component: SurfacePanel,
+    });
   }
 }
 ```
 
+## Persistence notes
+
 Surface windows reuse the same SQLite database file as the main window. Connections are cached per module and reused across all IPC calls (see SQLite connection caching).
+
+## Recommended defaults
+
+```ts
+host.surface.openWindow('my-module.control-window', undefined, {
+  title: 'Module Window',
+  width: 960,
+  height: 640,
+});
+```
+
+If you do not pass `width` and `height`, the window opens maximized instead of at a fixed size.
+
+## Best practices
+
+- Use `surface.window` for operator-facing module UI.
+- Use the overlay surface for separate overlay output.
+- Avoid opening multiple surface windows for the same module — reuse the module's single surface window and swap panels instead.
