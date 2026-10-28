@@ -63,12 +63,14 @@ interface SurfaceHostAPI {
 
 interface SurfaceWindowOptions {
   title?: string;
+  // Only honored together with `height`; omitting both opens maximized
   width?: number;
   height?: number;
   minWidth?: number;
   minHeight?: number;
   resizable?: boolean;
   decorations?: boolean;
+  // Defaults to true when `width`/`height` are not both provided
   maximized?: boolean;
   fullscreen?: boolean;
 }
@@ -220,6 +222,8 @@ The v1 option set should remain intentionally narrow:
 - `fullscreen`
 
 Do not expose position, always-on-top, focus stealing, arbitrary URL loading, devtools control, or raw Tauri window handles in v1.
+
+Sizing: `width` and `height` are only applied together. When they are not both provided the window opens maximized, so the OS fits it to the work area and the taskbar/dock stays visible; passing `maximized: false` opts out and falls back to the 960×640 default size.
 
 ## Rendering Rules
 

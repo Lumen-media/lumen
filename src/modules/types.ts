@@ -500,16 +500,53 @@ export interface OverlayHostAPI {
   isWindowOpen(): boolean;
 }
 
-/** Geometry and chrome for a surface window. */
 export interface SurfaceWindowOptions {
+  /**
+   * Whether the window opens maximized.
+   *
+   * Defaults to true when both `width` and `height` are omitted, so the OS
+   * places the window inside the work area (taskbar and dock stay reachable)
+   * instead of covering the whole monitor.
+   */
   maximized?: boolean;
+  /**
+   * Whether the window can be resized by the user.
+   */
   resizable?: boolean;
+  /**
+   * Whether the native title bar is drawn.
+   */
   decorations?: boolean;
+  /**
+   * Window title shown in the title bar when `decorations` is enabled.
+   */
   title?: string;
+  /**
+   * Whether the window opens in fullscreen.
+   *
+   * `true` overrides `maximized` even when `width` and `height` are omitted.
+   */
   fullscreen?: boolean;
+  /**
+   * Initial inner width in logical pixels.
+   *
+   * Only effective together with `height` — a window that provides only one of
+   * `width` or `height` still opens maximized by default.
+   */
   width?: number;
+  /**
+   * Initial inner height in logical pixels.
+   *
+   * Only effective together with `width`.
+   */
   height?: number;
+  /**
+   * Smallest inner width the window manager allows.
+   */
   minWidth?: number;
+  /**
+   * Smallest inner height the window manager allows.
+   */
   minHeight?: number;
 }
 
