@@ -79,6 +79,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Copy translations to app (flat files)
+        shell: bash
         run: |
           rm -rf src/locales
           mkdir -p src/locales
