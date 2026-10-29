@@ -150,7 +150,7 @@ export function AsidePanel() {
         onValueChange={(v) => setActiveTab(v as TabValue)}
         className="flex flex-col h-full"
       >
-        <div className="relative border-b border-border shrink-0">
+        <div className="relative @container border-b border-border shrink-0">
           <TabsList
             variant="line"
             className="w-full justify-between rounded-none border-none px-2 h-10"
@@ -159,7 +159,7 @@ export function AsidePanel() {
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="flex-none px-4 after:hidden"
+                className="flex-none after:hidden"
               >
                 {tab.label}
               </TabsTrigger>

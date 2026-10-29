@@ -74,6 +74,7 @@ function TabsIndicator({ className }: { className?: string }) {
     if (!el) return;
 
     let frame = 0;
+    let shouldAnimate = true;
     let observedElements = new Set<Element>();
 
     const update = () => {
@@ -89,7 +90,7 @@ function TabsIndicator({ className }: { className?: string }) {
       const left = activeRect.left - anchorRect.left;
       const width = activeRect.width;
 
-      if (!readyRef.current) {
+      if (!readyRef.current || !shouldAnimate) {
         animationRef.current?.cancel();
         el.style.opacity = '1';
         el.style.left = `${left}px`;
@@ -108,12 +109,15 @@ function TabsIndicator({ className }: { className?: string }) {
       });
     };
 
-    const scheduleUpdate = () => {
+    const scheduleUpdate = (animateChange = true) => {
+      shouldAnimate = animateChange;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(update);
     };
 
-    const resizeObserver = new ResizeObserver(() => scheduleUpdate());
+    const resizeObserver = new ResizeObserver(() => scheduleUpdate(false));
+    const handleWindowResize = () => scheduleUpdate(false);
+    window.addEventListener('resize', handleWindowResize);
 
     const observeLayoutElements = () => {
       const list = el.parentElement;
@@ -156,6 +160,7 @@ function TabsIndicator({ className }: { className?: string }) {
     return () => {
       cancelAnimationFrame(frame);
       animationRef.current?.cancel();
+      window.removeEventListener('resize', handleWindowResize);
       observer.disconnect();
       resizeObserver.disconnect();
     };
