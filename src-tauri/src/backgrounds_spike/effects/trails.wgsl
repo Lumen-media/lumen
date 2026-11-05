@@ -28,6 +28,10 @@ fn main(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
 
   let keep = mix(0.82, 0.995, trail_length);
   var col = mix(blurred, textureSample(prev_tex, prev_sampler, uv - flow).rgb, blur) * keep;
-  col = col + palette(fract(uv.y + t * 0.05)) * (0.004 * P.u_intensity);
+
+  // Moving emitter so the trail field never stays black.
+  let emitter = vec2<f32>(0.5 + 0.35 * sin(t * 0.7), 0.5 + 0.28 * cos(t * 0.9));
+  let spot = 1.0 - smoothstep(0.0, 0.06, length(uv - emitter));
+  col = col + palette(fract(uv.y + t * 0.05)) * spot * (0.5 * P.u_intensity);
   return vec4<f32>(col, 1.0);
 }
