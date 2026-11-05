@@ -4,6 +4,10 @@ import type { EffectRuntime, ParamValue } from './types';
 export type ParamShape = {
   key: string;
   kind: string;
+  label?: string;
+  group?: string;
+  scale?: string;
+  step?: number;
   default: ParamValue;
   min?: number;
   max?: number;
@@ -42,13 +46,13 @@ export function normalizeParams(
 }
 
 function normalizeValue(spec: ParamShape, value: ParamValue): ParamValue {
-  if (spec.kind === 'Color') {
+  if (spec.kind === 'color') {
     return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
       ? value
       : String(spec.default);
   }
 
-  if (spec.kind === 'Bool') {
+  if (spec.kind === 'bool') {
     return typeof value === 'boolean' ? value : Boolean(spec.default);
   }
 
@@ -57,7 +61,7 @@ function normalizeValue(spec: ParamShape, value: ParamValue): ParamValue {
   const max = spec.max ?? Number.POSITIVE_INFINITY;
   let clamped = Math.min(max, Math.max(min, numeric));
 
-  if (spec.kind === 'Int' || spec.kind === 'Seed') {
+  if (spec.kind === 'int' || spec.kind === 'seed') {
     clamped = Math.round(clamped);
   }
 
