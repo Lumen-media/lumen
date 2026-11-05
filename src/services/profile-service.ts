@@ -1,3 +1,4 @@
+import type { Background } from '@/backgrounds/types';
 import { ipc } from '@/lib/ipc';
 
 export interface Profile {
@@ -6,11 +7,7 @@ export interface Profile {
   language?: string;
   colorMode: 'dark' | 'light';
   accentId: string;
-  defaultBackground: {
-    type: 'theme' | 'image' | 'video';
-    src: string;
-    name: string;
-  } | null;
+  defaultBackground: Background | null;
   createdAt: number;
 }
 
