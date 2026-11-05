@@ -25,6 +25,7 @@
  * `invoke()` from `@tauri-apps/api/core`; add an entry when migrating one.
  */
 
+import type { GeneratorPreset } from '@/backgrounds/presets';
 import type {
   Migration,
   ModuleManifest,
@@ -396,6 +397,12 @@ export interface CommandMap {
   push_stream_blank: { args: NoArgs; result: undefined };
   set_mobile_preview_device: { args: { deviceId?: string | null }; result: undefined };
   set_stream_overlay: { args: { active: boolean }; result: undefined };
+
+  /* ── Generator presets ────────────────────────────────────────────────── */
+
+  bg_preset_list: { args: NoArgs; result: GeneratorPreset[] };
+  bg_preset_save: { args: { preset: GeneratorPreset }; result: GeneratorPreset };
+  bg_preset_delete: { args: { id: string }; result: undefined };
 
   /* ── Profiles ─────────────────────────────────────────────────────────── */
 
