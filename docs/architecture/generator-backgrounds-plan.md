@@ -207,7 +207,8 @@ Smoke and Trails ship in v1 as the only feedback effects: they exercise ping-pon
 
 ## 6. UX summary
 
-- Entry point: **titlebar menu → Tools → Generators**, opening the picker directly on the Generators tab, in addition to the picker sections.
+- Entry point: **titlebar menu → Tools → Generators**, opening a preset management dialog with two tabs: **Presets** (built-in + saved, load into the editor or delete a user preset) and **Editor** (effect picker, generated sliders, name and save).
+- The background picker gets a **Generators** tab that lists the same presets for **selection only**; editing stays in the Tools dialog.
 - A new **Generators** tab is added to the existing background picker (next to Themes / Images / Video).
 - The tab shows a grid of **live previews** (low-resolution, muted, capped FPS).
 - Selecting an effect opens a parameter panel with auto-generated sliders grouped into **Motion / Shape / Color / Advanced**.

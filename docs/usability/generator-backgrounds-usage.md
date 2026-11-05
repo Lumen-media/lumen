@@ -76,11 +76,18 @@ Slider ranges are clamped by the engine; you cannot produce an invalid effect.
 
 ## Presets
 
-- **Built-in presets** ship with the app (for example "Calm aurora", "Deep space", "Neon grid").
+Open **Tools → Generators** to manage presets. The dialog has two tabs:
+
+- **Presets** — lists built-in and saved presets. Load one into the editor, or delete a preset you created. Built-ins cannot be edited or deleted.
+- **Editor** — picks the effect, shows the generated sliders and saves the current effect, parameters and seed under a name you choose. Saving an existing user preset overwrites it.
+
+In the background picker, the **Generators** tab lists the same presets for selection only. There is no editing from the picker: choose a preset, confirm, and edit it later in the Tools dialog.
+
+- **Built-in presets** ship with the app (for example "Calm aurora", "Deep space", "Stage smoke").
 - **Your presets** are saved locally and appear alongside the built-ins.
 - Selecting a preset fills every slider; you can keep editing and apply.
 - **Save as preset** stores the current effect, parameters and seed under a name you choose.
-- Presets are per-machine, stored in the app's config folder, and survive updates.
+- Presets are per-machine, stored in `config/background-presets/`, validated against the Rust catalog and survive updates.
 
 ---
 

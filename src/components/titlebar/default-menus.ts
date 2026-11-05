@@ -4,6 +4,7 @@ import { checkForUpdatesManually } from '@/hooks/use-app-update';
 import { menuShortcut, shortcutAction } from '@/lib/shortcuts';
 import { installModule } from '@/modules/injector';
 import { useAppSettingsStore } from '@/stores/app-settings-store';
+import { useGeneratorPresetsDialogStore } from '@/stores/generator-presets-dialog-store';
 import { useLyricModalStore } from '@/stores/lyric-modal-store';
 import { useNoticesDialogStore } from '@/stores/notices-dialog-store';
 import { useSettingsStore } from '@/stores/settings-store';
@@ -118,11 +119,7 @@ const DEFAULT_MENUS: MenuDef[] = [
         type: 'action',
         id: 'generators',
         label: 'Generators',
-        onClick: () => {
-          void import('@/lib/router').then(({ router }) =>
-            router.navigate({ to: '/spike-backgrounds' })
-          );
-        },
+        onClick: () => useGeneratorPresetsDialogStore.getState().open(),
       },
       { type: 'separator' },
       {
@@ -185,11 +182,6 @@ export function registerDefaultMenus() {
       while (items.length > 0 && items[items.length - 1].type === 'separator') {
         items = items.slice(0, -1);
       }
-    }
-    // The Generators entry points at the spike harness until the real picker
-    // lands in Phase 1.
-    if (menu.id === 'tools' && !import.meta.env.DEV) {
-      items = items.filter((item) => !(item.type === 'action' && item.id === 'generators'));
     }
     registerMenu(menu.id === 'tools' ? { ...menu, items } : menu, index * 10);
   });
