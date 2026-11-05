@@ -7,6 +7,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod background_presets;
 mod chat;
 mod devices;
 mod download;
@@ -806,6 +807,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lyrics::lyric_parse,
             lyrics::lyric_serialize,
             lyrics::lyric_build_search_content,
+            background_presets::bg_preset_list,
+            background_presets::bg_preset_save,
+            background_presets::bg_preset_delete,
             profiles::profile_list,
             profiles::profile_save,
             profiles::profile_delete,

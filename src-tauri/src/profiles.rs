@@ -36,17 +36,34 @@ pub struct Profile {
     pub created_at: i64,
 }
 
-/// Reference to a background asset used when nothing else is set.
+/// Reference to the default background: a media asset or a generator preset.
+///
+/// Old profile files only carry `type`, `src` and `name`; the generator fields
+/// are optional aliases that keep those files loading unchanged.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DefaultBackground {
-    /// Kind of background (`"theme"`, `"image"` or `"video"`), serialized as `type`.
+    /// Kind of background (`"theme"`, `"image"`, `"video"` or `"generator"`).
     #[serde(rename = "type")]
     pub kind: String,
-    /// Path or URL of the background asset.
+    /// Path or URL of a media asset; empty for generators.
+    #[serde(default)]
     pub src: String,
-    /// Display name of the asset.
+    /// Display name of the background.
+    #[serde(default)]
     pub name: String,
+    /// Effect id when `kind` is `"generator"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect: Option<String>,
+    /// Generator parameter overrides.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub params: serde_json::Map<String, serde_json::Value>,
+    /// Generator variation seed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u32>,
+    /// Preset the generator was created from, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
 }
 
 /// Returns every valid profile, oldest first.
