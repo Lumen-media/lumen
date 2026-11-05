@@ -1,5 +1,6 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router';
 import * as React from 'react';
+import { GeneratorPresetsDialog } from '@/components/generator-presets-dialog';
 import { GlobalAlert } from '@/components/global-alert';
 import { LyricModal } from '@/components/lyric-modal';
 import { NoticesDialog } from '@/components/notices-dialog';
@@ -72,6 +73,7 @@ function RootComponent() {
           <ShortcutsSheet />
           <LyricModal />
           <NoticesDialog />
+          <GeneratorPresetsDialog />
           <OnboardingDialog />
           <AppUpdateDialog />
           <ReleaseNotesDialog />
