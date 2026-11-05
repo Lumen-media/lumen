@@ -16,6 +16,7 @@ const VERTEX: &str = include_str!("fullscreen.wgsl");
 const DISPLAY: &str = include_str!("display.wgsl");
 
 /// Edge case: loop bound comes from a uniform (allowed by GLSL ES 3.00).
+#[cfg(test)]
 const EDGE_DYNAMIC_LOOP: &str = r#"
 @fragment
 fn main(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
@@ -29,6 +30,7 @@ fn main(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
 "#;
 
 /// Edge case: dense `fract`/`sin` math plus vector reassignment.
+#[cfg(test)]
 const EDGE_FRACT_SIN: &str = r#"
 @fragment
 fn main(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
