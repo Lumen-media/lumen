@@ -116,6 +116,17 @@ const DEFAULT_MENUS: MenuDef[] = [
     items: [
       {
         type: 'action',
+        id: 'generators',
+        label: 'Generators',
+        onClick: () => {
+          void import('@/lib/router').then(({ router }) =>
+            router.navigate({ to: '/spike-backgrounds' })
+          );
+        },
+      },
+      { type: 'separator' },
+      {
+        type: 'action',
         id: 'notices',
         label: 'Notices',
         onClick: () => useNoticesDialogStore.getState().open(),
@@ -174,6 +185,11 @@ export function registerDefaultMenus() {
       while (items.length > 0 && items[items.length - 1].type === 'separator') {
         items = items.slice(0, -1);
       }
+    }
+    // The Generators entry points at the spike harness until the real picker
+    // lands in Phase 1.
+    if (menu.id === 'tools' && !import.meta.env.DEV) {
+      items = items.filter((item) => !(item.type === 'action' && item.id === 'generators'));
     }
     registerMenu(menu.id === 'tools' ? { ...menu, items } : menu, index * 10);
   });

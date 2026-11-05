@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './app/__root'
 import { Route as SplashRouteImport } from './app/splash'
+import { Route as SpikeBackgroundsRouteImport } from './app/spike-backgrounds'
 import { Route as ModuleSurfaceWindowRouteImport } from './app/module-surface-window'
 import { Route as ModuleOverlayWindowRouteImport } from './app/module-overlay-window'
 import { Route as MediaWindowRouteImport } from './app/media-window'
@@ -23,6 +24,11 @@ import { Route as LayoutEditRouteImport } from './app/_layout/edit'
 const SplashRoute = SplashRouteImport.update({
   id: '/splash',
   path: '/splash',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SpikeBackgroundsRoute = SpikeBackgroundsRouteImport.update({
+  id: '/spike-backgrounds',
+  path: '/spike-backgrounds',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ModuleSurfaceWindowRoute = ModuleSurfaceWindowRouteImport.update({
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/media-window': typeof MediaWindowRoute
   '/module-overlay-window': typeof ModuleOverlayWindowRoute
   '/module-surface-window': typeof ModuleSurfaceWindowRoute
+  '/spike-backgrounds': typeof SpikeBackgroundsRoute
   '/splash': typeof SplashRoute
   '/edit': typeof LayoutEditRoute
   '/live': typeof LayoutLiveRoute
@@ -85,6 +92,7 @@ export interface FileRoutesByTo {
   '/media-window': typeof MediaWindowRoute
   '/module-overlay-window': typeof ModuleOverlayWindowRoute
   '/module-surface-window': typeof ModuleSurfaceWindowRoute
+  '/spike-backgrounds': typeof SpikeBackgroundsRoute
   '/splash': typeof SplashRoute
   '/edit': typeof LayoutEditRoute
   '/live': typeof LayoutLiveRoute
@@ -98,6 +106,7 @@ export interface FileRoutesById {
   '/media-window': typeof MediaWindowRoute
   '/module-overlay-window': typeof ModuleOverlayWindowRoute
   '/module-surface-window': typeof ModuleSurfaceWindowRoute
+  '/spike-backgrounds': typeof SpikeBackgroundsRoute
   '/splash': typeof SplashRoute
   '/_layout/edit': typeof LayoutEditRoute
   '/_layout/live': typeof LayoutLiveRoute
@@ -112,6 +121,7 @@ export interface FileRouteTypes {
     | '/media-window'
     | '/module-overlay-window'
     | '/module-surface-window'
+    | '/spike-backgrounds'
     | '/splash'
     | '/edit'
     | '/live'
@@ -122,6 +132,7 @@ export interface FileRouteTypes {
     | '/media-window'
     | '/module-overlay-window'
     | '/module-surface-window'
+    | '/spike-backgrounds'
     | '/splash'
     | '/edit'
     | '/live'
@@ -134,6 +145,7 @@ export interface FileRouteTypes {
     | '/media-window'
     | '/module-overlay-window'
     | '/module-surface-window'
+    | '/spike-backgrounds'
     | '/splash'
     | '/_layout/edit'
     | '/_layout/live'
@@ -147,6 +159,7 @@ export interface RootRouteChildren {
   MediaWindowRoute: typeof MediaWindowRoute
   ModuleOverlayWindowRoute: typeof ModuleOverlayWindowRoute
   ModuleSurfaceWindowRoute: typeof ModuleSurfaceWindowRoute
+  SpikeBackgroundsRoute: typeof SpikeBackgroundsRoute
   SplashRoute: typeof SplashRoute
 }
 
@@ -157,6 +170,13 @@ declare module '@tanstack/react-router' {
       path: '/splash'
       fullPath: '/splash'
       preLoaderRoute: typeof SplashRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/spike-backgrounds': {
+      id: '/spike-backgrounds'
+      path: '/spike-backgrounds'
+      fullPath: '/spike-backgrounds'
+      preLoaderRoute: typeof SpikeBackgroundsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/module-surface-window': {
@@ -249,6 +269,7 @@ const rootRouteChildren: RootRouteChildren = {
   MediaWindowRoute: MediaWindowRoute,
   ModuleOverlayWindowRoute: ModuleOverlayWindowRoute,
   ModuleSurfaceWindowRoute: ModuleSurfaceWindowRoute,
+  SpikeBackgroundsRoute: SpikeBackgroundsRoute,
   SplashRoute: SplashRoute,
 }
 export const routeTree = rootRouteImport
