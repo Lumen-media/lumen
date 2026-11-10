@@ -1,20 +1,22 @@
 import { Dices, Loader2, Plus, Save, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { HexColorPicker } from 'react-colorful';
 import { toast } from 'sonner';
 import { BackgroundLayer } from '@/backgrounds/components/BackgroundLayer';
 import { BACKGROUND_BUNDLE } from '@/backgrounds/generated/catalog';
-import { defaultParams, normalizeParams, paramSpecs, type ParamShape } from '@/backgrounds/params';
+import { defaultParams, normalizeParams, type ParamShape, paramSpecs } from '@/backgrounds/params';
 import type { GeneratorPreset } from '@/backgrounds/presets';
 import { useGeneratorPresetsStore } from '@/backgrounds/presets-store';
 import type { ParamValue } from '@/backgrounds/types';
 import { useTranslation } from '@/lib/i18n';
-import { cn } from '@/lib/utils';
 import { useGeneratorPresetsDialogStore } from '@/stores/generator-presets-dialog-store';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './ui/empty';
 import { Input } from './ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { ScrollArea } from './ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from './ui/tabs';
 
 type Tab = 'presets' | 'editor';
@@ -58,9 +60,7 @@ function sliderValue(spec: ParamShape, position: number): number {
   const min = spec.min ?? 0;
   const max = spec.max ?? 1;
   const value =
-    spec.scale === 'log' && min > 0
-      ? min * (max / min) ** position
-      : min + position * (max - min);
+    spec.scale === 'log' && min > 0 ? min * (max / min) ** position : min + position * (max - min);
   return spec.kind === 'int' || spec.kind === 'seed' ? Math.round(value) : value;
 }
 
@@ -80,15 +80,23 @@ function ParamControl({
 }) {
   if (spec.kind === 'color') {
     return (
-      <div className="flex items-center justify-between gap-2 text-xs">
-        <span>{spec.label ?? spec.key}</span>
-        <input
-          type="color"
-          value={typeof value === 'string' ? value : String(spec.default)}
-          onChange={(event) => onChange(event.target.value)}
-          className="h-6 w-12 rounded border border-border bg-transparent"
-        />
-      </div>
+      <Popover>
+        <PopoverTrigger>
+          <div
+            className="flex items-center gap-1.5 rounded-lg aspect-square w-8 border border-preview bg-preview/20 p-1.5 hover:bg-preview/30 cursor-pointer"
+            style={{ backgroundColor: typeof value === 'string' ? value : String(spec.default) }}
+          >
+            <span className="text-xs hidden sm:block">{spec.label ?? spec.key}</span>
+          </div>
+        </PopoverTrigger>
+        <PopoverContent className="p-2 space-y-1">
+          <HexColorPicker
+            color={typeof value === 'string' ? value : String(spec.default)}
+            onChange={(color) => onChange(color ?? String(spec.default))}
+            className="rectangle-color-picker w-full h-24 aspect-square"
+          />
+        </PopoverContent>
+      </Popover>
     );
   }
 
@@ -152,7 +160,7 @@ export function GeneratorPresetsDialog() {
   useEffect(() => {
     if (!isOpen) return;
     setTab('presets');
-    void load(true).catch(() => {});
+    void load(true).catch(() => { });
   }, [isOpen, load]);
 
   const effect = EFFECTS.find((item) => item.id === draft.effectId) ?? EFFECTS[0];
@@ -239,18 +247,16 @@ export function GeneratorPresetsDialog() {
           <DialogTitle className="text-base font-semibold">{t('Generators')}</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
-          <div className="border-b border-border/50 px-6">
-            <TabsList variant="line" className="h-auto w-fit justify-start gap-4 rounded-none py-0">
-              <TabsTrigger value="presets" className="px-0 pb-3 after:hidden">
-                {t('Presets')}
-              </TabsTrigger>
-              <TabsTrigger value="editor" className="px-0 pb-3 after:hidden">
-                {t('Editor')}
-              </TabsTrigger>
-              <TabsIndicator className="bg-primary" />
-            </TabsList>
-          </div>
+        <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} orientation="vertical">
+          <TabsList variant="line" className="h-auto w-fit justify-start gap-4 rounded-none py-0">
+            <TabsTrigger value="presets" className="px-0 pb-3 after:hidden">
+              {t('Presets')}
+            </TabsTrigger>
+            <TabsTrigger value="editor" className="px-0 pb-3 after:hidden">
+              {t('Editor')}
+            </TabsTrigger>
+            <TabsIndicator className="bg-primary" />
+          </TabsList>
 
           <TabsContent value="presets" className="flex flex-col gap-3 px-6 py-4">
             <div className="flex items-center justify-between gap-3">
@@ -344,17 +350,21 @@ export function GeneratorPresetsDialog() {
                   </label>
                   <label className="space-y-1 text-xs">
                     <span className="text-muted-foreground">{t('Effect')}</span>
-                    <select
+                    <Select
                       value={draft.effectId}
-                      onChange={(event) => changeEffect(event.target.value)}
-                      className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      onValueChange={(val) => changeEffect(val ?? draft.effectId)}
                     >
-                      {EFFECTS.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EFFECTS.map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {item.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </label>
                 </div>
 
