@@ -550,10 +550,10 @@ fn snowfall() -> EffectDef {
         CostHint::Low,
         include_str!("effects/snowfall.wgsl"),
         vec![
-            pf(0, "density", "Density", 0.5, 0.0, 1.0, SHAPE),
-            pf(1, "wind", "Wind", 0.0, -1.0, 1.0, MOTION),
-            pf(2, "size", "Size", 0.4, 0.0, 1.0, SHAPE),
-            pf(3, "blur", "Blur", 0.3, 0.0, 1.0, SHAPE),
+            pf(0, "density", "Density", 0.6, 0.0, 1.0, SHAPE),
+            pf(1, "wind", "Wind", 0.2, -1.0, 1.0, MOTION),
+            pf(2, "size", "Size", 0.45, 0.0, 1.0, SHAPE),
+            pf(3, "blur", "Blur", 0.5, 0.0, 1.0, SHAPE),
         ],
     )
 }
