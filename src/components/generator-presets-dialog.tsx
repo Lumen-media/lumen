@@ -16,7 +16,15 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './
 import { Input } from './ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { ScrollArea } from './ui/scroll-area';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from './ui/tabs';
 
 type Tab = 'presets' | 'editor';
@@ -29,6 +37,26 @@ type Draft = {
 
 const EFFECTS = BACKGROUND_BUNDLE.effects;
 const CURRENT_VERSION = 1;
+const CATEGORY_LABELS: Record<string, string> = {
+  gradients: 'Gradients',
+  waves: 'Waves',
+  particles: 'Particles',
+  geometry: 'Geometry',
+  stylized: 'Stylized',
+  feedback: 'Feedback',
+};
+const EFFECT_GROUPS = EFFECTS.reduce<{ category: string; items: (typeof EFFECTS)[number][] }[]>(
+  (groups, effect) => {
+    const last = groups[groups.length - 1];
+    if (last && last.category === effect.category) {
+      last.items.push(effect);
+    } else {
+      groups.push({ category: effect.category, items: [effect] });
+    }
+    return groups;
+  },
+  []
+);
 const PARAM_GROUPS = [
   { id: 'motion', label: 'Motion' },
   { id: 'shape', label: 'Shape' },
@@ -358,10 +386,17 @@ export function GeneratorPresetsDialog() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {EFFECTS.map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {item.name}
-                          </SelectItem>
+                        {EFFECT_GROUPS.map((group) => (
+                          <SelectGroup key={group.category}>
+                            <SelectLabel>
+                              {t(CATEGORY_LABELS[group.category] ?? group.category)}
+                            </SelectLabel>
+                            {group.items.map((item) => (
+                              <SelectItem key={item.id} value={item.id}>
+                                {item.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         ))}
                       </SelectContent>
                     </Select>
