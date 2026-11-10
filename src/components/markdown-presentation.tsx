@@ -67,7 +67,7 @@ export function MarkdownPresentation({
   useProfiles();
   const { profiles, activeProfileId } = useProfileStore();
   const profileBackground =
-    profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.src ?? undefined;
+    profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.type === 'generator' ? undefined : profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.src ?? undefined;
 
   const [lyricData, setLyricData] = useState<LyricData | null>(null);
   const [currentSlide, setCurrentSlide] = useState(startIndex);
