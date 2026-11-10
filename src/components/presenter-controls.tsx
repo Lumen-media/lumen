@@ -330,7 +330,7 @@ function usePresentedLyricData(lyricPath: string | null, kind: PresenterKind | n
 
 function useProfileBackground() {
   const { profiles, activeProfileId } = useProfileStore();
-  return profiles.find((profile) => profile.id === activeProfileId)?.defaultBackground?.src;
+  return profiles.find((profile) => profile.id === activeProfileId)?.defaultBackground?.type === 'generator' ? undefined : profiles.find((profile) => profile.id === activeProfileId)?.defaultBackground?.src;
 }
 
 function usePresenterCollapseAnimation() {
@@ -643,7 +643,7 @@ const ModuleSequenceThumbnail = memo(function ModuleSequenceThumbnail({
   const { width: containerWidth = 0 } = useResizeObserver({ ref: containerRef });
   const scale = containerWidth / THUMB_VIRTUAL_W;
 
-  const bgPath = data.background?.src ?? data.profileBackground?.src ?? undefined;
+  const bgPath = data.background?.type !== 'generator' ? data.background?.src : undefined ?? data.profileBackground?.type !== 'generator' ? data.profileBackground?.src : undefined ?? undefined;
   const bgSrc = useBackgroundSrc(bgPath);
   const color = data.fontColor || '#FFFFFF';
   const overlayOpacity = (data.backgroundOpacity ?? 30) / 100;

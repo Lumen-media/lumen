@@ -204,7 +204,7 @@ export const NoticesDialog = () => {
   const { isOpen, close } = useNoticesDialogStore();
   const { profiles, activeProfileId } = useProfileStore();
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
-  const profileBackground = activeProfile?.defaultBackground?.src ?? undefined;
+  const profileBackground = activeProfile?.defaultBackground?.type === 'generator' ? undefined : activeProfile?.defaultBackground?.src ?? undefined;
   const editorRef = useRef<TextEditorRef | null>(null);
   const backgroundModalRef = useRef<LyricBackgroundModalRef>(null);
   const [saving, setSaving] = useState(false);
