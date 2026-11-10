@@ -13,6 +13,7 @@ pub enum Category {
     Waves,
     Particles,
     Geometry,
+    Stylized,
     Feedback,
 }
 

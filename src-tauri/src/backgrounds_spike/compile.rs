@@ -257,11 +257,12 @@ pub fn write_generated() -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backgrounds_spike::catalog;
 
     #[test]
     fn catalog_compiles_to_glsl_es_300() {
         let effects = compile_catalog().expect("catalog must compile");
-        assert_eq!(effects.len(), 5);
+        assert_eq!(effects.len(), 42);
 
         for effect in &effects {
             for pass in &effect.passes {
@@ -277,6 +278,29 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn effect_extras_fit_the_uniform_capacity() {
+        for effect in catalog::catalog() {
+            for param in &effect.params {
+                assert!(
+                    param.uniform_index < catalog::FLOAT_COUNT,
+                    "`{}` parameter `{}` overflows the uniform block",
+                    effect.id,
+                    param.key
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn effect_ids_are_unique() {
+        let mut ids: Vec<&str> = catalog::catalog().iter().map(|effect| effect.id).collect();
+        ids.sort_unstable();
+        let total = ids.len();
+        ids.dedup();
+        assert_eq!(ids.len(), total, "duplicate effect ids in the catalog");
     }
 
     #[test]
