@@ -143,8 +143,8 @@ export interface CommandsAPI {
 
 /** The background currently applied to the stage. */
 export interface SelectedBackground {
-  type: 'theme' | 'image' | 'video';
-  src: string;
+  type: 'theme' | 'image' | 'video' | 'generator';
+  src?: string;
   name: string;
 }
 
@@ -600,14 +600,19 @@ export interface ThemesHostAPI {
   /** Imports a background and makes it the default. */
   addBackground(input: ThemeAddInput): Promise<ThemeAddResult>;
   defaultBackground(): Promise<{
-    src: string;
-    type: 'theme' | 'image' | 'video';
+    src?: string;
+    type: 'theme' | 'image' | 'video' | 'generator';
     name: string;
   } | null>;
   onChange(handler: (theme: ThemeRef) => void): Disposable;
   onDefaultBackgroundChange(
     handler: (
-      bg: { src: string; thumb?: string; type: 'theme' | 'image' | 'video'; name: string } | null
+      bg: {
+        src?: string;
+        thumb?: string;
+        type: 'theme' | 'image' | 'video' | 'generator';
+        name: string;
+      } | null
     ) => void
   ): Disposable;
 }
