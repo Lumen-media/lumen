@@ -43,7 +43,7 @@ export default defineConfig({
   },
 
   server: {
-    port: 3000,
+    port: 3005,
     strictPort: false,
     host: host || false,
     hmr: host
