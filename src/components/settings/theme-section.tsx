@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 
 function BackgroundPreview({ background }: { background: Profile['defaultBackground'] }) {
   const srcUrl = background
-    ? lumenUrl(background.src, background.type === 'video' ? {} : { w: 550 })
+    ? background?.type !== 'generator' && lumenUrl(background?.src, background?.type === 'video' ? {} : { w: 550 })
     : null;
 
   if (!background) {
