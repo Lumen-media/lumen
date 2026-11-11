@@ -8,6 +8,7 @@ import {
   Loader2,
   RefreshCw,
   SearchIcon,
+  SparklesIcon,
   Trash2Icon,
 } from 'lucide-react';
 import {
@@ -21,6 +22,11 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { useDebounceValue } from 'usehooks-ts';
+import { BackgroundLayer } from '@/backgrounds/components/BackgroundLayer';
+import { BACKGROUND_BUNDLE } from '@/backgrounds/generated/catalog';
+import type { GeneratorPreset } from '@/backgrounds/presets';
+import { useGeneratorPresetsStore } from '@/backgrounds/presets-store';
+import { encodeBackgroundUri } from '@/backgrounds/uri';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { getThemesPath } from '@/services/app-paths';
@@ -35,12 +41,31 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
 import { ScrollArea } from './ui/scroll-area';
 import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from './ui/tabs';
 
-type MediaTab = 'themes' | 'images' | 'video';
+type MediaTab = 'themes' | 'images' | 'generators' | 'video';
 
 export interface SelectedBackground {
-  type: 'theme' | 'image' | 'video';
+  type: 'theme' | 'image' | 'video' | 'generator';
   src: string;
   name: string;
+}
+
+const EFFECT_NAMES = new Map<string, string>(
+  BACKGROUND_BUNDLE.effects.map((effect) => [effect.id, effect.name])
+);
+
+function generatorSelection(preset: GeneratorPreset): SelectedBackground {
+  return {
+    type: 'generator',
+    src: encodeBackgroundUri({
+      type: 'generator',
+      effect: preset.effect,
+      params: preset.params,
+      seed: preset.seed,
+      name: preset.name,
+      preset: preset.id,
+    }),
+    name: preset.name,
+  };
 }
 
 export interface LyricBackgroundModalRef {
@@ -243,6 +268,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
   const [unsplashTotalPages, setUnsplashTotalPages] = useState(0);
   const onSelectRef = useRef<((bg: SelectedBackground) => void) | undefined>(undefined);
   const themesScrollRef = useRef<HTMLDivElement>(null);
+  const { presets, loading: presetsLoading, load: loadPresets } = useGeneratorPresetsStore();
 
   useImperativeHandle(ref, () => ({
     open(onSelect?: (bg: SelectedBackground) => void) {
@@ -301,7 +327,8 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
   useEffect(() => {
     if (!open) return;
     loadThemes();
-  }, [open, loadThemes]);
+    loadPresets();
+  }, [open, loadThemes, loadPresets]);
 
   const COLS = 4;
   const GAP = 12;
@@ -476,6 +503,9 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
               </TabsTrigger>
               <TabsTrigger value="images" className="pb-3 px-0 after:hidden">
                 {t('Images')}
+              </TabsTrigger>
+              <TabsTrigger value="generators" className="pb-3 px-0 after:hidden">
+                {t('Generators')}
               </TabsTrigger>
               <TabsIndicator className="bg-primary" />
             </TabsList>
@@ -679,6 +709,74 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
                 </div>
               )}
             </ScrollArea>
+          </TabsContent>
+
+          <TabsContent
+            value="generators"
+            className="px-6 py-4 flex flex-col gap-3 min-h-100 h-[40dvh]"
+          >
+            {presets.length === 0 ? (
+              <Empty className="min-h-100 h-[40dvh]">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <SparklesIcon />
+                  </EmptyMedia>
+                  <EmptyTitle>
+                    {presetsLoading ? t('Loading presets...') : t('No presets yet')}
+                  </EmptyTitle>
+                  <EmptyDescription>
+                    {t('Create a generator preset in Tools → Generators.')}
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <ScrollArea className="min-h-100 h-[40dvh]" viewportClassName="pt-1 px-1.5">
+                <div className="grid grid-cols-3 gap-3 pr-1">
+                  {presets.map((preset) => {
+                    const selection = generatorSelection(preset);
+                    const isSelected = selected?.src === selection.src;
+                    return (
+                      <div key={preset.id} className="space-y-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSelected(selection)}
+                          onDoubleClick={handleConfirm}
+                          className={cn(
+                            'group relative block aspect-video w-full overflow-hidden rounded-lg bg-black transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                            isSelected
+                              ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                              : 'hover:opacity-90'
+                          )}
+                        >
+                          <BackgroundLayer
+                            effectId={preset.effect}
+                            params={preset.params}
+                            seed={preset.seed}
+                            maxFps={15}
+                            resolutionScale={0.5}
+                            paused={!open || activeTab !== 'generators'}
+                          />
+                          {isSelected && (
+                            <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+                              <span className="rounded-full bg-black/60 p-1.5">
+                                <CheckIcon className="size-4 text-white" />
+                              </span>
+                            </span>
+                          )}
+                        </button>
+                        <div className="px-0.5">
+                          <p className="truncate text-xs font-medium">{preset.name}</p>
+                          <p className="truncate text-[10px] text-muted-foreground">
+                            {EFFECT_NAMES.get(preset.effect) ?? preset.effect}
+                            {preset.builtIn ? ` · ${t('Built-in')}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            )}
           </TabsContent>
 
           {/* <TabsContent value="video" className="px-6 py-4">
