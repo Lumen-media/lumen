@@ -107,24 +107,27 @@ function ParamControl({
   onChange: (value: ParamValue) => void;
 }) {
   if (spec.kind === 'color') {
+    const color = typeof value === 'string' ? value : String(spec.default);
+    const label = spec.label ?? spec.key;
     return (
-      <Popover>
-        <PopoverTrigger>
-          <div
-            className="flex items-center gap-1.5 rounded-lg aspect-square w-8 border border-preview bg-preview/20 p-1.5 hover:bg-preview/30 cursor-pointer"
-            style={{ backgroundColor: typeof value === 'string' ? value : String(spec.default) }}
-          >
-            <span className="text-xs hidden sm:block">{spec.label ?? spec.key}</span>
-          </div>
-        </PopoverTrigger>
-        <PopoverContent className="p-2 space-y-1">
-          <HexColorPicker
-            color={typeof value === 'string' ? value : String(spec.default)}
-            onChange={(color) => onChange(color ?? String(spec.default))}
-            className="rectangle-color-picker w-full h-24 aspect-square"
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span>{label}</span>
+        <Popover>
+          <PopoverTrigger
+            aria-label={`${label}: ${color}`}
+            title={color}
+            className="size-7 shrink-0 cursor-pointer rounded-md border border-border ring-ring/40 hover:ring-2 focus-visible:outline-none focus-visible:ring-2"
+            style={{ backgroundColor: color }}
           />
-        </PopoverContent>
-      </Popover>
+          <PopoverContent className="w-66 p-2">
+            <HexColorPicker
+              color={color}
+              onChange={(next) => onChange(next ?? color)}
+              className="rectangle-color-picker"
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
     );
   }
 
