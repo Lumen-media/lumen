@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { GeneratorSurface } from '@/backgrounds/components/GeneratorSurface';
 import { lumenUrl } from '@/services/lumen-url';
 import { useProfileStore } from '@/stores/profile-store';
 import { useModuleStore } from '../store';
@@ -6,7 +7,7 @@ import type { PanelSpec } from '../types';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 
 interface BackgroundMedia {
-  type: 'theme' | 'image' | 'video';
+  type: 'theme' | 'image' | 'video' | 'generator';
   src: string;
   name: string;
 }
@@ -28,8 +29,10 @@ function useBackgroundSrc(path?: string, thumb = false): string | undefined {
 }
 
 function PresenterBackground({ media }: { media: BackgroundMedia }) {
-  const src = useBackgroundSrc(media.src, media.type === 'image');
+  const isGenerator = media.type === 'generator';
+  const src = useBackgroundSrc(isGenerator ? undefined : media.src, media.type === 'image');
 
+  if (isGenerator) return <GeneratorSurface value={media.src} maxFps={30} />;
   if (!src) return null;
 
   if (media.type === 'video') {
@@ -42,7 +45,9 @@ function PresenterBackground({ media }: { media: BackgroundMedia }) {
 
 function PresenterDefaultBackground() {
   const { profiles, activeProfileId } = useProfileStore();
-  const profileBg = profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.src;
+  const profileBackground = profiles.find((p) => p.id === activeProfileId)?.defaultBackground;
+  const profileBg =
+    profileBackground && profileBackground.type !== 'generator' ? profileBackground.src : undefined;
   const src = useBackgroundSrc(profileBg);
 
   if (!src) return null;

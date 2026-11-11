@@ -4,6 +4,7 @@ import { Pencil } from 'lucide-react';
 import { forwardRef, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useIsomorphicLayoutEffect } from 'usehooks-ts';
 import { useShallow } from 'zustand/react/shallow';
+import { generatorOf, GeneratorPoster } from '@/backgrounds/components/GeneratorSurface';
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -43,8 +44,11 @@ function RouteComponent() {
   const { profiles, activeProfileId } = useProfileStore(
     useShallow((s) => ({ profiles: s.profiles, activeProfileId: s.activeProfileId }))
   );
+  const activeDefaultBackground = profiles.find((p) => p.id === activeProfileId)?.defaultBackground;
   const profileBackground =
-    profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.src ?? undefined;
+    activeDefaultBackground && activeDefaultBackground.type !== 'generator'
+      ? activeDefaultBackground.src
+      : undefined;
 
   const thumbRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const slideRowRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
@@ -350,7 +354,7 @@ const SequenceThumbnail = memo(
     const fontSizeNum = Number.parseFloat(lyricData.metadata.fontSize) || 48;
 
     const effectiveBg = slide.background || lyricData.metadata.globalBackground || profileBackground;
-    const bgSrc = useBackgroundSrc(effectiveBg);
+    const bgSrc = useBackgroundSrc(generatorOf(effectiveBg) ? undefined : effectiveBg);
 
     useIsomorphicLayoutEffect(() => {
       const text = textRef.current;
@@ -404,6 +408,7 @@ const SequenceThumbnail = memo(
         )}
       >
         <div className="relative aspect-video bg-black">
+          <GeneratorPoster value={effectiveBg} />
           {bgSrc && (
             <img
               src={bgSrc}
