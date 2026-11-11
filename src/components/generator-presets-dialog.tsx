@@ -1,5 +1,5 @@
 import { Dices, Loader2, Plus, Save, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { toast } from 'sonner';
 import { BackgroundLayer } from '@/backgrounds/components/BackgroundLayer';
@@ -11,20 +11,21 @@ import type { ParamValue } from '@/backgrounds/types';
 import { useTranslation } from '@/lib/i18n';
 import { useGeneratorPresetsDialogStore } from '@/stores/generator-presets-dialog-store';
 import { Button } from './ui/button';
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxLabel,
+  ComboboxList,
+} from './ui/combobox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './ui/empty';
 import { Input } from './ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { ScrollArea } from './ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
 import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from './ui/tabs';
 
 type Tab = 'presets' | 'editor';
@@ -187,6 +188,19 @@ export function GeneratorPresetsDialog() {
   const [name, setName] = useState('');
   const [base, setBase] = useState<GeneratorPreset | null>(null);
   const [saving, setSaving] = useState(false);
+  const [effectQuery, setEffectQuery] = useState('');
+  const effectAnchor = useRef<HTMLDivElement | null>(null);
+
+  const filteredGroups = useMemo(() => {
+    const query = effectQuery.trim().toLowerCase();
+    if (!query) return EFFECT_GROUPS;
+    return EFFECT_GROUPS.map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) => item.name.toLowerCase().includes(query) || item.id.includes(query)
+      ),
+    })).filter((group) => group.items.length > 0);
+  }, [effectQuery]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -381,28 +395,46 @@ export function GeneratorPresetsDialog() {
                   </label>
                   <label className="space-y-1 text-xs">
                     <span className="text-muted-foreground">{t('Effect')}</span>
-                    <Select
-                      value={draft.effectId}
-                      onValueChange={(val) => changeEffect(val ?? draft.effectId)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {EFFECT_GROUPS.map((group) => (
-                          <SelectGroup key={group.category}>
-                            <SelectLabel>
-                              {t(CATEGORY_LABELS[group.category] ?? group.category)}
-                            </SelectLabel>
-                            {group.items.map((item) => (
-                              <SelectItem key={item.id} value={item.id}>
-                                {item.name}
-                              </SelectItem>
+                    <div ref={effectAnchor}>
+                      <Combobox
+                        value={draft.effectId}
+                        onValueChange={(val) => val && changeEffect(val)}
+                        itemToStringLabel={(id) => effectName(id)}
+                        onInputValueChange={(value, details) => {
+                          if (details.reason === 'input-change' || details.reason === 'input-clear') {
+                            setEffectQuery(value);
+                          }
+                        }}
+                        onOpenChange={(open) => !open && setEffectQuery('')}
+                      >
+                        <ComboboxInput
+                          className="w-full"
+                          placeholder={t('Search effects...')}
+                          showClear
+                        />
+                        <ComboboxContent
+                          anchor={effectAnchor}
+                          align="start"
+                          className="w-(--anchor-width) min-w-(--anchor-width)"
+                        >
+                          <ComboboxList>
+                            <ComboboxEmpty>{t('No effect found.')}</ComboboxEmpty>
+                            {filteredGroups.map((group) => (
+                              <ComboboxGroup key={group.category}>
+                                <ComboboxLabel>
+                                  {t(CATEGORY_LABELS[group.category] ?? group.category)}
+                                </ComboboxLabel>
+                                {group.items.map((item) => (
+                                  <ComboboxItem key={item.id} value={item.id}>
+                                    {item.name}
+                                  </ComboboxItem>
+                                ))}
+                              </ComboboxGroup>
                             ))}
-                          </SelectGroup>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          </ComboboxList>
+                        </ComboboxContent>
+                      </Combobox>
+                    </div>
                   </label>
                 </div>
 
