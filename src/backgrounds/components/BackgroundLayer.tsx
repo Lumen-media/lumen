@@ -6,6 +6,7 @@ import { normalizeParams } from '../params';
 import type { ParamValue } from '../types';
 
 export interface BackgroundLayerProps {
+  /** Effect id from the generated catalog; unknown ids render the fallback poster. */
   effectId: string;
   params?: Record<string, ParamValue>;
   seed?: number;

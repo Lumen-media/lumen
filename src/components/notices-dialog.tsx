@@ -3,6 +3,7 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
+import { generatorOf, GeneratorSurface } from '@/backgrounds/components/GeneratorSurface';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
 import { useTranslation } from '@/lib/i18n';
 import { getNoticesPath } from '@/services/app-paths';
@@ -122,14 +123,18 @@ function SlidePreview({
   }, [slide.lines, fontSizeNum]);
 
   const effectiveBg = globalBackground || profileBackground;
-  const bgSrc = effectiveBg?.startsWith('#')
-    ? effectiveBg
-    : effectiveBg
-      ? lumenUrl(effectiveBg, { w: 550 })
-      : undefined;
+  const isGeneratorBg = !!generatorOf(effectiveBg);
+  const bgSrc = isGeneratorBg
+    ? undefined
+    : effectiveBg?.startsWith('#')
+      ? effectiveBg
+      : effectiveBg
+        ? lumenUrl(effectiveBg, { w: 550 })
+        : undefined;
 
   return (
     <div className="relative aspect-video bg-black rounded-lg border border-border/20 overflow-hidden">
+      {isGeneratorBg && <GeneratorSurface value={effectiveBg} maxFps={30} resolutionScale={0.5} />}
       {bgSrc && (
         <img
           src={bgSrc}

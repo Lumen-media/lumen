@@ -3,6 +3,7 @@ import { readTextFile } from '@tauri-apps/plugin-fs';
 import { animate, stagger } from 'animejs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
+import { generatorOf, GeneratorSurface } from '@/backgrounds/components/GeneratorSurface';
 import { useProfiles } from '@/hooks/use-profiles';
 import { ipc } from '@/lib/ipc';
 import { useScopedShortcuts } from '@/lib/shortcuts';
@@ -66,8 +67,9 @@ export function MarkdownPresentation({
 }) {
   useProfiles();
   const { profiles, activeProfileId } = useProfileStore();
+  const activeBackground = profiles.find((p) => p.id === activeProfileId)?.defaultBackground;
   const profileBackground =
-    profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.type === 'generator' ? undefined : profiles.find((p) => p.id === activeProfileId)?.defaultBackground?.src ?? undefined;
+    activeBackground?.type === 'generator' ? undefined : (activeBackground?.src ?? undefined);
 
   const [lyricData, setLyricData] = useState<LyricData | null>(null);
   const [currentSlide, setCurrentSlide] = useState(startIndex);
@@ -288,13 +290,14 @@ export function MarkdownPresentation({
     }
   }, [animation, exiting, slide]);
 
-  const globalBgSrc = useBackgroundSrc(
-    useProfileWallpaper
-      ? profileBackground
-      : lyricData?.metadata.globalBackground || profileBackground,
-    winW
-  );
-  const slideBgSrc = useSlideBgSrc(useProfileWallpaper ? undefined : slide?.background, winW);
+  const globalBgValue = useProfileWallpaper
+    ? profileBackground
+    : lyricData?.metadata.globalBackground || profileBackground;
+  const globalBgIsGenerator = !!generatorOf(globalBgValue);
+  const globalBgSrc = useBackgroundSrc(globalBgIsGenerator ? undefined : globalBgValue, winW);
+  const slideBgValue = useProfileWallpaper ? undefined : slide?.background;
+  const slideBgIsGenerator = !!generatorOf(slideBgValue);
+  const slideBgSrc = useSlideBgSrc(slideBgIsGenerator ? undefined : slideBgValue, winW);
 
   if (!lyricData || !slide) {
     return <div className="h-full w-full bg-black" />;
@@ -304,22 +307,30 @@ export function MarkdownPresentation({
 
   return (
     <div className="h-full w-full bg-black relative overflow-hidden">
-      {globalBgSrc && (
-        <img
-          src={globalBgSrc}
-          alt=""
-          className="absolute inset-0 z-0 w-full h-full object-cover"
-          aria-hidden
-        />
+      {globalBgIsGenerator ? (
+        <GeneratorSurface value={globalBgValue} maxFps={60} className="z-0" />
+      ) : (
+        globalBgSrc && (
+          <img
+            src={globalBgSrc}
+            alt=""
+            className="absolute inset-0 z-0 w-full h-full object-cover"
+            aria-hidden
+          />
+        )
       )}
 
-      {slideBgSrc && (
-        <img
-          src={slideBgSrc}
-          alt=""
-          className="absolute inset-0 z-1 w-full h-full object-cover"
-          aria-hidden
-        />
+      {slideBgIsGenerator ? (
+        <GeneratorSurface value={slideBgValue} maxFps={60} className="z-1" />
+      ) : (
+        slideBgSrc && (
+          <img
+            src={slideBgSrc}
+            alt=""
+            className="absolute inset-0 z-1 w-full h-full object-cover"
+            aria-hidden
+          />
+        )
       )}
 
       <div

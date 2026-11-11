@@ -286,6 +286,15 @@ const HTML_TEMPLATE: &str = r#"<!doctype html>
         const background = payload.background || '#000000';
         if (background.startsWith('#')) {
           root.style.background = background;
+        } else if (background.startsWith('lumen-bg://')) {
+          // Generators are desktop-only: phones get a static gradient poster derived
+          // from the reference, so the slide still reads instead of showing black.
+          let hash = 0;
+          for (let i = 0; i < background.length; i++) {
+            hash = (hash * 31 + background.charCodeAt(i)) >>> 0;
+          }
+          const hue = hash % 360;
+          root.style.background = `radial-gradient(120% 120% at 30% 20%, hsl(${hue} 55% 22%), hsl(${(hue + 60) % 360} 45% 8%))`;
         } else {
           root.style.background = `#000 url("${background}") center/cover no-repeat`;
         }
