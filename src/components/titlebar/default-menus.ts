@@ -117,13 +117,6 @@ const DEFAULT_MENUS: MenuDef[] = [
     items: [
       {
         type: 'action',
-        id: 'generators',
-        label: 'Generators',
-        onClick: () => useGeneratorPresetsDialogStore.getState().open(),
-      },
-      { type: 'separator' },
-      {
-        type: 'action',
         id: 'notices',
         label: 'Notices',
         onClick: () => useNoticesDialogStore.getState().open(),
@@ -140,6 +133,13 @@ const DEFAULT_MENUS: MenuDef[] = [
           });
           if (selected) await installModule(selected as string);
         },
+      },
+      { type: 'separator' },
+      {
+        type: 'action',
+        id: 'generators',
+        label: 'Generators',
+        onClick: () => useGeneratorPresetsDialogStore.getState().open(),
       },
     ],
   },
