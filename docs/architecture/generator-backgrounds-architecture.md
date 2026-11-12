@@ -96,7 +96,7 @@ If a future version needs Rust executing per-frame simulation logic, the middle 
 │    presets.ts      → calls into Rust preset commands                      │
 │    presets-store.ts→ shared preset list (zustand)                         │
 │    components/BackgroundLayer.tsx    → canvas + rAF loop                  │
-│    components/GeneratorSurface.tsx   → live surface + static poster       │
+│    components/GeneratorSurface.tsx   → live surface + cached poster frame │
 │                                                                           │
 │  components/generator-presets-dialog.tsx → Tools → Generators             │
 │  components/lyric-background-modal.tsx   → presets in the Themes tab      │
@@ -285,9 +285,11 @@ The layer renders **generators only**; media backgrounds keep their existing `<i
 
 Responsibilities (shipped):
 
-- For generators: mount a `<canvas>`, acquire WebGL2, compile/cache the program, run the rAF loop.
-- Pause on `paused` and when `document.hidden`.
-- Resize via `ResizeObserver`, capped by `devicePixelRatio` and `resolutionScale`.
+- For generators: mount a `<canvas>`, acquire WebGL2, compile the programs, run the rAF loop.
+- Pause on `paused` and when `document.hidden`, keeping the phase so resuming never jumps back to t=0.
+- Resize via `ResizeObserver`, capped by `devicePixelRatio` and `resolutionScale`; changing the scale updates the running engine instead of recompiling.
+- Release the WebGL context on unmount (`WEBGL_lose_context`), so opening pickers and dialogs cannot exhaust the browser's context cap and blank a surface that is still visible.
+- Normalize parameters once per change and parse colors once per value, not per frame.
 - `webglcontextlost` hides the canvas and leaves the palette gradient; `webglcontextrestored` re-initializes resources.
 
 Still planned:
@@ -303,9 +305,9 @@ Still planned:
 |---|---|
 | Context | `webgl2`, `{ alpha: false, antialias: false, desynchronized: true, powerPreference: 'high-performance' }` |
 | Geometry | Full-screen triangle (one draw call) |
-| Program cache | Keyed by effect id + version |
-| Uniforms | Common block + `u_extra` packed from params |
-| FBOs | Ping-pong pair for feedback passes, sized to `resolutionScale` |
+| Programs | Compiled per engine; a `resolutionScale` change reuses the engine instead of rebuilding it |
+| Uniforms | Common block + `u_extra` packed from params, with the effect's parameter specs resolved once |
+| FBOs | Ping-pong pair for feedback passes, size snapped to 64 px steps inside 64–512 |
 | FPS cap | rAF accumulator against `maxFps` |
 | Adaptive quality | Measure frame time; drop `resolutionScale` one step after sustained over-budget frames |
 | Failure | No WebGL2 → static poster (palette gradient), log once, never throw in render |
@@ -440,7 +442,8 @@ Profiles and app state use the structured object; the URI exists only where the 
 |---|---|---|---|---|
 | Main window previews (edit, presentation, settings, notices) | own | min(960, container) | 30 | Low cost, many mounted |
 | Media/output window | own | display resolution (cap 1440p by default) | 60 | Full quality |
-| Presenter module backdrop | own | container | 30 | Only when a module is presenting |
+| Presenter module backdrop | own | container | 30 | Only when a module is presenting; generators arrive from the module payload as a `lumen-bg://` URI |
+| Thumbnails (edit strip, presenter strip, sequence) | — | 320×180 offscreen | once | One frame rendered offscreen, cached by effect + seed + params |
 | HTML server (mobile) | — | — | — | **Out of v1 scope.** No WebGL runtime; a generator ref degrades to a static gradient/theme poster |
 | WebRTC app preview | captured | capture config | capture FPS | Free once the window renders |
 | WebRTC main stream | captured | capture config | up to 60 | Free |
@@ -468,6 +471,7 @@ No change. Window capture already includes the canvas. Mobile WebRTC preview is 
 | Visibility | Pause when hidden, minimized, blackout, or off-screen |
 | Effect cost hint | `Low/Medium/High` sets default scale and FPS |
 | Context loss | Recover once, then fall back to poster |
+| Live contexts | One per surface, released on unmount; poster renders run one at a time |
 | Long sessions | Tier 1 effects must declare an anti-degeneration strategy (Section 6) |
 | Thermal | "Performance" quality mode reduces scale/FPS globally |
 
@@ -508,7 +512,7 @@ Target budget at 1080p: **< 4 ms GPU per surface** for Tier 0, so two surfaces f
 | `src/backgrounds/presets.ts` | Preset IPC client |
 | `src/backgrounds/presets-store.ts` | Shared preset list (`zustand`) |
 | `src/backgrounds/components/BackgroundLayer.tsx` | Generator canvas layer |
-| `src/backgrounds/components/GeneratorSurface.tsx` | Live surface + static poster |
+| `src/backgrounds/components/GeneratorSurface.tsx` | Live surface + cached poster frame |
 | `src/components/generator-presets-dialog.tsx` | Tools → Generators (presets + editor) |
 
 ### Modified
@@ -639,11 +643,11 @@ Detailed tasks, gates and measurement protocol: [generator-backgrounds-spike.md]
 |---|---|
 | Catalog | 42 effects (36 Tier 0 + 6 Tier 1) authored in Rust (`backgrounds/`), assembled with the shared prelude, converted WGSL → GLSL ES 3.00 with `naga`, emitted to `src/backgrounds/generated/catalog.ts` by `cargo run --example bg_compile` |
 | Renderer | `gl-engine.ts` + `BackgroundLayer.tsx`: WebGL2, full-screen triangle, program cache, ping-pong FBOs, fps cap, `resolutionScale`, `document.hidden` pause, context loss/restore |
-| Components | `GeneratorSurface` (live) and `GeneratorPoster` (palette gradient) |
+| Components | `GeneratorSurface` (live) and `GeneratorPoster` (one frame rendered offscreen, cached by effect + seed + params, palette gradient until it lands) |
 | Picker | Generator presets merged into the existing **Themes** grid (virtualized, 4 per row), live preview at 15 fps / 0.5 scale, name on hover; tabs are Themes + Images |
 | Presets | `background_presets.rs` + `bg_preset_list` / `bg_preset_save` / `bg_preset_delete`, `presets-store.ts`, Tools → Generators dialog (Presets + Editor) |
-| Persistence | `background_presets` files, `DefaultBackground` extended with `effect`/`params`/`seed`/`preset`, `lumen-bg://` URI in lyric files, stream payloads and the HTML payload |
-| Surfaces | Lyric global + per-slide + notices + profile default + aside panel + Settings preview + edit previews + media/output window + presenter backdrop + module API (`SelectedBackground`) |
+| Persistence | `background_presets` files, `DefaultBackground` extended with `effect`/`params`/`seed`/`preset`, `lumen-bg://` URI in lyric files, stream payloads and the HTML payload; the URI carries the preset name and id |
+| Surfaces | Lyric global + per-slide + notices + profile default + aside panel + Settings preview + edit previews + media/output window + presenter backdrop + module API (`SelectedBackground`, where generators arrive as a `lumen-bg://` URI in `src`) |
 | Mobile | `generatorPoster()` in `html_server.rs` renders a palette gradient from the URI payload |
 
 ### Pending
