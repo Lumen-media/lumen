@@ -27,7 +27,11 @@ function BackgroundPreview({ background }: { background: Profile['defaultBackgro
   }
 
   if (background.type === 'generator') {
-    return <GeneratorSurface value={background} maxFps={15} resolutionScale={0.5} />;
+    return (
+      <div className="relative size-full">
+        <GeneratorSurface value={background} maxFps={15} resolutionScale={0.5} />
+      </div>
+    );
   }
 
   const srcUrl = lumenUrl(background.src, background.type === 'video' ? {} : { w: 550 });
@@ -257,7 +261,7 @@ export function ThemeSection() {
           </h4>
           <div className="grid grid-cols-2 gap-3">
             {activeProfile?.defaultBackground && (
-              <div className="aspect-video rounded-lg overflow-hidden bg-muted border border-border">
+              <div className="relative aspect-video rounded-lg overflow-hidden bg-muted border border-border">
                 <BackgroundPreview background={activeProfile?.defaultBackground ?? null} />
               </div>
             )}
