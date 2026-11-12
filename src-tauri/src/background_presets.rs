@@ -210,6 +210,10 @@ pub fn bg_preset_list() -> Result<Vec<GeneratorPreset>, String> {
         let Ok(preset) = serde_json::from_str::<GeneratorPreset>(&raw) else {
             continue;
         };
+        // A hand-written file must not take over a built-in's id.
+        if preset.id.starts_with("builtin-") {
+            continue;
+        }
         presets.retain(|candidate| candidate.id != preset.id);
         presets.push(preset);
     }
@@ -231,6 +235,9 @@ pub fn bg_preset_save(mut preset: GeneratorPreset) -> Result<GeneratorPreset, St
         preset.id = uuid::Uuid::new_v4().to_string();
     }
     safe_id(&preset.id)?;
+    if preset.id.starts_with("builtin-") {
+        return Err("built-in presets cannot be overwritten".to_string());
+    }
 
     let (params, seed) = normalize(&preset.effect, &preset.params, preset.seed)?;
     preset.params = params;
