@@ -273,6 +273,21 @@ const HTML_TEMPLATE: &str = r#"<!doctype html>
   <script>
     const root = document.getElementById('root');
     const text = document.getElementById('text');
+    function generatorPoster(ref) {
+      const hex = (value) => typeof value === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(value);
+      const colorA = '#0b1020';
+      const colorB = '#1a1030';
+      try {
+        const encoded = new URLSearchParams(ref.split('?')[1] || '').get('p');
+        if (!encoded) return null;
+        const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+        const params = JSON.parse(atob(padded));
+        return `linear-gradient(135deg, ${hex(params.colorA) ? params.colorA : colorA}, ${hex(params.colorB) ? params.colorB : colorB})`;
+      } catch (_error) {
+        return null;
+      }
+    }
     function clearSlide() {
       root.style.background = '#000';
       text.innerHTML = '';
@@ -287,14 +302,9 @@ const HTML_TEMPLATE: &str = r#"<!doctype html>
         if (background.startsWith('#')) {
           root.style.background = background;
         } else if (background.startsWith('lumen-bg://')) {
-          // Generators are desktop-only: phones get a static gradient poster derived
-          // from the reference, so the slide still reads instead of showing black.
-          let hash = 0;
-          for (let i = 0; i < background.length; i++) {
-            hash = (hash * 31 + background.charCodeAt(i)) >>> 0;
-          }
-          const hue = hash % 360;
-          root.style.background = `radial-gradient(120% 120% at 30% 20%, hsl(${hue} 55% 22%), hsl(${(hue + 60) % 360} 45% 8%))`;
+          // Generators are desktop-only: phones get a static poster built from the
+          // preset palette so the slide still reads instead of showing black.
+          root.style.background = generatorPoster(background) || '#0b1020';
         } else {
           root.style.background = `#000 url("${background}") center/cover no-repeat`;
         }
