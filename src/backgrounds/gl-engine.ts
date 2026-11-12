@@ -1,5 +1,5 @@
 import { BACKGROUND_BUNDLE } from './generated/catalog';
-import { hexToRgba, paramSpecs } from './params';
+import { hexToRgba, type ParamShape, paramSpecs } from './params';
 import type { EffectRuntime, ParamValue } from './types';
 
 /** Per-frame inputs the layer feeds the renderer. */
@@ -46,6 +46,7 @@ export class GlEngine {
   private readonly gl: WebGL2RenderingContext;
   private readonly effect: EffectRuntime;
   private readonly uniforms: Float32Array;
+  private readonly specs: readonly ParamShape[];
   private readonly onContextLost?: () => void;
   private readonly onContextRestored?: () => void;
 
@@ -95,6 +96,7 @@ export class GlEngine {
     }
     this.gl = gl;
     this.uniforms = new Float32Array(BACKGROUND_BUNDLE.layout.floatCount);
+    this.specs = paramSpecs(effect);
 
     canvas.addEventListener('webglcontextlost', this.handleContextLost);
     canvas.addEventListener('webglcontextrestored', this.handleContextRestored);
@@ -316,7 +318,7 @@ export class GlEngine {
     uniforms.set(hexToRgba(String(frame.params.colorA ?? '#4f7cff')), layout.colorA);
     uniforms.set(hexToRgba(String(frame.params.colorB ?? '#ff5fa2')), layout.colorB);
 
-    for (const spec of paramSpecs(this.effect)) {
+    for (const spec of this.specs) {
       if (spec.uniformIndex < layout.extra) continue;
       const value = frame.params[spec.key];
       if (typeof value === 'number') {
