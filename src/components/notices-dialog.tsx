@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { generatorOf, GeneratorSurface } from '@/backgrounds/components/GeneratorSurface';
+import { encodeBackgroundUri } from '@/backgrounds/uri';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
 import { useTranslation } from '@/lib/i18n';
 import { getNoticesPath } from '@/services/app-paths';
@@ -209,7 +210,11 @@ export const NoticesDialog = () => {
   const { isOpen, close } = useNoticesDialogStore();
   const { profiles, activeProfileId } = useProfileStore();
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
-  const profileBackground = activeProfile?.defaultBackground?.type === 'generator' ? undefined : activeProfile?.defaultBackground?.src ?? undefined;
+  const profileDefault = activeProfile?.defaultBackground;
+  const profileBackground =
+    profileDefault?.type === 'generator'
+      ? encodeBackgroundUri(profileDefault)
+      : (profileDefault?.src ?? undefined);
   const editorRef = useRef<TextEditorRef | null>(null);
   const backgroundModalRef = useRef<LyricBackgroundModalRef>(null);
   const [saving, setSaving] = useState(false);

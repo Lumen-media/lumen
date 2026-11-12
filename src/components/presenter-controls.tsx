@@ -10,6 +10,9 @@ import {
   SkipForward,
 } from 'lucide-react';
 import type React from 'react';
+import { GeneratorPoster, generatorOf } from '@/backgrounds/components/GeneratorSurface';
+import type { Background as BackgroundValue } from '@/backgrounds/types';
+import { mediaSrcOf } from '@/backgrounds/uri';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEventListener, useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
 import { Button } from '@/components/ui/button';
@@ -61,8 +64,8 @@ interface ModuleSlideData {
   fontFamily?: string;
   fontWeight?: string;
   fontStyle?: string;
-  background?: { src?: string; type?: string; name?: string } | null;
-  profileBackground?: { src?: string; type?: string; name?: string } | null;
+  background?: BackgroundValue | null;
+  profileBackground?: BackgroundValue | null;
   backgroundOpacity?: number;
   showReferenceOnly?: boolean;
   showVersion?: boolean;
@@ -330,7 +333,7 @@ function usePresentedLyricData(lyricPath: string | null, kind: PresenterKind | n
 
 function useProfileBackground() {
   const { profiles, activeProfileId } = useProfileStore();
-  return profiles.find((profile) => profile.id === activeProfileId)?.defaultBackground?.type === 'generator' ? undefined : profiles.find((profile) => profile.id === activeProfileId)?.defaultBackground?.src;
+  return profiles.find((profile) => profile.id === activeProfileId)?.defaultBackground ?? undefined;
 }
 
 function usePresenterCollapseAnimation() {
@@ -485,7 +488,7 @@ function LyricSequenceThumbnail({
   slide: LyricSlide;
   isSelected: boolean;
   lyricData: LyricData;
-  profileBackground?: string;
+  profileBackground?: BackgroundValue;
   onClick: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null!);
@@ -494,7 +497,7 @@ function LyricSequenceThumbnail({
   const scale = containerWidth / THUMB_VIRTUAL_W;
   const fontSizeNum = Number.parseFloat(lyricData.metadata.fontSize) || 48;
   const effectiveBg = slide.background || lyricData.metadata.globalBackground || profileBackground;
-  const bgSrc = useBackgroundSrc(effectiveBg);
+  const bgSrc = useBackgroundSrc(mediaSrcOf(effectiveBg));
   const textAlign = (lyricData.metadata.alignment || 'center') as React.CSSProperties['textAlign'];
 
   useIsomorphicLayoutEffect(() => {
@@ -530,6 +533,7 @@ function LyricSequenceThumbnail({
       )}
     >
       <div ref={containerRef} className="relative aspect-video bg-black">
+        <GeneratorPoster value={effectiveBg} />
         {bgSrc && (
           <img
             src={bgSrc}
@@ -643,8 +647,9 @@ const ModuleSequenceThumbnail = memo(function ModuleSequenceThumbnail({
   const { width: containerWidth = 0 } = useResizeObserver({ ref: containerRef });
   const scale = containerWidth / THUMB_VIRTUAL_W;
 
-  const bgPath = data.background?.type !== 'generator' ? data.background?.src : undefined ?? data.profileBackground?.type !== 'generator' ? data.profileBackground?.src : undefined ?? undefined;
+  const bgPath = mediaSrcOf(data.background) ?? mediaSrcOf(data.profileBackground);
   const bgSrc = useBackgroundSrc(bgPath);
+  const generatorBg = generatorOf(data.background) ?? generatorOf(data.profileBackground);
   const color = data.fontColor || '#FFFFFF';
   const overlayOpacity = (data.backgroundOpacity ?? 30) / 100;
 
@@ -702,6 +707,7 @@ const ModuleSequenceThumbnail = memo(function ModuleSequenceThumbnail({
       )}
     >
       <div ref={containerRef} className="relative aspect-video bg-black">
+        <GeneratorPoster value={generatorBg} />
         {bgSrc && (
           <img
             src={bgSrc}
@@ -991,7 +997,7 @@ function PresenterSequence({
   lyricData: LyricData | null;
   lyricItems: LyricSlide[];
   lyricSlideIndex: number;
-  profileBackground?: string;
+  profileBackground?: BackgroundValue;
   fallbackSlides: FallbackSlide[];
   moduleData: ModuleSlideData | null;
   moduleSlideComponents: React.ComponentType[];
