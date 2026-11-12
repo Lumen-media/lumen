@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { BACKGROUND_BUNDLE } from '../generated/catalog';
 import { GlEngine } from '../gl-engine';
-import { normalizeParams } from '../params';
+import { isHexColor, normalizeParams } from '../params';
 import type { ParamValue } from '../types';
 
 export interface BackgroundLayerProps {
@@ -163,8 +163,8 @@ export function BackgroundLayer({
     };
   }, [effect, paused, maxFps]);
 
-  const colorA = String(params?.colorA ?? '#0b1020');
-  const colorB = String(params?.colorB ?? '#1a1030');
+  const colorA = isHexColor(params?.colorA) ? params.colorA : '#0b1020';
+  const colorB = isHexColor(params?.colorB) ? params.colorB : '#1a1030';
 
   return (
     <div

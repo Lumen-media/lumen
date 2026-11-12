@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { useEffect, useRef, useState } from 'react';
 import { BACKGROUND_BUNDLE } from '../generated/catalog';
 import { GlEngine } from '../gl-engine';
-import { normalizeParams } from '../params';
+import { isHexColor, normalizeParams } from '../params';
 import type { Background, GeneratorBackground, ParamValue } from '../types';
 import { parseBackground } from '../uri';
 import { BackgroundLayer } from './BackgroundLayer';
@@ -14,7 +14,7 @@ export function generatorOf(value: string | Background | null | undefined): Gene
 }
 
 function safeColor(value: ParamValue | undefined, fallback: string): string {
-  return typeof value === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(value) ? value : fallback;
+  return isHexColor(value) ? value : fallback;
 }
 
 interface GeneratorSurfaceProps {

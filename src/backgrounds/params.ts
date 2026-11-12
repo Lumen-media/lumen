@@ -45,11 +45,20 @@ export function normalizeParams(
   return normalized;
 }
 
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * The single color test: `#rrggbb` exactly, matching the Rust schema.
+ * Thumbnails and the renderer must agree, or a poster shows a color the canvas
+ * silently ignores.
+ */
+export function isHexColor(value: unknown): value is string {
+  return typeof value === 'string' && HEX_COLOR.test(value);
+}
+
 function normalizeValue(spec: ParamShape, value: ParamValue): ParamValue {
   if (spec.kind === 'color') {
-    return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
-      ? value
-      : String(spec.default);
+    return isHexColor(value) ? value : String(spec.default);
   }
 
   if (spec.kind === 'bool') {
