@@ -141,10 +141,16 @@ export interface CommandsAPI {
   addPrefix(spec: PrefixSpec): Disposable;
 }
 
-/** The background currently applied to the stage. */
+/**
+ * The background currently applied to the stage.
+ *
+ * `src` is always a string: media backgrounds carry a path or URL, generators
+ * carry an opaque `lumen-bg://generator/...` URI. Modules can store and pass
+ * the generator URI around, but only the host renders it.
+ */
 export interface SelectedBackground {
   type: 'theme' | 'image' | 'video' | 'generator';
-  src?: string;
+  src: string;
   name: string;
 }
 
@@ -599,8 +605,12 @@ export interface ThemesHostAPI {
   apply(id: string): void;
   /** Imports a background and makes it the default. */
   addBackground(input: ThemeAddInput): Promise<ThemeAddResult>;
+  /**
+   * The active profile background; generators come back as a `lumen-bg://` URI
+   * in `src`, which the host renders and modules treat as opaque.
+   */
   defaultBackground(): Promise<{
-    src?: string;
+    src: string;
     type: 'theme' | 'image' | 'video' | 'generator';
     name: string;
   } | null>;
@@ -608,7 +618,7 @@ export interface ThemesHostAPI {
   onDefaultBackgroundChange(
     handler: (
       bg: {
-        src?: string;
+        src: string;
         thumb?: string;
         type: 'theme' | 'image' | 'video' | 'generator';
         name: string;
