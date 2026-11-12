@@ -37,8 +37,10 @@ function LayoutComponent() {
 
   const [dragFile, setDragFile] = React.useState<FileInfo | null>(null);
   const sensors = useSensors(
+    // Distance-based activation: a plain click (used to load a lyric into the
+    // editor) never starts a drag, while holding and moving still drags.
     useSensor(PointerSensor, {
-      activationConstraint: { delay: 100, tolerance: 5 },
+      activationConstraint: { distance: 6 },
     })
   );
   const finalCursorY = React.useRef(0);

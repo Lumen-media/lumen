@@ -1,3 +1,4 @@
+import { useNavigate } from '@tanstack/react-router';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   ArrowLeft,
@@ -53,6 +54,7 @@ const mediaItems = [
 
 export function MediaPanel() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const player = usePlayerStore();
   const { addToQueue, playNext } = useQueueStore();
   const openLyricModal = useLyricModalStore((s) => s.open);
@@ -610,6 +612,8 @@ export function MediaPanel() {
                                 onClick={(file) => {
                                   if (activeMedia === 'lyrics') {
                                     useLyricEditStore.getState().loadLyric(file.path);
+                                    // A single click loads the lyric into the editor view.
+                                    navigate({ to: '/edit' });
                                   }
 
                                   const ext = file.extension?.toLowerCase() ?? '';
