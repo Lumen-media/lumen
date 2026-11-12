@@ -1,7 +1,8 @@
 import { emit, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type React from 'react';
-import { mediaSrcOf } from '@/backgrounds/uri';
+import type { Background } from '@/backgrounds/types';
+import { encodeBackgroundUri, mediaSrcOf } from '@/backgrounds/uri';
 import { ipc } from '@/lib/ipc';
 import { lumenUrl } from '@/services/lumen-url';
 import { lyricService } from '@/services/lyric-service';
@@ -780,52 +781,59 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
       const profileBg = profiles.find((p) => p.id === activeProfileId)?.defaultBackground;
       if (!profileBg) return null;
 
+      // Generators travel as a `lumen-bg://` URI: modules need a `src` they can
+      // keep and echo back, and the host renders it from that string.
+      if (profileBg.type === 'generator') {
+        return {
+          src: encodeBackgroundUri(profileBg),
+          type: 'generator' as const,
+          name: profileBg.name,
+        };
+      }
+
       const src = mediaSrcOf(profileBg);
-      const type = profileBg.type;
-      // Generator backgrounds have no src; modules get type + name only.
-      if (type === 'generator') return { src: undefined, type, name: profileBg.name };
       if (!src || src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:')) {
-        return { src, type: profileBg.type, name: profileBg.name };
+        return { src: src ?? '', type: profileBg.type, name: profileBg.name };
       }
 
       return { src: lumenUrl(src), type: profileBg.type, name: profileBg.name };
     },
     onDefaultBackgroundChange(handler) {
-      let lastSrc: string | null | undefined;
+      let lastSrc: string | null = null;
 
-      const fire = (
-        bg: { src?: string; type: 'theme' | 'image' | 'video' | 'generator'; name: string } | null
-      ) => {
-        // Generator backgrounds don't have src; skip lumenUrl conversion
-        if (bg?.type === 'generator') {
-          handler(bg);
-          return;
+      const toRef = (bg: Background | null) => {
+        if (!bg) return null;
+        if (bg.type === 'generator') {
+          return { src: encodeBackgroundUri(bg), type: 'generator' as const, name: bg.name };
         }
+        const src = bg.src;
+        return { src, type: bg.type, name: bg.name };
+      };
 
-        // Generators are handled above; everything here has a media src.
-        const src = bg?.src ?? null;
-        if (!src || src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:')) {
-          handler(bg);
-          return;
-        }
-
-        if (!bg) {
+      const fire = (bg: Background | null) => {
+        const ref = toRef(bg);
+        if (!ref) {
           handler(null);
           return;
         }
-
-        handler({
-          ...bg,
-          src: lumenUrl(src),
-          thumb: lumenUrl(src, { w: 200 }),
-        });
+        if (ref.type === 'generator') {
+          handler(ref);
+          return;
+        }
+        const src = ref.src;
+        if (!src || src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:')) {
+          handler(ref);
+          return;
+        }
+        handler({ ...ref, src: lumenUrl(src), thumb: lumenUrl(src, { w: 200 }) });
       };
 
       const unsub = useProfileStore.subscribe((state) => {
         const profile = state.profiles.find((p) => p.id === state.activeProfileId);
         const bg = profile?.defaultBackground ?? null;
-        // Generators have no src, so a sentinel key is used to detect changes.
-        const key = mediaSrcOf(bg) ?? (bg?.type === 'generator' ? '(generator)' : null);
+        // The URI changes with the generator parameters, so a preset edit also
+        // reaches modules as a background change.
+        const key = toRef(bg)?.src ?? null;
         if (key === lastSrc) return;
         lastSrc = key;
         fire(bg);
@@ -834,8 +842,7 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
       const { profiles, activeProfileId } = useProfileStore.getState();
       const profile = profiles.find((p) => p.id === activeProfileId);
       const current = profile?.defaultBackground ?? null;
-      const currentKey =
-        mediaSrcOf(current) ?? (current?.type === 'generator' ? '(generator)' : null);
+      const currentKey = toRef(current)?.src ?? null;
       if (currentKey) {
         lastSrc = currentKey;
         fire(current);
