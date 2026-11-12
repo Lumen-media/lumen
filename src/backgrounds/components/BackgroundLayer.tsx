@@ -33,6 +33,7 @@ export function BackgroundLayer({
 }: BackgroundLayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GlEngine | null>(null);
+  const resizeRef = useRef<(() => void) | null>(null);
   const [failed, setFailed] = useState(false);
 
   const effect = useMemo(
@@ -46,6 +47,8 @@ export function BackgroundLayer({
   );
   const paramsRef = useRef(normalizedParams);
   paramsRef.current = normalizedParams;
+  const resolutionScaleRef = useRef(resolutionScale);
+  resolutionScaleRef.current = resolutionScale;
   const speedRef = useRef(speed);
   speedRef.current = speed;
   const seedRef = useRef(seed);
@@ -67,7 +70,7 @@ export function BackgroundLayer({
     let engine: GlEngine;
     try {
       engine = new GlEngine(canvas, effect, {
-        resolutionScale,
+        resolutionScale: resolutionScaleRef.current,
         onContextLost: () => setFailed(true),
         onContextRestored: () => setFailed(false),
       });
@@ -85,15 +88,26 @@ export function BackgroundLayer({
       }
     };
     resize();
+    resizeRef.current = resize;
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
 
     return () => {
       observer.disconnect();
+      resizeRef.current = null;
       engine.dispose();
       engineRef.current = null;
     };
-  }, [effect, effectId, resolutionScale]);
+  }, [effect, effectId]);
+
+  // Resolution is a hint, not a different renderer: changing it must not throw
+  // away the compiled programs and the feedback state.
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.setResolutionScale(resolutionScale);
+    resizeRef.current?.();
+  }, [resolutionScale]);
 
   useEffect(() => {
     phaseRef.current = 0;
