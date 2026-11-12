@@ -29,7 +29,12 @@ function decodeBase64Url(value: string): string {
 export function encodeBackgroundUri(background: GeneratorBackground): string {
   const params = encodeBase64Url(JSON.stringify(background.params ?? {}));
   const seed = Math.max(0, Math.trunc(background.seed));
-  return `${PREFIX}${encodeURIComponent(background.effect)}?v=1&seed=${seed}&p=${params}`;
+  const search = new URLSearchParams({ v: '1', seed: String(seed), p: params });
+  // The display name and the preset it came from survive the round trip, so a
+  // stored background keeps reading as "Calm aurora" instead of "aurora".
+  if (background.name) search.set('n', background.name);
+  if (background.preset) search.set('pr', background.preset);
+  return `${PREFIX}${encodeURIComponent(background.effect)}?${search.toString()}`;
 }
 
 /** Tolerant decoder: malformed input yields `null`, never an exception. */
@@ -61,12 +66,16 @@ export function decodeBackgroundUri(uri: string): GeneratorBackground | null {
     }
   }
 
+  const name = search.get('n')?.trim();
+  const preset = search.get('pr')?.trim();
+
   return {
     type: 'generator',
     effect,
     params,
     seed: Number.isFinite(seed) ? Math.max(0, Math.trunc(seed)) : 0,
-    name: effect,
+    name: name || effect,
+    ...(preset ? { preset } : {}),
   };
 }
 
