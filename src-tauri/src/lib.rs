@@ -6,5 +6,6 @@
 
 // Library entrypoint placeholder; application code resides in main.rs.
 
-// Spike-only generator engine, also used by the `bg_spike_compile` example.
-pub mod backgrounds_spike;
+// Generator background engine: catalog, WGSL sources and the GLSL bundle used
+// by both the binary (`background_presets`) and the `bg_compile` example.
+pub mod backgrounds;

@@ -2,12 +2,12 @@
 //! bundle consumed by the webview.
 //!
 //! Run from the repository root:
-//! `cargo run --manifest-path src-tauri/Cargo.toml --example bg_spike_compile`
+//! `cargo run --manifest-path src-tauri/Cargo.toml --example bg_compile`
 
-use lumen_lib::backgrounds_spike;
+use lumen_lib::backgrounds;
 
 fn main() {
-    match backgrounds_spike::write_generated() {
+    match backgrounds::write_generated() {
         Ok(path) => println!("generated {path}"),
         Err(error) => {
             eprintln!("generator bundle failed:\n{error}");

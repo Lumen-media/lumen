@@ -17,7 +17,7 @@ It is a throwaway build, not a product increment. Nothing here ships except the 
 | Artifact | Location |
 |---|---|
 | WebGL2 engine, clock, `<BackgroundLayer>` | `src/backgrounds/` (kept) |
-| 5 effects authored in WGSL + Rust compile probe | `src-tauri/src/backgrounds_spike/`, `src-tauri/examples/bg_spike_compile.rs` |
+| 5 effects authored in WGSL + Rust compile probe | `src-tauri/src/backgrounds/`, `src-tauri/examples/bg_compile.rs` |
 | Hardcoded catalog mirroring the future `EffectDef` | `src/backgrounds-spike/catalog.ts` (throwaway) |
 | Dev-only harness route | `src/app/spike-backgrounds.tsx` (throwaway) |
 | Measurement CSV + filled gate table | linked in the PR description |
@@ -121,7 +121,7 @@ Files: `src/backgrounds/gl-engine.ts`, `src/backgrounds/types.ts`.
 
 ### S0.3 — Rust shader pipeline probe (1.5 d)
 
-Files: `src-tauri/src/backgrounds_spike/{mod.rs,prelude.wgsl,effects/*.wgsl}`, `src-tauri/examples/bg_spike_compile.rs`, `src-tauri/Cargo.toml`.
+Files: `src-tauri/src/backgrounds/{mod.rs,prelude.wgsl,effects/*.wgsl}`, `src-tauri/examples/bg_compile.rs`, `src-tauri/Cargo.toml`.
 
 1. Add `naga` with `wgsl-in` + `glsl-out` behind a `spike` feature (or as a dev-dependency of the example) so it does not ship yet.
 2. Prelude: params struct matching the UBO, plus `hash`, value/simplex noise, `palette`, aspect correction.
@@ -129,11 +129,11 @@ Files: `src-tauri/src/backgrounds_spike/{mod.rs,prelude.wgsl,effects/*.wgsl}`, `
 4. The example writes `src/backgrounds/shaders.generated.ts` (effect id → GLSL string) and fails the build on any conversion error.
 5. Add `#[test]` cases for the 2 edge shaders (bounded loop with dynamic count; dense `fract`/`sin`) so `cargo test` fails on regressions.
 6. Inspect the emitted GLSL for `#version 300 es`, precision qualifiers (force `highp` in the fragment stage), explicit `std140` layout and no unsupported builtins.
-7. Exit: `cargo run --example bg_spike_compile` emits all 5 shaders, `cargo test` covers the edge cases.
+7. Exit: `cargo run --example bg_compile` emits all 5 shaders, `cargo test` covers the edge cases.
 
 ### S0.4 — Tier 0 effects (1.5 d)
 
-Files: `src-tauri/src/backgrounds_spike/effects/{aurora,waves,starfield}.wgsl`.
+Files: `src-tauri/src/backgrounds/effects/{aurora,waves,starfield}.wgsl`.
 
 - All three use only the prelude helpers and common uniforms; start with aurora because it exercises bands, flow and palette.
 - Params per effect match Plan §5 (`bands`, `flow`, `glow`, `hueShift`; `layers`, `amplitude`, `frequency`, `slope`; `density`, `twinkle`, `warp`, `depth`).
@@ -231,7 +231,7 @@ Environment block (fill before running): GPU, driver, WebView2 version, DPR, dis
 
 ```bash
 # 1. Compile WGSL -> GLSL (from src-tauri)
-cargo run --example bg_spike_compile
+cargo run --example bg_compile
 
 # 2. App with the harness route
 pnpm tauri dev
@@ -241,7 +241,7 @@ pnpm tauri dev
 VITE_BG_SPIKE_MEASURE=1 pnpm tauri dev
 
 # 4. Shader regression tests
-cargo test --manifest-path src-tauri/Cargo.toml backgrounds_spike
+cargo test --manifest-path src-tauri/Cargo.toml backgrounds
 ```
 
 ## 10. What Phase 1 promotes
