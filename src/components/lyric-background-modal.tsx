@@ -8,7 +8,6 @@ import {
   Loader2,
   RefreshCw,
   SearchIcon,
-  SparklesIcon,
   Trash2Icon,
 } from 'lucide-react';
 import {
@@ -23,7 +22,6 @@ import {
 import { toast } from 'sonner';
 import { useDebounceValue } from 'usehooks-ts';
 import { BackgroundLayer } from '@/backgrounds/components/BackgroundLayer';
-import { BACKGROUND_BUNDLE } from '@/backgrounds/generated/catalog';
 import type { GeneratorPreset } from '@/backgrounds/presets';
 import { useGeneratorPresetsStore } from '@/backgrounds/presets-store';
 import { encodeBackgroundUri } from '@/backgrounds/uri';
@@ -41,17 +39,13 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from './ui/input-group';
 import { ScrollArea } from './ui/scroll-area';
 import { Tabs, TabsContent, TabsIndicator, TabsList, TabsTrigger } from './ui/tabs';
 
-type MediaTab = 'themes' | 'images' | 'generators' | 'video';
+type MediaTab = 'themes' | 'images' | 'video';
 
 export interface SelectedBackground {
   type: 'theme' | 'image' | 'video' | 'generator';
   src: string;
   name: string;
 }
-
-const EFFECT_NAMES = new Map<string, string>(
-  BACKGROUND_BUNDLE.effects.map((effect) => [effect.id, effect.name])
-);
 
 function generatorSelection(preset: GeneratorPreset): SelectedBackground {
   return {
@@ -238,6 +232,57 @@ function MediaThumbnail({ file, selected, onClick, onDelete }: MediaThumbnailPro
   );
 }
 
+type ThemeRowItem =
+  | { kind: 'generator'; preset: GeneratorPreset }
+  | { kind: 'file'; file: FileInfo };
+
+/** A generator preset shown in the themes bank, styled like a media thumbnail. */
+function GeneratorCard({
+  preset,
+  selected,
+  paused,
+  onClick,
+  onDoubleClick,
+}: {
+  preset: GeneratorPreset;
+  selected: boolean;
+  paused: boolean;
+  onClick: () => void;
+  onDoubleClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      title={preset.name}
+      className={cn(
+        'group relative block aspect-video w-full overflow-hidden rounded-lg bg-black transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        selected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'hover:opacity-90'
+      )}
+    >
+      <BackgroundLayer
+        effectId={preset.effect}
+        params={preset.params}
+        seed={preset.seed}
+        maxFps={15}
+        resolutionScale={0.5}
+        paused={paused}
+      />
+      {selected && (
+        <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+          <span className="rounded-full bg-black/60 p-1.5">
+            <CheckIcon className="size-4 text-white" />
+          </span>
+        </span>
+      )}
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-4 text-left text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+        {preset.name}
+      </span>
+    </button>
+  );
+}
+
 function UnsplashImage({ src, alt }: { src: string; alt: string }) {
   const [loaded, setLoaded] = useState(false);
   return (
@@ -268,7 +313,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
   const [unsplashTotalPages, setUnsplashTotalPages] = useState(0);
   const onSelectRef = useRef<((bg: SelectedBackground) => void) | undefined>(undefined);
   const themesScrollRef = useRef<HTMLDivElement>(null);
-  const { presets, loading: presetsLoading, load: loadPresets } = useGeneratorPresetsStore();
+  const { presets, load: loadPresets } = useGeneratorPresetsStore();
 
   useImperativeHandle(ref, () => ({
     open(onSelect?: (bg: SelectedBackground) => void) {
@@ -333,12 +378,17 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
   const COLS = 4;
   const GAP = 12;
   const themeRows = useMemo(() => {
-    const rows: FileInfo[][] = [];
-    for (let i = 0; i < themes.length; i += COLS) {
-      rows.push(themes.slice(i, i + COLS));
+    // Generators are backgrounds like any other: they share the themes bank list.
+    const items: ThemeRowItem[] = [
+      ...presets.map((preset) => ({ kind: 'generator' as const, preset })),
+      ...themes.map((file) => ({ kind: 'file' as const, file })),
+    ];
+    const rows: ThemeRowItem[][] = [];
+    for (let i = 0; i < items.length; i += COLS) {
+      rows.push(items.slice(i, i + COLS));
     }
     return rows;
-  }, [themes]);
+  }, [themes, presets]);
 
   const themesVirtualizer = useVirtualizer({
     count: themeRows.length,
@@ -504,9 +554,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
               <TabsTrigger value="images" className="pb-3 px-0 after:hidden">
                 {t('Images')}
               </TabsTrigger>
-              <TabsTrigger value="generators" className="pb-3 px-0 after:hidden">
-                {t('Generators')}
-              </TabsTrigger>
+
               <TabsIndicator className="bg-primary" />
             </TabsList>
 
@@ -528,7 +576,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
             value="themes"
             className="px-6 py-4 flex flex-col gap-3 min-h-100 h-[40dvh]"
           >
-            {themes.length === 0 ? (
+            {themes.length === 0 && presets.length === 0 ? (
               <Empty className="min-h-100 h-[40dvh]">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
@@ -561,17 +609,35 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
                           transform: `translateY(${virtualRow.start}px)`,
                         }}
                       >
-                        {row.map((file) => (
-                          <MediaThumbnail
-                            key={file.path}
-                            file={file}
-                            selected={selected?.src === file.path}
-                            onClick={() =>
-                              setSelected({ type: 'theme', src: file.path, name: file.name })
-                            }
-                            onDelete={() => handleDeleteTheme(file)}
-                          />
-                        ))}
+                        {row.map((item) =>
+                          item.kind === 'generator' ? (
+                            <GeneratorCard
+                              key={item.preset.id}
+                              preset={item.preset}
+                              selected={
+                                selected?.src === generatorSelection(item.preset).src &&
+                                selected.type === 'generator'
+                              }
+                              paused={!open || activeTab !== 'themes'}
+                              onClick={() => setSelected(generatorSelection(item.preset))}
+                              onDoubleClick={handleConfirm}
+                            />
+                          ) : (
+                            <MediaThumbnail
+                              key={item.file.path}
+                              file={item.file}
+                              selected={selected?.src === item.file.path}
+                              onClick={() =>
+                                setSelected({
+                                  type: 'theme',
+                                  src: item.file.path,
+                                  name: item.file.name,
+                                })
+                              }
+                              onDelete={() => handleDeleteTheme(item.file)}
+                            />
+                          )
+                        )}
                       </div>
                     );
                   })}
@@ -711,73 +777,6 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent
-            value="generators"
-            className="px-6 py-4 flex flex-col gap-3 min-h-100 h-[40dvh]"
-          >
-            {presets.length === 0 ? (
-              <Empty className="min-h-100 h-[40dvh]">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <SparklesIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>
-                    {presetsLoading ? t('Loading presets...') : t('No presets yet')}
-                  </EmptyTitle>
-                  <EmptyDescription>
-                    {t('Create a generator preset in Tools → Generators.')}
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              <ScrollArea className="min-h-100 h-[40dvh]" viewportClassName="pt-1 px-1.5">
-                <div className="grid grid-cols-3 gap-3 pr-1">
-                  {presets.map((preset) => {
-                    const selection = generatorSelection(preset);
-                    const isSelected = selected?.src === selection.src;
-                    return (
-                      <div key={preset.id} className="space-y-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setSelected(selection)}
-                          onDoubleClick={handleConfirm}
-                          className={cn(
-                            'group relative block aspect-video w-full overflow-hidden rounded-lg bg-black transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                            isSelected
-                              ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                              : 'hover:opacity-90'
-                          )}
-                        >
-                          <BackgroundLayer
-                            effectId={preset.effect}
-                            params={preset.params}
-                            seed={preset.seed}
-                            maxFps={15}
-                            resolutionScale={0.5}
-                            paused={!open || activeTab !== 'generators'}
-                          />
-                          {isSelected && (
-                            <span className="absolute inset-0 flex items-center justify-center bg-black/20">
-                              <span className="rounded-full bg-black/60 p-1.5">
-                                <CheckIcon className="size-4 text-white" />
-                              </span>
-                            </span>
-                          )}
-                        </button>
-                        <div className="px-0.5">
-                          <p className="truncate text-xs font-medium">{preset.name}</p>
-                          <p className="truncate text-[10px] text-muted-foreground">
-                            {EFFECT_NAMES.get(preset.effect) ?? preset.effect}
-                            {preset.builtIn ? ` · ${t('Built-in')}` : ''}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </ScrollArea>
-            )}
-          </TabsContent>
 
           {/* <TabsContent value="video" className="px-6 py-4">
             <ScrollArea className="min-h-100 h-[40dvh]">

@@ -1,6 +1,9 @@
 'use client';
 
 import { ImagePlus, X } from 'lucide-react';
+import { GeneratorSurface } from '@/backgrounds/components/GeneratorSurface';
+import type { Background } from '@/backgrounds/types';
+import { parseBackground } from '@/backgrounds/uri';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { useBoolean, useOnClickOutside } from 'usehooks-ts';
 import { useTheme } from '@/hooks/use-theme';
@@ -19,13 +22,15 @@ import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 function BackgroundPreview({ background }: { background: Profile['defaultBackground'] }) {
-  const srcUrl = background
-    ? background?.type !== 'generator' && lumenUrl(background?.src, background?.type === 'video' ? {} : { w: 550 })
-    : null;
-
   if (!background) {
     return <div className="size-full bg-linear-to-br from-slate-700 via-slate-800 to-slate-900" />;
   }
+
+  if (background.type === 'generator') {
+    return <GeneratorSurface value={background} maxFps={15} resolutionScale={0.5} />;
+  }
+
+  const srcUrl = lumenUrl(background.src, background.type === 'video' ? {} : { w: 550 });
 
   if (!srcUrl) {
     return <div className="size-full bg-muted animate-pulse" />;
@@ -79,7 +84,13 @@ export function ThemeSection() {
 
   function handleSelectBackground(bg: SelectedBackground) {
     if (!activeProfileId) return;
-    updateProfile(activeProfileId, { defaultBackground: bg });
+    // Profiles store structured backgrounds; generators live as effect + params,
+    // while string boundaries (lyrics, stream) keep the compact URI form.
+    const background: Background | null =
+      bg.type === 'generator'
+        ? parseBackground(bg.src)
+        : { type: bg.type, src: bg.src, name: bg.name };
+    updateProfile(activeProfileId, { defaultBackground: background });
   }
 
   function handleSetColorMode(mode: 'dark' | 'light') {

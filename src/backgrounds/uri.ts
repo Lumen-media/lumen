@@ -70,6 +70,17 @@ export function decodeBackgroundUri(uri: string): GeneratorBackground | null {
   };
 }
 
+/**
+ * `src` of a media background, `undefined` for generators. Use this instead of
+ * reaching for `.src` so the union is narrowed once, in one place.
+ */
+export function mediaSrcOf(
+  value: string | Background | null | undefined
+): string | undefined {
+  const background = parseBackground(value);
+  return background && background.type !== 'generator' ? background.src : undefined;
+}
+
 /** Normalizes a stored string or structured value into a renderable background. */
 export function parseBackground(value: string | Background | null | undefined): Background | null {
   if (!value) return null;
