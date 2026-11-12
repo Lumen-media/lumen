@@ -41,6 +41,9 @@ export function BackgroundLayer({
   speedRef.current = speed;
   const seedRef = useRef(seed);
   seedRef.current = seed;
+  // The phase survives pause/resume and prop changes; only a new effect or seed
+  // restarts it, so toggling visibility never jumps the animation back to t=0.
+  const phaseRef = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -85,6 +88,10 @@ export function BackgroundLayer({
   }, [effectId, resolutionScale]);
 
   useEffect(() => {
+    phaseRef.current = 0;
+  }, [effectId, seed]);
+
+  useEffect(() => {
     const engine = engineRef.current;
     if (!engine || paused) return;
 
@@ -95,7 +102,6 @@ export function BackgroundLayer({
     let raf = 0;
     let last = performance.now();
     let lastDraw = 0;
-    let phase = 0;
 
     const loop = (now: number) => {
       if (document.hidden) {
@@ -108,10 +114,10 @@ export function BackgroundLayer({
       const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
       last = now;
       lastDraw = now;
-      phase += dt * speedRef.current;
+      phaseRef.current += dt * speedRef.current;
 
       engine.render({
-        time: phase,
+        time: phaseRef.current,
         dt,
         speed: speedRef.current,
         seed: seedRef.current,
