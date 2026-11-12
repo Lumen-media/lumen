@@ -68,10 +68,27 @@ function normalizeValue(spec: ParamShape, value: ParamValue): ParamValue {
   return Number.isFinite(clamped) ? clamped : Number(spec.default);
 }
 
+const rgbaCache = new Map<string, [number, number, number, number]>();
+
 /** Parses `#rrggbb` into normalized RGBA; falls back to a neutral color. */
 export function hexToRgba(hex: string): [number, number, number, number] {
-  const match = /^#([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!match) return [0.5, 0.5, 0.5, 1];
-  const value = Number.parseInt(match[1], 16);
-  return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255, 1];
+  const key = hex.trim();
+  const cached = rgbaCache.get(key);
+  if (cached) return cached;
+
+  const match = /^#([0-9a-f]{6})$/i.exec(key);
+  const rgba: [number, number, number, number] = match
+    ? (() => {
+        const value = Number.parseInt(match[1], 16);
+        return [
+          ((value >> 16) & 255) / 255,
+          ((value >> 8) & 255) / 255,
+          (value & 255) / 255,
+          1,
+        ] as [number, number, number, number];
+      })()
+    : [0.5, 0.5, 0.5, 1];
+
+  rgbaCache.set(key, rgba);
+  return rgba;
 }

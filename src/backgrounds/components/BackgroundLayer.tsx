@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { BACKGROUND_BUNDLE } from '../generated/catalog';
 import { GlEngine } from '../gl-engine';
@@ -35,8 +35,17 @@ export function BackgroundLayer({
   const engineRef = useRef<GlEngine | null>(null);
   const [failed, setFailed] = useState(false);
 
-  const paramsRef = useRef(params);
-  paramsRef.current = params;
+  const effect = useMemo(
+    () => BACKGROUND_BUNDLE.effects.find((item) => item.id === effectId) ?? null,
+    [effectId]
+  );
+  // Normalizing allocates; do it when the parameters change, not every frame.
+  const normalizedParams = useMemo(
+    () => (effect ? normalizeParams(effect, params) : {}),
+    [effect, params]
+  );
+  const paramsRef = useRef(normalizedParams);
+  paramsRef.current = normalizedParams;
   const speedRef = useRef(speed);
   speedRef.current = speed;
   const seedRef = useRef(seed);
@@ -49,7 +58,6 @@ export function BackgroundLayer({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const effect = BACKGROUND_BUNDLE.effects.find((item) => item.id === effectId);
     if (!effect) {
       setFailed(true);
       return;
@@ -85,7 +93,7 @@ export function BackgroundLayer({
       engine.dispose();
       engineRef.current = null;
     };
-  }, [effectId, resolutionScale]);
+  }, [effect, effectId, resolutionScale]);
 
   useEffect(() => {
     phaseRef.current = 0;
@@ -93,10 +101,7 @@ export function BackgroundLayer({
 
   useEffect(() => {
     const engine = engineRef.current;
-    if (!engine || paused) return;
-
-    const effect = BACKGROUND_BUNDLE.effects.find((item) => item.id === effectId);
-    if (!effect) return;
+    if (!engine || paused || !effect) return;
 
     const frameInterval = maxFps > 0 ? 1000 / maxFps : 0;
     let raf = 0;
@@ -121,7 +126,7 @@ export function BackgroundLayer({
         dt,
         speed: speedRef.current,
         seed: seedRef.current,
-        params: normalizeParams(effect, paramsRef.current),
+        params: paramsRef.current,
       });
     };
 
@@ -142,7 +147,7 @@ export function BackgroundLayer({
       document.removeEventListener('visibilitychange', onVisibility);
       cancelAnimationFrame(raf);
     };
-  }, [effectId, paused, maxFps]);
+  }, [effect, paused, maxFps]);
 
   const colorA = String(params?.colorA ?? '#0b1020');
   const colorB = String(params?.colorB ?? '#1a1030');
