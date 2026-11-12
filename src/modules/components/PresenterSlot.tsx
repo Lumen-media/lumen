@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { GeneratorSurface } from '@/backgrounds/components/GeneratorSurface';
+import { GeneratorSurface, generatorOf } from '@/backgrounds/components/GeneratorSurface';
+import { mediaSrcOf } from '@/backgrounds/uri';
 import { lumenUrl } from '@/services/lumen-url';
 import { useProfileStore } from '@/stores/profile-store';
 import { useModuleStore } from '../store';
@@ -46,10 +47,10 @@ function PresenterBackground({ media }: { media: BackgroundMedia }) {
 function PresenterDefaultBackground() {
   const { profiles, activeProfileId } = useProfileStore();
   const profileBackground = profiles.find((p) => p.id === activeProfileId)?.defaultBackground;
-  const profileBg =
-    profileBackground && profileBackground.type !== 'generator' ? profileBackground.src : undefined;
-  const src = useBackgroundSrc(profileBg);
+  const profileGenerator = generatorOf(profileBackground);
+  const src = useBackgroundSrc(generatorOf(profileBackground) ? undefined : mediaSrcOf(profileBackground));
 
+  if (profileGenerator) return <GeneratorSurface value={profileGenerator} maxFps={30} />;
   if (!src) return null;
   return <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />;
 }

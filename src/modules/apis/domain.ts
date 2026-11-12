@@ -1,6 +1,7 @@
 import { emit, listen } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type React from 'react';
+import { mediaSrcOf } from '@/backgrounds/uri';
 import { ipc } from '@/lib/ipc';
 import { lumenUrl } from '@/services/lumen-url';
 import { lyricService } from '@/services/lyric-service';
@@ -779,9 +780,9 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
       const profileBg = profiles.find((p) => p.id === activeProfileId)?.defaultBackground;
       if (!profileBg) return null;
 
-      const src = profileBg.src;
+      const src = mediaSrcOf(profileBg);
       const type = profileBg.type;
-      // Generator backgrounds don't have src; only media backgrounds do
+      // Generator backgrounds have no src; modules get type + name only.
       if (type === 'generator') return { src: undefined, type, name: profileBg.name };
       if (!src || src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:')) {
         return { src, type: profileBg.type, name: profileBg.name };
@@ -801,6 +802,7 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
           return;
         }
 
+        // Generators are handled above; everything here has a media src.
         const src = bg?.src ?? null;
         if (!src || src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:')) {
           handler(bg);
@@ -822,32 +824,20 @@ export function createThemesHostAPI(moduleId: string): ThemesHostAPI {
       const unsub = useProfileStore.subscribe((state) => {
         const profile = state.profiles.find((p) => p.id === state.activeProfileId);
         const bg = profile?.defaultBackground ?? null;
-        // Generator backgrounds: use a sentinel to avoid lumenUrl conversion
-        if (bg?.type === 'generator') {
-          const src = bg.src ?? '(generator)';
-          if (src === lastSrc) return;
-          lastSrc = src;
-          fire(bg);
-          return;
-        }
-
-        const src = bg?.src ?? null;
-        if (src === lastSrc) return;
-        lastSrc = src;
+        // Generators have no src, so a sentinel key is used to detect changes.
+        const key = mediaSrcOf(bg) ?? (bg?.type === 'generator' ? '(generator)' : null);
+        if (key === lastSrc) return;
+        lastSrc = key;
         fire(bg);
       });
 
       const { profiles, activeProfileId } = useProfileStore.getState();
       const profile = profiles.find((p) => p.id === activeProfileId);
       const current = profile?.defaultBackground ?? null;
-      // Generator backgrounds: use sentinel string to avoid lumenUrl conversion
-      if (current?.type === 'generator') {
-        lastSrc = '(generator)';
-        fire(current);
-        return;
-      }
-      if (current?.src) {
-        lastSrc = current.src;
+      const currentKey =
+        mediaSrcOf(current) ?? (current?.type === 'generator' ? '(generator)' : null);
+      if (currentKey) {
+        lastSrc = currentKey;
         fire(current);
       }
 

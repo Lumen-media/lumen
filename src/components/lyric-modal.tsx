@@ -4,7 +4,9 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useIsomorphicLayoutEffect, useResizeObserver } from 'usehooks-ts';
-import { generatorOf, GeneratorPoster } from '@/backgrounds/components/GeneratorSurface';
+import { generatorOf, GeneratorSurface } from '@/backgrounds/components/GeneratorSurface';
+import type { Background as BackgroundValue } from '@/backgrounds/types';
+import { mediaSrcOf } from '@/backgrounds/uri';
 import { useLocalFonts } from '@/hooks/use-local-fonts';
 import { useTranslation } from '@/lib/i18n';
 import { getQuickPresentationPath } from '@/services/app-paths';
@@ -82,8 +84,8 @@ function SlidePreview({
   selectedFont: string;
   fontSizeNum: number;
   background?: string;
-  globalBackground?: string;
-  profileBackground?: string;
+  globalBackground?: BackgroundValue | string;
+  profileBackground?: BackgroundValue | string;
   onSetBackground: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null!);
@@ -134,18 +136,19 @@ function SlidePreview({
   }, [slide.lines, fontSizeNum]);
 
   const effectiveBg = background || globalBackground || profileBackground;
-  const isGeneratorBg = !!generatorOf(effectiveBg);
-  const bgSrc = isGeneratorBg
+  const generator = generatorOf(effectiveBg);
+  const mediaSrc = mediaSrcOf(effectiveBg);
+  const bgSrc = generator
     ? undefined
-    : effectiveBg?.startsWith('#')
+    : typeof effectiveBg === 'string' && effectiveBg.startsWith('#')
       ? effectiveBg
-      : effectiveBg
-        ? lumenUrl(effectiveBg, { w: 550 })
+      : mediaSrc
+        ? lumenUrl(mediaSrc, { w: 550 })
         : undefined;
 
   return (
     <div className="relative aspect-video bg-black rounded-lg border border-border/20 overflow-hidden">
-      <GeneratorPoster value={effectiveBg} />
+      <GeneratorSurface value={generator} maxFps={30} resolutionScale={0.5} />
       {bgSrc && (
         <img
           src={bgSrc}
@@ -259,7 +262,7 @@ export const LyricModal = () => {
   const isQuick = title === 'Quick Presentation';
   const { profiles, activeProfileId } = useProfileStore();
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
-  const profileBackground = activeProfile?.defaultBackground?.type === 'generator' ? undefined : activeProfile?.defaultBackground?.src ?? undefined; // src is optional for generator backgrounds
+  const profileBackground = activeProfile?.defaultBackground ?? undefined;
   const editorRef = useRef<TextEditorRef | null>(null);
   const backgroundModalRef = useRef<LyricBackgroundModalRef>(null);
   const [saving, setSaving] = useState(false);

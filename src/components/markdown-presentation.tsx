@@ -4,6 +4,7 @@ import { animate, stagger } from 'animejs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsomorphicLayoutEffect, useWindowSize } from 'usehooks-ts';
 import { generatorOf, GeneratorSurface } from '@/backgrounds/components/GeneratorSurface';
+import { encodeBackgroundUri } from '@/backgrounds/uri';
 import { useProfiles } from '@/hooks/use-profiles';
 import { ipc } from '@/lib/ipc';
 import { useScopedShortcuts } from '@/lib/shortcuts';
@@ -68,8 +69,12 @@ export function MarkdownPresentation({
   useProfiles();
   const { profiles, activeProfileId } = useProfileStore();
   const activeBackground = profiles.find((p) => p.id === activeProfileId)?.defaultBackground;
+  // Generators travel as a URI so the same value feeds the stage, the stream
+  // payload and the mobile poster fallback.
   const profileBackground =
-    activeBackground?.type === 'generator' ? undefined : (activeBackground?.src ?? undefined);
+    activeBackground?.type === 'generator'
+      ? encodeBackgroundUri(activeBackground)
+      : (activeBackground?.src ?? undefined);
 
   const [lyricData, setLyricData] = useState<LyricData | null>(null);
   const [currentSlide, setCurrentSlide] = useState(startIndex);

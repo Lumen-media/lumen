@@ -2,6 +2,8 @@ import { createFileRoute } from '@tanstack/react-router';
 import { emit, listen } from '@tauri-apps/api/event';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebounceCallback, useInterval } from 'usehooks-ts';
+import { GeneratorSurface, generatorOf } from '@/backgrounds/components/GeneratorSurface';
+import { mediaSrcOf } from '@/backgrounds/uri';
 import { MarkdownPresentation } from '@/components/markdown-presentation';
 import { PptxPresentation } from '@/components/reveal-presentation';
 import { Videoplayer } from '@/components/ui/videoplayer';
@@ -55,8 +57,9 @@ export const Route = createFileRoute('/media-window')({
 function MediaWindowComponent() {
   useProfiles();
   const { profiles, activeProfileId } = useProfileStore();
-  const profileBackground =
-    profiles.find((profile) => profile.id === activeProfileId)?.defaultBackground?.src ?? undefined;
+  const profileDefault = profiles.find((profile) => profile.id === activeProfileId)?.defaultBackground;
+  const profileBackground = mediaSrcOf(profileDefault);
+  const profileGenerator = generatorOf(profileDefault);
   const profileBackgroundSrc = useMediaImageSrc(profileBackground);
 
   const [isFullscreen, setIsFullscreen] = useState(true);
@@ -541,8 +544,17 @@ function MediaWindowComponent() {
           useProfileWallpaper ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       >
-        {profileBackgroundSrc && (
-          <img src={profileBackgroundSrc} alt="" className="h-full w-full object-cover" />
+        {profileGenerator ? (
+          <GeneratorSurface
+            value={profileGenerator}
+            maxFps={60}
+            paused={!useProfileWallpaper}
+            className="h-full w-full"
+          />
+        ) : (
+          profileBackgroundSrc && (
+            <img src={profileBackgroundSrc} alt="" className="h-full w-full object-cover" />
+          )
         )}
       </div>
       <div

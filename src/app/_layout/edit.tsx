@@ -5,6 +5,7 @@ import { forwardRef, memo, useCallback, useEffect, useRef, useState } from 'reac
 import { useIsomorphicLayoutEffect } from 'usehooks-ts';
 import { useShallow } from 'zustand/react/shallow';
 import { generatorOf, GeneratorPoster } from '@/backgrounds/components/GeneratorSurface';
+import { encodeBackgroundUri } from '@/backgrounds/uri';
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -46,9 +47,9 @@ function RouteComponent() {
   );
   const activeDefaultBackground = profiles.find((p) => p.id === activeProfileId)?.defaultBackground;
   const profileBackground =
-    activeDefaultBackground && activeDefaultBackground.type !== 'generator'
-      ? activeDefaultBackground.src
-      : undefined;
+    activeDefaultBackground?.type === 'generator'
+      ? encodeBackgroundUri(activeDefaultBackground)
+      : activeDefaultBackground?.src;
 
   const thumbRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const slideRowRefs = useRef<Map<number, HTMLButtonElement>>(new Map());

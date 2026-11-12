@@ -9,6 +9,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import { mediaSrcOf } from '@/backgrounds/uri';
 import {
   arrayMove,
   SortableContext,
@@ -889,7 +890,7 @@ function ThemesTab() {
               <ThemeThumbnail
                 key={file.path}
                 file={file}
-                isActive={activeProfile?.defaultBackground?.src === file.path}
+                isActive={mediaSrcOf(activeProfile?.defaultBackground) === file.path}
                 onClick={() => {
                   if (activeProfileId) {
                     updateProfile(activeProfileId, {
