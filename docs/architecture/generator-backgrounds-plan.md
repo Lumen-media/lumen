@@ -1,6 +1,6 @@
 # Generator Backgrounds — Feature Plan
 
-> Status: **draft for review**
+> Status: **implemented, with pending items** — see [Architecture §18](./generator-backgrounds-architecture.md#18-status-shipped-vs-pending) for the shipped/pending split.
 > Related: [Architecture](./generator-backgrounds-architecture.md) · [Phase 0 spike](./generator-backgrounds-spike.md) · [Usage guide](../usability/generator-backgrounds-usage.md)
 
 ## 1. Problem
@@ -38,13 +38,13 @@ These were agreed before writing this plan and shape everything below:
 | Outputs | Every surface that renders a background today must support generators |
 | Compatibility | Existing image/video/theme backgrounds must keep working unchanged |
 | Render host | **WebGL2 in the webview** (Option A); shaders authored in **WGSL** and converted with `naga` |
-| Surface scope (v1) | **Lyric global background** and **module/presenter backdrop**; profile default and per-slide keep assets |
-| Mobile (v1) | **No generators on the HTML server**; a generator ref falls back to a static gradient poster |
+| Surface scope (v1) | **Every surface**: lyric global, per-slide, notices, profile default, module/presenter backdrop and the output window |
+| Mobile (v1) | **No generators on the HTML server**; a generator ref renders a static palette poster |
 | Module API (v1) | **Full generator support** through `SelectedBackground` and `ui.openBackgroundPicker` |
-| Effects (v1) | 10 Tier 0 **plus smoke and trails** (Tier 1) |
+| Effects (v1) | 42 in the catalog: 36 Tier 0 plus 6 Tier 1 |
 | Presets | Built-in + user presets in `config/background-presets/` |
 | Versioning | Presets carry a version but migrate to the current effect schema |
-| Clock | One shared phase emitted by the main window |
+| Clock | One shared phase emitted by the main window (**planned**; each surface still integrates its own phase) |
 
 ## 4. Where backgrounds appear today
 
@@ -52,16 +52,16 @@ These are the integration points the feature must cover (confirmed in the curren
 
 | Surface | Current rendering | Impact |
 |---|---|---|
-| Profile default (`defaultBackground`) | `src` path, `<img>` | Deferred in v1 (keeps assets) |
+| Profile default (`defaultBackground`) | `src` path, `<img>` | Extended `DefaultBackground` (`effect`/`params`/`seed`) |
 | Lyric metadata (`globalBackground`) | string path in the file | Encode generator as a URI |
-| Per-slide (`<!-- bg: ... -->`) | string path in the file | Deferred in v1 (keeps assets) |
+| Per-slide (`<!-- bg: ... -->`) | string path in the file | Encode generator as a URI |
 | Main app previews (edit, presentation, settings, notices) | `<img>` / `<video>` | Replace with shared `<BackgroundLayer>` |
 | Presenter module backdrop (`PresenterSlot`) | `<img>` / `<video>` | Reuse `<BackgroundLayer>` |
 | Media / output window (`MarkdownPresentation`) | `<img>` layers | Reuse `<BackgroundLayer>` |
 | HTML server (mobile, port 8090) | CSS `url(...)` | Serve a small WebGL runtime + shader |
 | WebRTC streams | window capture (`app_preview_producer`) | Works automatically once the window renders it |
 
-> **v1 scope:** generators apply to the **lyric global background** and the **module/presenter backdrop**. Profile default and per-slide are deferred and keep the current asset behavior. Notices use the lyric document's `globalBackground`, so they are covered. The shared types stay backward compatible so widening the scope later is additive.
+> **Scope shipped:** generators apply to the **profile default**, the **lyric global background**, **per-slide backgrounds**, **notices** and the **module/presenter backdrop**, plus the media/output window and every preview. All of it resolves through `parseBackground`/`mediaSrcOf`, so one code path drives string boundaries and structured values.
 
 The important consequence: the background must render **inside the webview, behind the DOM**, because slides/lyrics are DOM. A native surface cannot be composited behind text without platform-specific tricks, so v1 renders in the webview (see the architecture document for the full trade-off).
 
@@ -180,7 +180,7 @@ Only pursue these if the MVP proves the framework and there is a concrete use ca
 
 ### MVP selection
 
-The MVP targets **Tier 0** effects — pure fragment shaders, no persistent state — plus **Smoke** and **Trails** from Tier 1, which the spike validates. Start with these ten Tier 0 effects, one visual family each:
+> **Shipped:** the catalog grew past this MVP list. It now exposes **42 effects** (36 Tier 0 + 6 Tier 1: smoke, trails, pixel sorting, ink bloom, glitch feedback, reaction-diffusion), generated from `src-tauri/src/backgrounds_spike/catalog.rs`. The ten below were the original starting point, one visual family each:
 
 | # | Effect | Why it is in the MVP |
 |---|---|---|
@@ -208,13 +208,12 @@ Smoke and Trails ship in v1 as the only feedback effects: they exercise ping-pon
 ## 6. UX summary
 
 - Entry point: **titlebar menu → Tools → Generators**, opening a preset management dialog with two tabs: **Presets** (built-in + saved, load into the editor or delete a user preset) and **Editor** (effect picker, generated sliders, name and save).
-- The background picker gets a **Generators** tab that lists the same presets for **selection only**; editing stays in the Tools dialog.
-- A new **Generators** tab is added to the existing background picker (next to Themes / Images / Video).
-- The tab shows a grid of **live previews** (low-resolution, muted, capped FPS).
-- Selecting an effect opens a parameter panel with auto-generated sliders grouped into **Motion / Shape / Color / Advanced**.
-- Controls: apply, reset, randomize seed, save as preset, duplicate to profile/global/slide.
-- Changing a parameter updates the preview instantly and pushes live to the output window; closing without applying reverts.
-- A **quality** setting (Auto / High / Balanced / Performance) controls resolution scale and FPS per surface.
+- Generator presets are **cards in the existing Themes tab** of the background picker, mixed with themes and saved images and **selection only**; editing stays in the Tools dialog. There is no separate Generators tab.
+- Each preset card is a **live preview** (low resolution, capped at 15 fps, name on hover).
+- Selecting a preset fills the parameters; sliders are generated from the Rust schema and grouped into **Motion / Shape / Color / Advanced**.
+- Controls: set background, reset, randomize seed, save as preset.
+- Closing without **Set Background** keeps the previous background.
+- A **quality** setting (Auto / High / Balanced / Performance) is planned but not shipped; previews currently run at fixed 30 fps / 0.5 scale.
 
 Detailed flows: [generator-backgrounds-usage.md](../usability/generator-backgrounds-usage.md).
 
@@ -223,22 +222,22 @@ Detailed flows: [generator-backgrounds-usage.md](../usability/generator-backgrou
 | Criterion | Target |
 |---|---|
 | Frame rate | 60 fps at 1080p, one generator, integrated GPU |
-| Output + preview | Same visual phase, no desync when speed changes |
+| Output + preview | Same visual phase once the shared clock lands; today each surface keeps its own phase |
 | Parameter latency | Slider change visible in output in < 100 ms |
 | Idle cost | Paused when hidden/minimized/blackout; near-zero CPU when paused |
 | Memory | No growth over multi-hour sessions (feedback effects included) |
 | Compatibility | Existing profiles, lyrics and slides load unchanged |
 | Failure mode | No WebGL2 / driver issue → static poster, never a black screen crash |
-| Mobile preview | Generator refs degrade to a static gradient; no WebGL on the HTML server in v1 |
+| Mobile preview | Generator refs render a static palette gradient; no WebGL on the HTML server |
 
 ## 8. Phases
 
 | Phase | Scope | Outcome |
 |---|---|---|
 | **0 — Spike** | Detailed in [generator-backgrounds-spike.md](./generator-backgrounds-spike.md): WebGL2 host, 3 Tier 0 effects + 2 Tier 1 probes, hardcoded schema, shared clock, 2-surface measurement, naga/UBO validation. | Go/no-go on the render host |
-| **1 — Engine** | Rust registry, schema, commands, presets, naga pipeline. Picker tab, generated sliders, lyric-global + module persistence. 10 Tier 0 effects + smoke/trails. | Usable feature end to end |
-| **2 — Distribution** | Stream URI payloads, presenter backdrop, adaptive quality, clock sync, crossfade, mobile static fallback. | Works on every desktop surface |
-| **3 — Depth** | Remaining Tier 1 (pixel sorting, ink, glitch feedback), thumbnails, profile/slide generators, mobile runtime, optional Tier 2. | Full catalog |
+| **1 — Engine** | Rust registry, schema, commands, presets, naga pipeline. Preset cards in the Themes tab, generated sliders, persistence in lyric global/global-slide/profile. 42 effects (36 Tier 0 + 6 Tier 1). | Usable feature end to end |
+| **2 — Distribution** | Stream URI payloads, presenter backdrop, output window, mobile static poster. Remaining: adaptive quality, shared clock, crossfade, visibility pause. | Works on every surface |
+| **3 — Depth** | Remaining Tier 1 (pixel sorting, ink, glitch feedback), thumbnails, mobile runtime, optional Tier 2. | Full catalog |
 
 The spike must finish before committing to Phase 1; its main question is whether the webview shader host is good enough or whether a native `wgpu` host is required sooner.
 
@@ -256,17 +255,17 @@ The spike must finish before committing to Phase 1; its main question is whether
 |---|---|
 | Render host | **WebGL2 in the webview** (Option A). Rust owns definitions, params, presets, validation and timing |
 | Shader language | **WGSL → GLSL ES 3.00 via `naga`**, with the spike gating conversion quality |
-| Scoping | **Lyric global + module/presenter backdrop.** Profile default and per-slide deferred; the shared types stay additive so widening later is cheap |
+| Scoping | **Every surface** (profile default, lyric global, per-slide, notices, module/presenter backdrop, output window). Profile stores the generator in the existing `DefaultBackground` struct with optional fields; slides and streams carry the URI |
 | Presets | **Built-in + user presets** in `config/background-presets/` |
-| Mobile HTML | **No generators** in v1; static gradient fallback from the palette |
-| Module API | **Full generator support in v1** (`SelectedBackground` union + picker) |
-| Effects | 10 Tier 0 **plus smoke and trails** |
-| Clock | **One shared phase** from the main window, epoch `sentAt` |
+| Mobile HTML | **No generators**; static palette gradient derived from the URI payload |
+| Module API | **Full generator support** (`SelectedBackground` union + picker) |
+| Effects | **42**: 36 Tier 0 plus 6 Tier 1 |
+| Clock | **One shared phase** from the main window, epoch `sentAt` (**planned**) |
 | Versioning | Presets **migrate to the current schema** (unknown keys dropped, missing keys defaulted) |
 
 Still open and intentionally decided during Phase 2, after the spike numbers exist:
 
-1. **Quality default** — `Auto` per surface vs a single global setting. The spike measures with `Auto`.
-2. **Thumbnails** — live low-res previews vs build-time posters.
+1. **Quality default** — `Auto` per surface vs a single global setting. Nothing ships yet: previews use fixed 30 fps / 0.5 scale.
+2. **Thumbnails** — live low-res previews vs build-time posters. Shipped as live cards in the picker and static posters in sequence thumbnails.
 3. **Stream payload growth** — the URI is compact today; add a `backgroundId` + side table only if params outgrow it.
 4. **Remote controllers** — phones stay read-only on the existing slide payload; revisit with mobile generators.

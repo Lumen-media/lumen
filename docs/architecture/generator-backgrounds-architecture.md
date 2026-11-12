@@ -1,6 +1,6 @@
 # Generator Backgrounds — Architecture
 
-> Status: **draft for review**
+> Status: **implemented, with pending items** — see [§18 Status](#18-status-shipped-vs-pending) for what is live and what is still a plan.
 > Related: [Feature plan](./generator-backgrounds-plan.md) · [Phase 0 spike](./generator-backgrounds-spike.md) · [Usage guide](../usability/generator-backgrounds-usage.md)
 
 ## 1. Constraints from the current code
@@ -68,39 +68,41 @@ If a future version needs Rust executing per-frame simulation logic, the middle 
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
-│ Rust (src-tauri)                                                           │
+│ Rust (src-tauri)                                                          │
 │                                                                           │
-│  backgrounds/                                                              │
-│    catalog.rs      → static &[EffectDef] (10 MVP effects)                  │
-│    schema.rs       → EffectDef, ParamSpec, ParamValue, PassDef             │
-│    prelude.wgsl    → shared uniforms + noise/palette helpers                │
-│    effects/*.wgsl  → effect body per effect                                 │
-│    compile.rs      → naga validate + WGSL → GLSL ES 3.0 (cached)            │
-│    presets.rs      → user presets under config/background-presets/          │
-│    mod.rs          → Tauri commands                                        │
+│  backgrounds_spike/   (renamed to backgrounds/ when Phase 1 is promoted)  ││    catalog.rs      → static &[EffectDef] (42 effects)                      │
+│    schema.rs       → EffectDef, ParamSpec, ParamValue, PassDef            │
+│    prelude.wgsl    → shared uniforms + noise/palette helpers              │
+│    effects/*.wgsl  → effect body per effect                               │
+│    compile.rs      → naga validate + WGSL → GLSL ES 3.0 (cached)          │
+│    mod.rs          → catalog + bundle generation                          │
 │                                                                           │
-│  streaming/html_server.rs → media backgrounds only; generator → poster      │
-│  profiles.rs              → Background tagged enum (deferred; see §17)      │
+│  background_presets.rs     → user presets under config/background-presets/│
+│  streaming/html_server.rs → media backgrounds; generator → palette poster │
+│  profiles.rs              → DefaultBackground extended (media + generator)│
 └───────────────────────────────┬───────────────────────────────────────────┘
-                                │ command: bg_effect_list()
-                                │ event:   background:clock / background:preview
+                                │ example: cargo run --example bg_spike_compile
+                                │ writes:  src/backgrounds/generated/catalog.ts
 ┌───────────────────────────────▼───────────────────────────────────────────┐
 │ Frontend (React)                                                          │
 │                                                                           │
 │  backgrounds/                                                             │
-│    types.ts        → Background union (media | generator)                  │
-│    registry.ts     → caches EffectDef[] from Rust                           │
-│    gl-engine.ts    → WebGL2 renderer (program cache, FBOs, uniforms)       │
-│    clock.ts        → shared phase from background:clock                     │
-│    uri.ts          → encode/decode lumen-bg:// generator refs              │
-│    presets.ts      → calls into Rust preset commands                        │
-│    components/BackgroundLayer.tsx                                           │
-│    components/BackgroundPicker/ (tab + grid + param panel)                  │
+│    types.ts        → Background union (media | generator)                 │
+│    generated/catalog.ts → effect catalog + GLSL emitted by Rust           │
+│    gl-engine.ts    → WebGL2 renderer (program cache, FBOs, uniforms)      │
+│    params.ts       → default filling + clamping from the catalog          │
+│    clock.ts        → shared phase helpers (not wired yet)                 │
+│    uri.ts          → encode/decode lumen-bg:// refs + mediaSrcOf          │
+│    presets.ts      → calls into Rust preset commands                      │
+│    presets-store.ts→ shared preset list (zustand)                         │
+│    components/BackgroundLayer.tsx    → canvas + rAF loop                  │
+│    components/GeneratorSurface.tsx   → live surface + static poster       │
 │                                                                           │
-│  stores/generator-preview-store.ts                                          │
+│  components/generator-presets-dialog.tsx → Tools → Generators             │
+│  components/lyric-background-modal.tsx   → presets in the Themes tab      │
 │                                                                           │
-│  Used by: MarkdownPresentation, presenter backdrop, notices, edit,         │
-│           settings preview, media-window, module presenter slot            │
+│  Used by: MarkdownPresentation, presenter backdrop, notices, edit,        │
+│           settings preview, media-window, module presenter slot           │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -227,6 +229,8 @@ Custom values are packed into `u_extra` (4 `vec4`, i.e. 16 floats) in declaratio
 
 ### Time
 
+> **Shipped vs planned:** today each surface integrates its own phase inside its rAF loop (`phase += dt * speed`). The shared-clock protocol below exists as helpers in `src/backgrounds/clock.ts` but is **not emitted or consumed yet**, so previews and the output are not phase-locked.
+
 - A single **shared phase** is authoritative in the main window: `phase += dt * speed`.
 - Every second (and immediately on any change) the main window emits:
 
@@ -267,23 +271,31 @@ A single component replaces every current `<img>`/`<video>` background call site
 
 ```tsx
 <BackgroundLayer
-  background={background}     // media | generator | undefined
-  quality="auto"             // auto | high | balanced | performance
+  effectId={background.effect}
+  params={background.params}
+  seed={background.seed}
   maxFps={60}
+  resolutionScale={1}
   paused={blackoutActive}
   className="absolute inset-0 z-0"
 />
 ```
 
-Responsibilities:
+The layer renders **generators only**; media backgrounds keep their existing `<img>` / `<video>` call sites, and `GeneratorSurface` / `GeneratorPoster` wrap the layer for the generator cases.
 
-- Render `image`, `video` and `generator` backgrounds uniformly.
+Responsibilities (shipped):
+
 - For generators: mount a `<canvas>`, acquire WebGL2, compile/cache the program, run the rAF loop.
-- For media: keep the existing `<img>` / `<video>` behavior and URL handling (`lumenUrl`, `warm` width).
-- Pause on `paused`, when the element is not visible (IntersectionObserver), when the document is hidden, and when the window is minimized.
-- Resize via `ResizeObserver`, capped by `devicePixelRatio`.
-- Crossfade between the previous and next background (~250 ms) to avoid a pop.
-- Handle `webglcontextlost` by falling back to a static poster and retrying once.
+- Pause on `paused` and when `document.hidden`.
+- Resize via `ResizeObserver`, capped by `devicePixelRatio` and `resolutionScale`.
+- `webglcontextlost` hides the canvas and leaves the palette gradient; `webglcontextrestored` re-initializes resources.
+
+Still planned:
+
+- IntersectionObserver / minimized / blackout-aware pausing beyond the `paused` prop.
+- Crossfade between the previous and next background (~250 ms).
+- A `quality` prop (auto | high | balanced | performance) driving `resolutionScale` and `maxFps`.
+- Retry-after-loss beyond the single restore event.
 
 ### `gl-engine.ts`
 
@@ -389,7 +401,7 @@ pub enum Background {
 
 Old profile files (`{ "type": "image", "src": "...", "name": "..." }`) deserialize into the matching variants unchanged.
 
-> **v1 scope:** generators are not applied to profile defaults or slides yet, so `profiles.rs` keeps `DefaultBackground` as-is in v1. The tagged enum above ships when profile generators land; meanwhile the lyric/stream boundaries carry a `lumen-bg://` URI and the module API carries the TypeScript union directly.
+> **Shipped:** the tagged enum above was not needed. `DefaultBackground` in `profiles.rs` was extended in place — `src`/`name` stay, plus optional `effect`, `params`, `seed` and `preset` — so old profile files deserialize unchanged and generators fit the existing struct. Profile defaults and per-slide generators both work; the lyric/stream boundaries keep carrying a `lumen-bg://` URI.
 
 ### String-only boundaries
 
@@ -433,11 +445,11 @@ Profiles and app state use the structured object; the URI exists only where the 
 | WebRTC app preview | captured | capture config | capture FPS | Free once the window renders |
 | WebRTC main stream | captured | capture config | up to 60 | Free |
 
-### HTML server integration (v1: no generators)
+### HTML server integration (poster only)
 
-Generators are **desktop-only in v1**. The HTML server keeps rendering media backgrounds with its current CSS `url(...)`.
+Generators stay **desktop-only**. The HTML server keeps rendering media backgrounds with its current CSS `url(...)`.
 
-- `SlideUpdate.background` stays a string. A `lumen-bg://` value is never proxied or interpreted as a URL by the page: it renders a **static CSS gradient poster** built from the palette in the payload, or the profile theme color when no palette is present.
+- `SlideUpdate.background` stays a string. A `lumen-bg://` value is never proxied or interpreted as a URL by the page: `generatorPoster()` in `html_server.rs` decodes the `p` payload and renders a **static CSS gradient poster** from `colorA`/`colorB`, or the profile theme color when no palette is present.
 - No WebGL runtime, no `/bg/*` routes and no shader payload in v1, so mobile battery and the limited HTML page runtime stay untouched.
 - The stream payload stays small: the URI (plus palette) is the only generator data on the wire.
 - The full mobile runtime design (serve `/bg/runtime.js` + `/bg/effect/<id>`, gradient fallback) is deferred with the rest of the mobile work (Section 17).
@@ -488,14 +500,16 @@ Target budget at 1080p: **< 4 ms GPU per surface** for Tier 0, so two surfaces f
 | File | Purpose |
 |---|---|
 | `src/backgrounds/types.ts` | `Background` union, `ParamValue` |
-| `src/backgrounds/registry.ts` | Load/cache `EffectDef[]` |
+| `src/backgrounds/generated/catalog.ts` | Bundle generated by Rust: catalog + GLSL |
 | `src/backgrounds/gl-engine.ts` | WebGL2 renderer |
-| `src/backgrounds/clock.ts` | Shared phase |
-| `src/backgrounds/uri.ts` | `lumen-bg://` encode/decode |
-| `src/backgrounds/presets.ts` | Preset client |
-| `src/backgrounds/components/BackgroundLayer.tsx` | Unified background layer |
-| `src/backgrounds/components/BackgroundPicker/*` | Generators tab, grid, sliders |
-| `src/stores/generator-preview-store.ts` | Live preview state across windows |
+| `src/backgrounds/params.ts` | Default filling and clamping |
+| `src/backgrounds/clock.ts` | Shared-phase helpers (not wired yet) |
+| `src/backgrounds/uri.ts` | `lumen-bg://` encode/decode + `mediaSrcOf` |
+| `src/backgrounds/presets.ts` | Preset IPC client |
+| `src/backgrounds/presets-store.ts` | Shared preset list (`zustand`) |
+| `src/backgrounds/components/BackgroundLayer.tsx` | Generator canvas layer |
+| `src/backgrounds/components/GeneratorSurface.tsx` | Live surface + static poster |
+| `src/components/generator-presets-dialog.tsx` | Tools → Generators (presets + editor) |
 
 ### Modified
 
@@ -505,7 +519,7 @@ Target budget at 1080p: **< 4 ms GPU per surface** for Tier 0, so two surfaces f
 | `src-tauri/src/streaming/html_server.rs` | Serve `/bg/*`; parse generator URIs |
 | `src-tauri/src/main.rs` | Register background commands |
 | `src-tauri/Cargo.toml` | Add `naga` |
-| `src/components/lyric-background-modal.tsx` | Generators tab, union type |
+| `src/components/lyric-background-modal.tsx` | Presets in the Themes tab, union type |
 | `src/components/markdown-presentation.tsx` | Use `<BackgroundLayer>` |
 | `src/components/presenter-controls.tsx` | Use `<BackgroundLayer>` |
 | `src/components/notices-dialog.tsx` | Use `<BackgroundLayer>` |
@@ -520,12 +534,18 @@ Target budget at 1080p: **< 4 ms GPU per surface** for Tier 0, so two surfaces f
 ## 14. API surface
 
 ```ts
-// TypeScript facade (src/backgrounds/index.ts)
+// src/backgrounds/uri.ts
 export function parseBackground(value: string | Background | null): Background | null;
-export function encodeBackgroundUri(bg: GeneratorBackground): string;
+export function encodeBackgroundUri(bg: Background): string;
 export function decodeBackgroundUri(uri: string): GeneratorBackground | null;
-export function useBackgroundRegistry(): { effects: EffectDef[]; isLoading: boolean };
-export function useBackgroundClock(): number;
+export function isGeneratorUri(value: string): boolean;
+export function mediaSrcOf(value: string | Background | null): string | null;
+
+// src/backgrounds/components/GeneratorSurface.tsx
+export function generatorOf(value: string | Background | null): GeneratorBackground | null;
+
+// src/backgrounds/clock.ts
+export function useBackgroundClock(): () => number; // not consumed yet
 ```
 
 Module API (`src/modules/types.ts`):
@@ -556,7 +576,7 @@ Detailed tasks, gates and measurement protocol: [generator-backgrounds-spike.md]
 1. Rust schema/catalog/compile/commands; 10 MVP effects plus the two Tier 1 effects (smoke, trails) validated by the spike.
 2. Shared prelude with noise + palette.
 3. Registry, clock, URI codec.
-4. Generators tab, live previews, generated sliders, presets.
+4. Preset cards in the **Themes** tab with live previews, generated sliders, presets (no separate Generators tab).
 5. Persistence in profile + lyric global + per-slide; migration tests.
 6. Replace all `<img>`/`<video>` background call sites with `<BackgroundLayer>`.
 
@@ -594,19 +614,47 @@ Detailed tasks, gates and measurement protocol: [generator-backgrounds-spike.md]
 |---|---|
 | Render host | **WebGL2 in the webview (Option A)**. Rust owns the catalog, schema, WGSL assembly, validation and presets |
 | Shader language | **WGSL → GLSL ES 3.00 via `naga`**. If the spike's shader gate fails, author GLSL ES directly; Rust assembly/validation is unchanged |
-| Surface scope | **Lyric global background + module/presenter backdrop**. Profile default and per-slide generators are deferred and keep `{ type, src, name }` |
+| Surface scope | **Every surface**: lyric global, per-slide, notices, profile default, module/presenter backdrop, output window. The picker applies generators from the **Themes** tab — there is no separate Generators tab |
 | Mobile HTML | **No generators.** A `lumen-bg://` ref degrades to a static gradient/theme poster |
-| Clock | **Shared phase** emitted by the main window; `sentAt` uses epoch `Date.now()` because each window has its own `performance.now()` origin |
+| Clock | **Shared phase** emitted by the main window is the target; `sentAt` would use epoch `Date.now()` because each window has its own `performance.now()` origin. **Not wired yet** — each surface integrates its own phase |
 | Module API | **Full generator support in v1**: `SelectedBackground` union + `ui.openBackgroundPicker` |
-| v1 effects | 10 Tier 0 **plus smoke and trails** (Tier 1, ping-pong, anti-degeneration) |
+| v1 effects | **42 in the catalog**: 36 Tier 0 plus 6 Tier 1 (smoke, trails, pixel sorting, ink bloom, glitch feedback, reaction-diffusion) |
 | Presets | Built-in + user presets under `config/background-presets/` |
 | Versioning | Presets carry `version` but are **migrated to the current schema**: unknown keys dropped, missing keys defaulted |
 
 ### Deferred
 
-- Structured generator in `profiles.rs` and per-slide `<!-- bg -->` (both keep assets in v1).
+- Shared clock event between windows, crossfade (~250 ms) and the Auto/High/Balanced/Performance quality setting.
 - Mobile WebGL runtime (`/bg/runtime.js`) and smooth phone previews.
 - Remaining Tier 1 effects (pixel sorting, ink, glitch feedback), Tier 2 simulations and the native `wgpu` host.
 - Third-party effect packs.
 - `backgroundId` + side table if params outgrow the URI.
 - Still open: **quality default** (`Auto` per surface vs one global setting) and **thumbnails** (live low-res vs build-time) — both are Phase 2 calls, the spike measures with `Auto`.
+
+## 18. Status: shipped vs pending
+
+### Shipped
+
+| Area | State |
+|---|---|
+| Catalog | 42 effects (36 Tier 0 + 6 Tier 1) authored in Rust (`backgrounds_spike/`), assembled with the shared prelude, converted WGSL → GLSL ES 3.00 with `naga`, emitted to `src/backgrounds/generated/catalog.ts` by `cargo run --example bg_spike_compile` |
+| Renderer | `gl-engine.ts` + `BackgroundLayer.tsx`: WebGL2, full-screen triangle, program cache, ping-pong FBOs, fps cap, `resolutionScale`, `document.hidden` pause, context loss/restore |
+| Components | `GeneratorSurface` (live) and `GeneratorPoster` (palette gradient) |
+| Picker | Generator presets merged into the existing **Themes** grid (virtualized, 4 per row), live preview at 15 fps / 0.5 scale, name on hover; tabs are Themes + Images |
+| Presets | `background_presets.rs` + `bg_preset_list` / `bg_preset_save` / `bg_preset_delete`, `presets-store.ts`, Tools → Generators dialog (Presets + Editor) |
+| Persistence | `background_presets` files, `DefaultBackground` extended with `effect`/`params`/`seed`/`preset`, `lumen-bg://` URI in lyric files, stream payloads and the HTML payload |
+| Surfaces | Lyric global + per-slide + notices + profile default + aside panel + Settings preview + edit previews + media/output window + presenter backdrop + module API (`SelectedBackground`) |
+| Mobile | `generatorPoster()` in `html_server.rs` renders a palette gradient from the URI payload |
+
+### Pending
+
+| Item | Where |
+|---|---|
+| Shared clock (`background:clock`) between windows | `clock.ts` exists, nothing emits or consumes it |
+| Quality setting (Auto / High / Balanced / Performance) | No setting; call sites pass fixed `maxFps` / `resolutionScale` |
+| Crossfade (~250 ms) between backgrounds | Not implemented |
+| Pause on intersection / minimized / blackout | Only the `paused` prop and `document.hidden` |
+| Adaptive quality from frame time | Not implemented |
+| Retry after `webglcontextlost` beyond the restore event | Single restore attempt only |
+| Rename `backgrounds_spike/` → `backgrounds/` | Still carries the spike name |
+| Remaining Tier 1 effects (pixel sorting, ink, glitch feedback), Tier 2, mobile WebGL runtime | Phase 3 |

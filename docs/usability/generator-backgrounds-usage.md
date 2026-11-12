@@ -8,34 +8,35 @@ Generator backgrounds are animated, procedural backgrounds that run forever. Ins
 
 ## Where to find it
 
-Generators are part of the existing background picker, in a new **Generators** tab next to **Themes**, **Images** and **Video**.
+Generators are backgrounds like any other, so they live in the **Themes** tab of the existing background picker, in the same grid as themes and saved images — there is **no separate Generators tab**. Preset cards come first in the grid, play a small live preview and show their name on hover.
 
-In v1 the picker offers generators in the places below. Profile defaults and slide backgrounds keep images/videos:
+A generator can be applied everywhere a background can:
 
 | Place | What the generator applies to |
 |---|---|
 | **Lyrics editor → Global background** | Every slide in that lyric file |
+| **Lyrics editor → Slide background** | That slide only |
 | **Notices** | The notices background |
-| **Titlebar menu → Tools → Generators** | Opens the picker directly on the Generators tab |
+| **Settings → Appearance → Default background** | The profile default |
+| **Before the stage (aside panel)** | Sets the profile default |
 | **Modules / presenter backdrop** | The module's stage backdrop |
-| ~~Settings → Appearance → Default background~~ | Deferred: profile defaults keep images/videos in v1 |
-| ~~Lyrics editor → Slide background~~ | Deferred: slides keep images/videos in v1 |
-| ~~Before the stage (aside panel)~~ | Deferred: it sets the profile default |
+| **Titlebar menu → Tools → Generators** | Preset editor — manages presets, does not apply them |
 
-> Modules get generators in v1 through `ui.openBackgroundPicker(...)` and the `SelectedBackground` union.
+Backgrounds resolve per surface in this order: **slide → lyric global → profile default**.
+
+> Modules get generators through `ui.openBackgroundPicker(...)` and the `SelectedBackground` union.
 
 ---
 
 ## Applying a generator
 
 1. Open the background picker.
-2. Select the **Generators** tab.
-3. Browse the grid. Each card plays a small, muted, low-resolution preview.
-4. Click an effect to open its **parameter panel**.
-5. Adjust the sliders and watch the preview at the top of the panel update immediately.
-6. Click **Apply**.
+2. Stay in the **Themes** tab — generator presets are the first cards.
+3. Hover a card to read its name; each card plays a small, muted, low-resolution preview.
+4. Click the card.
+5. Click **Set Background**.
 
-If the output window is open, the change is pushed live while you edit, so you can tune against the real screen. Closing the picker without applying reverts to the previous background.
+Closing the picker without **Set Background** keeps the previous background. There is no separate "apply" step per surface: the picker writes the chosen background wherever it was opened from (lyric global, slide, profile default or module).
 
 ---
 
@@ -66,12 +67,6 @@ Effect-specific sliders are grouped to keep the panel short:
 
 Slider ranges are clamped by the engine; you cannot produce an invalid effect.
 
-### Live vs applied
-
-- **Live:** every slider change is visible immediately in the preview and in the output window.
-- **Applied:** the value is stored in the lyric file (global background) or in the module only after **Apply**.
-- Switching to another effect during editing shows a crossfade instead of a hard cut.
-
 ---
 
 ## Presets
@@ -81,7 +76,7 @@ Open **Tools → Generators** to manage presets. The dialog has two tabs:
 - **Presets** — lists built-in and saved presets. Load one into the editor, or delete a preset you created. Built-ins cannot be edited or deleted.
 - **Editor** — picks the effect, shows the generated sliders and saves the current effect, parameters and seed under a name you choose. Saving an existing user preset overwrites it.
 
-In the background picker, the **Generators** tab lists the same presets for selection only. There is no editing from the picker: choose a preset, confirm, and edit it later in the Tools dialog.
+In the background picker, the same presets appear as cards in the **Themes** tab, for selection only. There is no editing from the picker: choose a preset, confirm, and edit it later in the Tools dialog.
 
 - **Built-in presets** ship with the app (for example "Calm aurora", "Deep space", "Stage smoke").
 - **Your presets** are saved locally and appear alongside the built-ins.
@@ -91,21 +86,27 @@ In the background picker, the **Generators** tab lists the same presets for sele
 
 ---
 
+## How a generator is stored
+
+- **Lyric files, stream payloads and the mobile HTML payload** carry a compact URI: `lumen-bg://generator/<effect>?v=1&seed=<n>&p=<base64url params>`. A show therefore stays portable and small.
+- **Profiles** store the generator structured (`effect`, `params`, `seed`, `preset`), so older profile files that only carry `type`/`src`/`name` keep loading unchanged.
+
+---
+
 ## Behavior on the output
 
 | Output | Behavior |
 |---|---|
-| **Main window previews** | Lower resolution and 30 fps to keep the editor light |
+| **Picker cards** | Live canvas, muted, low resolution, 30 fps |
+| **Settings preview, lyric slide preview, slide thumbnails** | Live canvas at half resolution; sequence thumbnails use a static palette poster |
 | **Media / output window** | Full quality, up to 60 fps |
 | **Presenter module backdrop** | Same effect, at the module's container size |
-| **Mobile HTML preview** | Static gradient derived from the palette — generators are desktop-only in v1 |
+| **Mobile HTML preview** | Static gradient derived from the effect's palette — generators stay desktop-only |
 | **WebRTC stream** | Captured from the output window automatically |
 
 ### Sync
 
-The preview and the output share the same animation phase. Changing **Speed** does not restart or jump the effect — it smoothly speeds up or slows down.
-
-Stateful effects (smoke, trails) may drift slightly between windows over long sessions. This is expected; the main output is always correct.
+Each surface runs its own animation phase, so previews and the output show the same effect at different moments. Starting from the same moment across windows (a shared clock) is still pending.
 
 ---
 
@@ -122,24 +123,16 @@ If you need a calmer look:
 
 ---
 
-## Performance and quality
+## Performance
 
-Generators run on the GPU in real time. On lower-end machines, or when several windows are open, use the quality setting:
+Generators run on the GPU in real time. What the app already does to keep things light:
 
-**Settings → Appearance → Background quality**
+- Previews are capped at 30 fps and half resolution; only the output window runs at full quality.
+- Thumbnails are static palette posters, not live canvases.
+- Animation stops while the window is hidden.
+- If the GPU context is lost or WebGL2 is unavailable, the layer hides the canvas and keeps the palette gradient — never a black screen.
 
-| Mode | Behavior |
-|---|---|
-| **Auto** (recommended) | Scaled by surface: light previews, full output |
-| **High** | Full resolution everywhere |
-| **Balanced** | 75% resolution, 30 fps previews |
-| **Performance** | 50% resolution, 30 fps, cheaper effects feel identical |
-
-Additional automatic behavior:
-
-- The effect **pauses** when the output window is minimized, hidden, in blackout, or off-screen.
-- Frame time is monitored; if a machine cannot keep up, resolution drops automatically instead of stuttering.
-- Multi-hour sessions are safe: feedback effects are normalized/restarted so they do not slowly fill or fade out.
+A single **Background quality** setting (Auto / High / Balanced / Performance) is planned but not shipped yet. Until then, close extra preview windows or the presenter module when the effect stutters.
 
 ---
 
@@ -147,25 +140,24 @@ Additional automatic behavior:
 
 ### The background is black or a flat gradient
 
-- The machine or driver may not support WebGL2. Lumen falls back to a static poster instead of crashing.
-- Try **Settings → Appearance → Background quality → Performance**.
+- The machine or driver may not support WebGL2. Lumen falls back to the palette gradient instead of crashing.
 - Update the graphics driver.
+- Try a cheaper effect (Aurora, Mesh gradient, Starfield).
 
 ### The effect stutters
 
-- Switch quality to **Balanced** or **Performance**.
 - Close extra preview windows or the presenter module.
-- Reduce the number of effects visible at once in the picker.
+- Lower **Intensity**/**Scale**, which reduces per-pixel work for some effects.
+- Prefer a Tier 0 effect over Smoke or Trails (feedback passes).
 
 ### The preview and the output look different
 
 - They may be at different resolutions; some effects intentionally change density with scale. This is not a bug.
-- Stateful effects can drift slightly over hours. Re-apply the background to resync.
+- Each surface keeps its own animation phase, so the two are not frame-identical.
 
 ### The mobile HTML preview does not animate
 
-- Expected in v1: generators run on desktop only. Phones receive a static gradient derived from the effect's palette.
-- The WebRTC preview is intentionally low-FPS; use the desktop output window for the real look.
+- Expected: generators run on desktop only. Phones receive a static gradient derived from the effect's palette.
 
 ### My background changed after an app update
 
@@ -178,5 +170,5 @@ Additional automatic behavior:
 
 - Generators are **time-driven only**; they do not react to audio.
 - Nothing is exported or written to disk — the effect is generated live every frame.
-- A generator reference is stored as a small URI inside lyric files and stream payloads, so shows remain portable.
+- The effect catalog ships 42 generators: gradients and soft fields (aurora, mesh gradient, plasma, nebula, clouds, marble, caustics), waves and motion (waves, ripples, flow field, ribbons, lissajous, neon tunnel, retro sun), particles (starfield, star twinkle, snowfall, rain, floating dust, bokeh, fireflies, embers), geometry (voronoi, halftone, hex grid, grid pulse, topographic, moiré, kaleidoscope, dither, wireframe terrain, SDF shapes), stylized (glitch, holographic, liquid metal, vignette pulse) and six feedback effects (smoke, trails, pixel sorting, ink bloom, glitch feedback, reaction-diffusion).
 - Old image/video/theme backgrounds keep working exactly as before and can be mixed with generators in the same show.
