@@ -13,6 +13,8 @@ export interface FrameState {
 
 export interface GlEngineOptions {
   resolutionScale?: number;
+  /** Keeps the drawing buffer readable, required to capture a poster frame. */
+  preserveDrawingBuffer?: boolean;
   onContextLost?: () => void;
   onContextRestored?: () => void;
 }
@@ -86,6 +88,7 @@ export class GlEngine {
       antialias: false,
       desynchronized: true,
       powerPreference: 'high-performance',
+      preserveDrawingBuffer: options.preserveDrawingBuffer ?? false,
     });
     if (!gl) {
       throw new Error('WebGL2 is not available');
