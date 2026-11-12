@@ -313,7 +313,7 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
   const [unsplashTotalPages, setUnsplashTotalPages] = useState(0);
   const onSelectRef = useRef<((bg: SelectedBackground) => void) | undefined>(undefined);
   const themesScrollRef = useRef<HTMLDivElement>(null);
-  const { presets, load: loadPresets } = useGeneratorPresetsStore();
+  const { presets, error: presetError, load: loadPresets } = useGeneratorPresetsStore();
 
   useImperativeHandle(ref, () => ({
     open(onSelect?: (bg: SelectedBackground) => void) {
@@ -576,6 +576,14 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
             value="themes"
             className="px-6 py-4 flex flex-col gap-3 min-h-100 h-[40dvh]"
           >
+            {presetError && (
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                <span>{t('Could not load generator presets.')}</span>
+                <Button size="xs" variant="secondary" onClick={() => void loadPresets(true)}>
+                  {t('Try again')}
+                </Button>
+              </div>
+            )}
             {themes.length === 0 && presets.length === 0 ? (
               <Empty className="min-h-100 h-[40dvh]">
                 <EmptyHeader>
