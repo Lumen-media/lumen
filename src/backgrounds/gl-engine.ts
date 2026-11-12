@@ -332,10 +332,10 @@ export class GlEngine {
   }
 
   private ensureFeedback(): FeedbackTargets {
-    const size = Math.max(
-      64,
-      Math.min(512, Math.min(this.canvas.width || 512, this.canvas.height || 512))
-    );
+    // Snapped to 64px steps: resizing a window would otherwise delete and
+    // recreate both framebuffers on almost every frame of the drag.
+    const source = Math.min(this.canvas.width || 512, this.canvas.height || 512);
+    const size = Math.max(64, Math.min(512, Math.round(source / 64) * 64));
     if (this.feedback && this.feedback.size === size) {
       return this.feedback;
     }
