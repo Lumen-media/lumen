@@ -12,8 +12,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use lumen_lib::backgrounds_spike::catalog;
-use lumen_lib::backgrounds_spike::schema::{ParamKind, ParamValue};
+use lumen_lib::backgrounds::catalog;
+use lumen_lib::backgrounds::schema::{ParamKind, ParamValue};
 
 /// A saved generator configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
