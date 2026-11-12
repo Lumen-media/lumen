@@ -175,6 +175,11 @@ export class GlEngine {
     this.canvas.removeEventListener('webglcontextlost', this.handleContextLost);
     this.canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);
     this.releaseResources();
+    // Deleting resources does not release the context itself: the browser only
+    // reclaims it on GC, and there is a hard cap (~16) of live contexts. One
+    // context per surface means opening and closing dialogs would eventually
+    // evict the context of a surface that is still on screen, freezing it.
+    this.gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
 
   private initResources(): void {
