@@ -70,7 +70,7 @@ If a future version needs Rust executing per-frame simulation logic, the middle 
 ┌───────────────────────────────────────────────────────────────────────────┐
 │ Rust (src-tauri)                                                          │
 │                                                                           │
-│  backgrounds_spike/   (renamed to backgrounds/ when Phase 1 is promoted)  ││    catalog.rs      → static &[EffectDef] (42 effects)                      │
+│  backgrounds/      → catalog, WGSL sources, GLSL compilation               │
 │    schema.rs       → EffectDef, ParamSpec, ParamValue, PassDef            │
 │    prelude.wgsl    → shared uniforms + noise/palette helpers              │
 │    effects/*.wgsl  → effect body per effect                               │
@@ -81,7 +81,7 @@ If a future version needs Rust executing per-frame simulation logic, the middle 
 │  streaming/html_server.rs → media backgrounds; generator → palette poster │
 │  profiles.rs              → DefaultBackground extended (media + generator)│
 └───────────────────────────────┬───────────────────────────────────────────┘
-                                │ example: cargo run --example bg_spike_compile
+                                │ example: cargo run --example bg_compile
                                 │ writes:  src/backgrounds/generated/catalog.ts
 ┌───────────────────────────────▼───────────────────────────────────────────┐
 │ Frontend (React)                                                          │
@@ -637,7 +637,7 @@ Detailed tasks, gates and measurement protocol: [generator-backgrounds-spike.md]
 
 | Area | State |
 |---|---|
-| Catalog | 42 effects (36 Tier 0 + 6 Tier 1) authored in Rust (`backgrounds_spike/`), assembled with the shared prelude, converted WGSL → GLSL ES 3.00 with `naga`, emitted to `src/backgrounds/generated/catalog.ts` by `cargo run --example bg_spike_compile` |
+| Catalog | 42 effects (36 Tier 0 + 6 Tier 1) authored in Rust (`backgrounds/`), assembled with the shared prelude, converted WGSL → GLSL ES 3.00 with `naga`, emitted to `src/backgrounds/generated/catalog.ts` by `cargo run --example bg_compile` |
 | Renderer | `gl-engine.ts` + `BackgroundLayer.tsx`: WebGL2, full-screen triangle, program cache, ping-pong FBOs, fps cap, `resolutionScale`, `document.hidden` pause, context loss/restore |
 | Components | `GeneratorSurface` (live) and `GeneratorPoster` (palette gradient) |
 | Picker | Generator presets merged into the existing **Themes** grid (virtualized, 4 per row), live preview at 15 fps / 0.5 scale, name on hover; tabs are Themes + Images |
@@ -656,5 +656,4 @@ Detailed tasks, gates and measurement protocol: [generator-backgrounds-spike.md]
 | Pause on intersection / minimized / blackout | Only the `paused` prop and `document.hidden` |
 | Adaptive quality from frame time | Not implemented |
 | Retry after `webglcontextlost` beyond the restore event | Single restore attempt only |
-| Rename `backgrounds_spike/` → `backgrounds/` | Still carries the spike name |
 | Remaining Tier 1 effects (pixel sorting, ink, glitch feedback), Tier 2, mobile WebGL runtime | Phase 3 |

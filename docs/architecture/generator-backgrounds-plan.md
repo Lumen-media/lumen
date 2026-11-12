@@ -180,7 +180,7 @@ Only pursue these if the MVP proves the framework and there is a concrete use ca
 
 ### MVP selection
 
-> **Shipped:** the catalog grew past this MVP list. It now exposes **42 effects** (36 Tier 0 + 6 Tier 1: smoke, trails, pixel sorting, ink bloom, glitch feedback, reaction-diffusion), generated from `src-tauri/src/backgrounds_spike/catalog.rs`. The ten below were the original starting point, one visual family each:
+> **Shipped:** the catalog grew past this MVP list. It now exposes **42 effects** (36 Tier 0 + 6 Tier 1: smoke, trails, pixel sorting, ink bloom, glitch feedback, reaction-diffusion), generated from `src-tauri/src/backgrounds/catalog.rs`. The ten below were the original starting point, one visual family each:
 
 | # | Effect | Why it is in the MVP |
 |---|---|---|
