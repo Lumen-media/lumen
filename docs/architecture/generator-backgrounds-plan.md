@@ -266,6 +266,6 @@ The spike must finish before committing to Phase 1; its main question is whether
 Still open and intentionally decided during Phase 2, after the spike numbers exist:
 
 1. **Quality default** — `Auto` per surface vs a single global setting. Nothing ships yet: previews use fixed 30 fps / 0.5 scale.
-2. **Thumbnails** — live low-res previews vs build-time posters. Shipped as live cards in the picker and static posters in sequence thumbnails.
+2. **Thumbnails** — live low-res previews vs build-time posters. Shipped as live cards in the picker and as still frames rendered once offscreen (cached by effect + seed + params) in sequence thumbnails.
 3. **Stream payload growth** — the URI is compact today; add a `backgroundId` + side table only if params outgrow it.
 4. **Remote controllers** — phones stay read-only on the existing slide payload; revisit with mobile generators.

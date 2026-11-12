@@ -98,7 +98,7 @@ In the background picker, the same presets appear as cards in the **Themes** tab
 | Output | Behavior |
 |---|---|
 | **Picker cards** | Live canvas, muted, low resolution, 30 fps |
-| **Settings preview, lyric slide preview, slide thumbnails** | Live canvas at half resolution; sequence thumbnails use a static palette poster |
+| **Settings preview, lyric slide preview, slide thumbnails** | Live canvas at half resolution; sequence thumbnails use a still frame of the effect |
 | **Media / output window** | Full quality, up to 60 fps |
 | **Presenter module backdrop** | Same effect, at the module's container size |
 | **Mobile HTML preview** | Static gradient derived from the effect's palette — generators stay desktop-only |
@@ -128,7 +128,7 @@ If you need a calmer look:
 Generators run on the GPU in real time. What the app already does to keep things light:
 
 - Previews are capped at 30 fps and half resolution; only the output window runs at full quality.
-- Thumbnails are static palette posters, not live canvases.
+- Thumbnails are still frames, not live canvases: the effect is rendered once offscreen and cached, so the strip stays cheap even with many slides. Until the frame is ready (or if WebGL is unavailable) the card shows the background palette gradient.
 - Animation stops while the window is hidden.
 - If the GPU context is lost or WebGL2 is unavailable, the layer hides the canvas and keeps the palette gradient — never a black screen.
 
