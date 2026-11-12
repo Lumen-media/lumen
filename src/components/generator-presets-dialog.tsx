@@ -205,7 +205,7 @@ export function GeneratorPresetsDialog() {
   useEffect(() => {
     if (!isOpen) return;
     setTab('presets');
-    void load(true).catch(() => { });
+    void load(true);
   }, [isOpen, load]);
 
   const effect = EFFECTS.find((item) => item.id === draft.effectId) ?? EFFECTS[0];
