@@ -554,7 +554,6 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
               <TabsTrigger value="images" className="pb-3 px-0 after:hidden">
                 {t('Images')}
               </TabsTrigger>
-
               <TabsIndicator className="bg-primary" />
             </TabsList>
 
@@ -784,7 +783,6 @@ export function LyricBackgroundModal({ ref }: { ref?: Ref<LyricBackgroundModalRe
               )}
             </ScrollArea>
           </TabsContent>
-
 
           {/* <TabsContent value="video" className="px-6 py-4">
             <ScrollArea className="min-h-100 h-[40dvh]">
