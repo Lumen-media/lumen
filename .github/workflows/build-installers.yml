@@ -51,8 +51,12 @@ jobs:
           node-version: 26
           cache: pnpm
 
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+      # Pinned to 1.99.1 on purpose: Rust 1.100 made the never-type fallback
+      # edition-independent, which breaks `screenshots 0.8.10` on Linux (its
+      # `dbus` `method_call(..)?` calls infer `!`). Bump once we migrate to
+      # `xcap`; Windows is unaffected but both jobs should share a toolchain.
+      - name: Install Rust (1.99.1)
+        uses: dtolnay/rust-toolchain@1.99.1
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
