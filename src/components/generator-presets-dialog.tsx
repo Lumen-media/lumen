@@ -289,7 +289,7 @@ export function GeneratorPresetsDialog() {
     <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
       <DialogContent className="sm:max-w-225 p-0 gap-0 overflow-hidden">
         <DialogHeader className="px-6 pt-5 pb-0">
-          <DialogTitle className="text-base font-semibold">{t('Generators')}</DialogTitle>
+          <DialogTitle className="text-base font-semibold">{t('generator')}</DialogTitle>
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} orientation="vertical">
