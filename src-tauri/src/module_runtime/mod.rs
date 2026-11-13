@@ -153,7 +153,7 @@ impl ModuleRuntime {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct InstalledModule {
     pub manifest: ModuleManifest,
     pub source: String,

@@ -192,6 +192,52 @@ pub struct StoreDownloadProgress {
     pub progress: f64,
 }
 
+/// One module that was upgraded by [`store_update_installed`].
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreModuleUpdate {
+    /// Version that was installed before the update.
+    pub previous_version: String,
+    /// The freshly installed module.
+    pub module: InstalledModule,
+}
+
+/// Returns `true` when `candidate` is a strictly newer version than `current`.
+///
+/// Both arguments may carry a leading `v` (as GitHub release tags do) and an
+/// optional pre-release suffix, e.g. `v1.2.0-beta.1`. Core segments are compared
+/// numerically and missing segments count as `0`. When the cores are equal, a
+/// release (`1.2.0`) is newer than its pre-release (`1.2.0-beta.1`), and two
+/// pre-releases compare as equal, since their ordering is not meaningful for an
+/// automatic update.
+fn is_newer_version(candidate: &str, current: &str) -> bool {
+    fn parts(version: &str) -> (Vec<u64>, bool) {
+        let trimmed = version.trim().trim_start_matches(['v', 'V']);
+        let (core, pre) = match trimmed.split_once('-') {
+            Some((core, pre)) => (core, !pre.is_empty()),
+            None => (trimmed, false),
+        };
+        let numbers = core
+            .split('.')
+            .map(|segment| segment.parse::<u64>().unwrap_or(0))
+            .collect();
+        (numbers, pre)
+    }
+
+    let (candidate_core, candidate_pre) = parts(candidate);
+    let (current_core, current_pre) = parts(current);
+
+    for i in 0..candidate_core.len().max(current_core.len()) {
+        let a = candidate_core.get(i).copied().unwrap_or(0);
+        let b = current_core.get(i).copied().unwrap_or(0);
+        if a != b {
+            return a > b;
+        }
+    }
+
+    current_pre && !candidate_pre
+}
+
 /// Returns the store data directory (`<app_data_dir>/lumen`).
 fn store_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
@@ -710,6 +756,156 @@ pub async fn store_install(
     Ok(installed)
 }
 
+/// Tauri command: updates every store-installed module that has a newer release.
+///
+/// # Frontend API
+///
+/// ```text
+/// invoke("store_update_installed")
+/// ```
+///
+/// Called once on startup. Modules installed sideloaded or in dev mode are left
+/// alone, and the module's enabled flag is preserved across the update. The
+/// catalog and the per-repo release cache are used (the latter for up to
+/// [`RELEASE_TTL`]) so a normal boot does not hit GitHub's rate limit; a stale
+/// cache only delays an update by at most an hour.
+///
+/// Individual failures are logged and skipped: one unreachable repository must
+/// never block the others or the app boot.
+///
+/// # Errors
+///
+/// Returns an error only when the registry cannot be read.
+#[tauri::command]
+pub async fn store_update_installed(app: AppHandle) -> Result<Vec<StoreModuleUpdate>, String> {
+    let installed: Vec<ModuleEntry> = {
+        let runtime = app.state::<ModuleRuntime>();
+        let reg = runtime.registry.lock().map_err(|e| e.to_string())?;
+        reg.list_all()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .filter(|entry| entry.source == "store")
+            .collect()
+    };
+
+    if installed.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Refresh the catalog so a module published since the last boot is found;
+    // when the network is down the cached copy is used instead.
+    let catalog = match store_fetch_catalog(app.clone()).await {
+        Ok(response) => response.catalog,
+        Err(e) => {
+            log::warn!("startup module update check skipped: {e}");
+            return Ok(Vec::new());
+        }
+    };
+
+    let mut updates = Vec::new();
+
+    for entry in installed {
+        let Some(catalog_entry) = catalog
+            .modules
+            .iter()
+            .find(|m| m.id == entry.id && m.status == "approved")
+            .cloned()
+        else {
+            continue;
+        };
+
+        let release = match resolve_release_response(&app, &catalog_entry.repo, false).await {
+            Ok(response) => response.release,
+            Err(e) => {
+                log::warn!("update check failed for {}: {e}", entry.id);
+                continue;
+            }
+        };
+        let Some(release) = release else {
+            continue;
+        };
+
+        let latest = release.tag_name.trim_start_matches(['v', 'V']);
+        if !is_newer_version(latest, &entry.version) {
+            continue;
+        }
+
+        let Some(asset) = resolve_pack_asset(&catalog_entry.id, &release.tag_name, &release.assets)
+        else {
+            log::warn!(
+                "no .lumenpack asset in {} {}",
+                catalog_entry.repo,
+                release.tag_name
+            );
+            continue;
+        };
+
+        let pack = match download_pack(&app, &catalog_entry, &release.tag_name, asset).await {
+            Ok(path) => path,
+            Err(e) => {
+                log::warn!("update download failed for {}: {e}", entry.id);
+                continue;
+            }
+        };
+
+        let installed_module = {
+            let runtime = app.state::<ModuleRuntime>();
+            let reg = runtime.registry.lock().map_err(|e| e.to_string())?;
+            let installer = Installer::new(&runtime.modules_dir, &reg);
+
+            match installer.install_from_path(&pack, false) {
+                Ok(manifest) if manifest.id == entry.id => {
+                    let path = runtime.modules_dir.join(&manifest.id);
+                    let recorded = ModuleEntry {
+                        id: manifest.id.clone(),
+                        version: manifest.version.clone(),
+                        source: "store".into(),
+                        // Keep a module the user disabled disabled.
+                        enabled: entry.enabled,
+                        path,
+                    };
+                    if let Err(e) = reg.insert(&recorded) {
+                        log::warn!("failed to record update for {}: {e}", entry.id);
+                        continue;
+                    }
+                    runtime.invalidate_manifest_cache(&manifest.id);
+                    Some(InstalledModule {
+                        manifest,
+                        source: "store".into(),
+                        enabled: entry.enabled,
+                    })
+                }
+                Ok(manifest) => {
+                    // The release does not belong to this id; drop what it wrote.
+                    let _ = reg.remove(&manifest.id);
+                    let _ = fs::remove_dir_all(runtime.modules_dir.join(&manifest.id));
+                    log::warn!(
+                        "update for {} rejected: pack manifests as '{}'",
+                        entry.id,
+                        manifest.id
+                    );
+                    None
+                }
+                Err(e) => {
+                    log::warn!("update install failed for {}: {e}", entry.id);
+                    None
+                }
+            }
+        };
+
+        let _ = fs::remove_file(&pack);
+
+        if let Some(module) = installed_module {
+            updates.push(StoreModuleUpdate {
+                previous_version: entry.version,
+                module,
+            });
+        }
+    }
+
+    Ok(updates)
+}
+
 /// Tauri command: fetches a module's README from its repository.
 ///
 /// # Frontend API
@@ -844,4 +1040,32 @@ pub async fn store_get_manifest(
     }
 
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_newer_version;
+
+    #[test]
+    fn detects_newer_versions() {
+        assert!(is_newer_version("1.2.1", "1.2.0"));
+        assert!(is_newer_version("v2.0.0", "1.9.9"));
+        assert!(is_newer_version("1.10.0", "1.9.0"));
+        assert!(is_newer_version("1.0", "0.9.9"));
+    }
+
+    #[test]
+    fn ignores_equal_or_older_versions() {
+        assert!(!is_newer_version("1.2.0", "1.2.0"));
+        assert!(!is_newer_version("v1.2.0", "1.2.0"));
+        assert!(!is_newer_version("1.2.0", "1.10.0"));
+        assert!(!is_newer_version("1.2.0-beta.1", "1.2.0"));
+        assert!(!is_newer_version("0.9.0", "1.0.0"));
+    }
+
+    #[test]
+    fn a_release_beats_its_prerelease() {
+        assert!(is_newer_version("1.2.0", "1.2.0-beta.1"));
+        assert!(!is_newer_version("1.2.0-beta.2", "1.2.0-beta.1"));
+    }
 }
