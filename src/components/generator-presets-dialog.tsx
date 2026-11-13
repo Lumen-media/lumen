@@ -310,7 +310,7 @@ export function GeneratorPresetsDialog() {
 
           <TabsContent
             value="presets"
-            className="px-6 py-4 flex flex-col gap-3 min-h-100 h-[40dvh]"
+            className="px-6 py-4 flex flex-col gap-3 min-h-100 h-[46dvh]"
           >
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
@@ -323,7 +323,7 @@ export function GeneratorPresetsDialog() {
             </div>
 
             {presets.length === 0 ? (
-              <Empty className="min-h-100 h-[40dvh]">
+              <Empty className="min-h-100 h-[46dvh]">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
                     <Plus />
@@ -390,7 +390,7 @@ export function GeneratorPresetsDialog() {
           </TabsContent>
 
           <TabsContent value="editor" className="px-6 py-4">
-            <div className="grid h-[58dvh] grid-cols-[minmax(0,1fr)_300px] gap-4">
+            <div className="grid h-[62dvh] grid-cols-[minmax(0,1fr)_300px] gap-4">
               <div className="flex min-h-0 flex-col gap-3">
                 <div className="relative aspect-video overflow-hidden rounded-lg border bg-black">
                   <BackgroundLayer
@@ -462,6 +462,16 @@ export function GeneratorPresetsDialog() {
                     {base ? t('Editing an existing preset') : t('Saving a new preset')}
                   </p>
                   <div className="flex gap-2">
+                    {base && (
+                      <Button
+                        variant="outline"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => void handleDelete(base)}
+                      >
+                        <Trash2 />
+                        {t('Delete preset')}
+                      </Button>
+                    )}
                     <Button variant="outline" onClick={startNew}>
                       {t('Reset')}
                     </Button>
