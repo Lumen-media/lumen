@@ -57,6 +57,7 @@ import type { RemoteSyncPayload } from '@/services/remote-sync-service';
 import type {
   StoreCatalogResponse,
   StoreInstallResult,
+  StoreModuleUpdate,
   StoreReadmeResponse,
   StoreReleaseResponse,
 } from '@/services/store-service';
@@ -508,6 +509,7 @@ export interface CommandMap {
   store_get_release: { args: { repo: string; force?: boolean }; result: StoreReleaseResponse };
   store_download_module: { args: { repo: string; tag: string }; result: string };
   store_install: { args: { repo: string; tag: string }; result: StoreInstallResult };
+  store_update_installed: { args: NoArgs; result: StoreModuleUpdate[] };
   store_get_readme: {
     args: { repo: string; branch?: string | null; locale?: string | null };
     result: StoreReadmeResponse | null;

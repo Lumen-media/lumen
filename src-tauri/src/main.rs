@@ -798,6 +798,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             module_runtime::store::store_get_manifest,
             module_runtime::store::store_download_module,
             module_runtime::store::store_install,
+            module_runtime::store::store_update_installed,
             module_runtime::themes::module_theme_add,
             presentation::extract_presentation_metadata,
             queue::queue_load,
