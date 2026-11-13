@@ -70,6 +70,37 @@ fn get_exe_dir() -> Result<String, String> {
         })
 }
 
+/// Centers `window` on the monitor it currently sits on, in physical pixels.
+///
+/// The `center: true` config flag is resolved while the window is being
+/// created, which can miss on high-DPI or multi-monitor setups and leave the
+/// window at `(0, 0)` - the splash then shows up in the top-left corner.
+/// Centering once the window exists uses the real monitor bounds and the real
+/// outer size, so the result is DPI-correct on any resolution.
+fn center_window_on_monitor(window: &tauri::WebviewWindow) {
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
+
+    let Some(monitor) = monitor else {
+        return;
+    };
+    let Ok(size) = window.outer_size() else {
+        return;
+    };
+
+    let monitor_position = monitor.position();
+    let monitor_size = monitor.size();
+    let x = monitor_position.x + (monitor_size.width as i32 - size.width as i32) / 2;
+    let y = monitor_position.y + (monitor_size.height as i32 - size.height as i32) / 2;
+
+    if let Err(e) = window.set_position(tauri::PhysicalPosition::new(x, y)) {
+        eprintln!("[splash] failed to center the splash window: {e}");
+    }
+}
+
 #[tauri::command]
 fn close_splashscreen(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(splash) = app.get_webview_window("splashscreen") {
@@ -512,6 +543,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_fs::init())
         .plugin(
             tauri_plugin_window_state::Builder::new()
+                // The splash is a fixed-size, always-centered transient window;
+                // restoring a previous position/size for it leaves it stranded
+                // in a corner on monitors with a different size or DPI scale.
+                .with_denylist(&["splashscreen"])
                 .with_state_flags(
                     StateFlags::all()
                         & !StateFlags::DECORATIONS
@@ -531,6 +566,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .manage(updates::UpdateState::default())
         .setup(|app| {
             paths::init(app.handle()).expect("failed to resolve app paths");
+
+            if let Some(splash) = app.get_webview_window("splashscreen") {
+                center_window_on_monitor(&splash);
+            }
 
             let runtime = ModuleRuntime::init(app.handle())
                 .expect("failed to initialize module runtime");

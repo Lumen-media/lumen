@@ -72,7 +72,10 @@ html.splash-window #root {
 .splash-card {
   position: relative;
   z-index: 1;
-  width: calc(100% - 48px);
+  /* Cap the card so it keeps its designed width and stays centered even if
+     the window ends up larger than expected on high-DPI screens. */
+  width: min(352px, calc(100% - 48px));
+  margin: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -115,7 +118,11 @@ html.splash-window #root {
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1;
-  background: linear-gradient(180deg, var(--foreground), color-mix(in oklab, var(--foreground) 60%, transparent));
+  background: linear-gradient(
+    180deg,
+    var(--foreground),
+    color-mix(in oklab, var(--foreground) 60%, transparent)
+  );
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -146,12 +153,7 @@ html.splash-window #root {
   height: 100%;
   width: 35%;
   border-radius: 9999px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--primary),
-    transparent
-  );
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
   box-shadow: 0 0 12px color-mix(in oklab, var(--primary) 60%, transparent);
   animation: splash-shimmer 1.3s ease-in-out infinite;
 }
