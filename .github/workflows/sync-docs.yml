@@ -19,8 +19,12 @@ jobs:
       - name: Checkout source repository
         uses: actions/checkout@v4
 
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+      # Pinned to 1.99.1 on purpose: Rust 1.100 made the never-type fallback
+      # edition-independent, which breaks `screenshots 0.8.10` (its `dbus`
+      # `method_call(..)?` calls infer `!` on Linux). The crate is deprecated in
+      # favour of `xcap` and has no fixed release, so bump this once we migrate.
+      - name: Install Rust (1.99.1)
+        uses: dtolnay/rust-toolchain@1.99.1
 
       - name: Install Linux system dependencies
         run: |
