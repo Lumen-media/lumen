@@ -293,15 +293,17 @@ export function GeneratorPresetsDialog() {
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} orientation="vertical">
-          <TabsList variant="line" className="h-auto w-fit justify-start gap-4 rounded-none py-0">
-            <TabsTrigger value="presets" className="px-0 pb-3 after:hidden">
-              {t('Presets')}
-            </TabsTrigger>
-            <TabsTrigger value="editor" className="px-0 pb-3 after:hidden">
-              {t('Editor')}
-            </TabsTrigger>
-            <TabsIndicator className="bg-primary" />
-          </TabsList>
+          <div className="relative @container border-b border-border shrink-0">
+            <TabsList variant="line" className="h-auto w-fit justify-start gap-4 rounded-none py-0">
+              <TabsTrigger value="presets" className="px-0 pb-3 after:hidden">
+                {t('Presets')}
+              </TabsTrigger>
+              <TabsTrigger value="editor" className="px-0 pb-3 after:hidden">
+                {t('Editor')}
+              </TabsTrigger>
+              <TabsIndicator className="bg-primary" />
+            </TabsList>
+          </div>
 
           <TabsContent value="presets" className="flex flex-col gap-3 px-6 py-4">
             <div className="flex items-center justify-between gap-3">
