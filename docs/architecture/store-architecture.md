@@ -153,6 +153,7 @@ The existing runtime has `module_install(path, dev_mode)`, `module_list_installe
 | `store_download_module(asset_url, dest_dir)` | Download a `.lumenpack` to a staging dir, size-capped |
 | `store_install(repo, tag)` | Download the asset for the given tag and install it via the existing `Installer` |
 | `store_get_readme(repo, branch, locale)` | Probe + fetch `README.<locale>.md` (falling back to `README.md`) from the author's repo root via raw.githubusercontent.com; cached |
+| `store_update_installed()` | Checks each store-installed module against the latest GitHub release; downloads and reinstalls any that are newer; preserves the module's `enabled` flag; runs once on app boot (best-effort, non-blocking) |
 
 > Store downloads are **first-class commands**, not re-uses of `host.net` from a module. A store downloader must be allowed to read the whole `.lumenpack` before `Installer` validates it; routing it through the module permission system (which blocks private hosts and requires an allowlist) is the wrong tool. The store commands are host-granted and independent of any module's permissions.
 
@@ -185,6 +186,7 @@ Two triggers, both rate-limit-safe:
 
 - **On demand**: user clicks "Check for updates" — bypasses cache, checks every store-installed module.
 - **Background**: on app start and every ~6h, staggered per module, using cached release data (TTL 1h).
+- **Automatic on boot** (new in vX): the `store_update_installed` command runs once after `bootModules()`, checks each store-installed module against the latest release, and installs any that are newer. Updates are applied in-place (unload → re-register → load) so the new code takes effect immediately. Failures are per-module and logged; they never block the app boot or other modules.
 
 When a newer version exists, the entry surfaces **"Update available"** with a one-click update. Modules whose `id` disappeared from the catalog keep running but stop receiving updates and show **"No longer in store"**.
 
