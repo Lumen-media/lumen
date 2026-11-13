@@ -221,6 +221,7 @@ async fn create_window(
 
     if label == MEDIA_WINDOW_LABEL {
         builder = builder
+            .skip_taskbar(true)
             .inner_size(MEDIA_WINDOW_INITIAL_WIDTH, MEDIA_WINDOW_INITIAL_HEIGHT)
             .min_inner_size(MEDIA_WINDOW_MIN_WIDTH, MEDIA_WINDOW_MIN_HEIGHT);
     }
