@@ -1,4 +1,4 @@
-import { Dices, Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import { Dices, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { toast } from 'sonner';
@@ -293,8 +293,11 @@ export function GeneratorPresetsDialog() {
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} orientation="vertical">
-          <div className="relative @container border-b border-border shrink-0">
-            <TabsList variant="line" className="h-auto w-fit justify-start gap-4 rounded-none py-0">
+          <div className="flex w-full justify-between relative border-b border-border/50">
+            <TabsList
+              variant="line"
+              className="w-fit justify-start px-6 rounded-none h-auto py-0 gap-4"
+            >
               <TabsTrigger value="presets" className="px-0 pb-3 after:hidden">
                 {t('Presets')}
               </TabsTrigger>
@@ -305,7 +308,10 @@ export function GeneratorPresetsDialog() {
             </TabsList>
           </div>
 
-          <TabsContent value="presets" className="flex flex-col gap-3 px-6 py-4">
+          <TabsContent
+            value="presets"
+            className="px-6 py-4 flex flex-col gap-3 min-h-100 h-[40dvh]"
+          >
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
                 {t('Pick a preset to preview and edit. Built-ins are copied when edited.')}
@@ -317,7 +323,7 @@ export function GeneratorPresetsDialog() {
             </div>
 
             {presets.length === 0 ? (
-              <Empty className="h-[50dvh]">
+              <Empty className="min-h-100 h-[40dvh]">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
                     <Plus />
@@ -329,11 +335,16 @@ export function GeneratorPresetsDialog() {
                 </EmptyHeader>
               </Empty>
             ) : (
-              <ScrollArea className="h-[52dvh]" viewportClassName="p-1">
-                <div className="grid grid-cols-2 gap-3">
+              <ScrollArea className="flex-1 min-h-0" viewportClassName="pt-1 px-1.5">
+                <div className="grid grid-cols-4 gap-3">
                   {presets.map((preset) => (
-                    <div key={preset.id} className="group overflow-hidden rounded-lg border">
-                      <div className="relative aspect-video bg-black">
+                    <div key={preset.id} className="group relative">
+                      <button
+                        type="button"
+                        onClick={() => editPreset(preset)}
+                        title={`${preset.name} · ${effectName(preset.effect)}`}
+                        className="block aspect-video w-full overflow-hidden rounded-lg bg-black transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:opacity-90"
+                      >
                         <BackgroundLayer
                           effectId={preset.effect}
                           params={preset.params}
@@ -342,28 +353,34 @@ export function GeneratorPresetsDialog() {
                           resolutionScale={0.5}
                           paused={!isOpen || tab !== 'presets'}
                         />
-                        <div className="absolute inset-0 flex items-end justify-between gap-2 bg-linear-to-t from-black/70 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-                          <Button size="xs" variant="secondary" onClick={() => editPreset(preset)}>
-                            {t('Edit')}
+                        {preset.builtIn && (
+                          <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white/90">
+                            {t('Built-in')}
+                          </span>
+                        )}
+                        <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-linear-to-t from-black/80 to-transparent px-2 pb-1.5 pt-4 text-left text-[10px] font-medium text-white">
+                          {preset.name}
+                        </span>
+                      </button>
+                      <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                        <Button
+                          size="icon-xs"
+                          variant="secondary"
+                          title={t('Edit')}
+                          onClick={() => editPreset(preset)}
+                        >
+                          <Pencil />
+                        </Button>
+                        {!preset.builtIn && (
+                          <Button
+                            size="icon-xs"
+                            variant="secondary"
+                            title={t('Delete preset')}
+                            onClick={() => void handleDelete(preset)}
+                          >
+                            <Trash2 />
                           </Button>
-                          {!preset.builtIn && (
-                            <Button
-                              size="icon-xs"
-                              variant="secondary"
-                              title={t('Delete preset')}
-                              onClick={() => void handleDelete(preset)}
-                            >
-                              <Trash2 />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="px-2.5 py-2">
-                        <p className="truncate text-xs font-medium">{preset.name}</p>
-                        <p className="truncate text-[10px] text-muted-foreground">
-                          {effectName(preset.effect)}
-                          {preset.builtIn ? ` · ${t('Built-in')}` : ''}
-                        </p>
+                        )}
                       </div>
                     </div>
                   ))}
