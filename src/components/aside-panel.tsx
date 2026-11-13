@@ -9,7 +9,6 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
-import { mediaSrcOf } from '@/backgrounds/uri';
 import {
   arrayMove,
   SortableContext,
@@ -47,6 +46,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
+import { mediaSrcOf } from '@/backgrounds/uri';
 import { ChatTab } from '@/components/chat-panel';
 import { TextEditor, type TextEditorRef } from '@/components/text-editor';
 import { type BubbleMenuItem, TextEditorBubbleMenu } from '@/components/text-editor-bubble-menu';
@@ -157,11 +157,7 @@ export function AsidePanel() {
             className="w-full justify-between rounded-none border-none px-2 h-10"
           >
             {tabs.map((tab) => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                className="flex-none after:hidden"
-              >
+              <TabsTrigger key={tab.value} value={tab.value} className="flex-none after:hidden">
                 {tab.label}
               </TabsTrigger>
             ))}

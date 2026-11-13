@@ -21,6 +21,15 @@ export interface GlEngineOptions {
 
 const INVALID_INDEX = 0xffffffff;
 const MAX_DPR = 2;
+/** Grace period before a disposed canvas loses its context for good. */
+const CONTEXT_RELEASE_DELAY_MS = 1000;
+
+/**
+ * Which engine currently owns each canvas. React StrictMode mounts, disposes and
+ * remounts effects on the same `<canvas>` node; losing the context on the first
+ * cleanup would leave the remount drawing on a dead context.
+ */
+const canvasSessions = new WeakMap<HTMLCanvasElement, number>();
 
 interface ProgramInfo {
   program: WebGLProgram;
@@ -57,6 +66,7 @@ export class GlEngine {
   private programs: WebGLProgram[] = [];
   private feedback: FeedbackTargets | null = null;
 
+  private readonly canvasSession: number;
   private resolutionScale: number;
   private lost = false;
   private disposed = false;
@@ -79,6 +89,8 @@ export class GlEngine {
 
   constructor(canvas: HTMLCanvasElement, effect: EffectRuntime, options: GlEngineOptions = {}) {
     this.canvas = canvas;
+    this.canvasSession = (canvasSessions.get(canvas) ?? 0) + 1;
+    canvasSessions.set(canvas, this.canvasSession);
     this.effect = effect;
     this.resolutionScale = options.resolutionScale ?? 1;
     this.onContextLost = options.onContextLost;
@@ -180,11 +192,27 @@ export class GlEngine {
     this.canvas.removeEventListener('webglcontextlost', this.handleContextLost);
     this.canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);
     this.releaseResources();
+
     // Deleting resources does not release the context itself: the browser only
-    // reclaims it on GC, and there is a hard cap (~16) of live contexts. One
-    // context per surface means opening and closing dialogs would eventually
-    // evict the context of a surface that is still on screen, freezing it.
-    this.gl.getExtension('WEBGL_lose_context')?.loseContext();
+    // reclaims it on GC, and there is a hard cap (~16) of live contexts. Release
+    // it once the canvas is really gone, never while another engine may be using
+    // the same node (StrictMode remounts, tab switches that keep the element).
+    const canvas = this.canvas;
+    const gl = this.gl;
+    const session = this.canvasSession;
+    const release = () => {
+      if ((canvasSessions.get(canvas) ?? 0) !== session) return;
+      if (canvas.isConnected) return;
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+    };
+
+    // Offscreen canvases (poster frames) are never reused and can release at
+    // once; connected ones wait, because StrictMode remounts use the same node.
+    if (!canvas.isConnected) {
+      release();
+      return;
+    }
+    window.setTimeout(release, CONTEXT_RELEASE_DELAY_MS);
   }
 
   private initResources(): void {
