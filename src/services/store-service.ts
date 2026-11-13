@@ -69,6 +69,12 @@ export interface StoreInstallResult {
   enabled: boolean;
 }
 
+/** A module the startup pass upgraded, as returned by `store_update_installed`. */
+export interface StoreModuleUpdate {
+  previousVersion: string;
+  module: StoreInstallResult;
+}
+
 export type StoreProgressPhase = 'downloading' | 'installing' | 'done' | 'error';
 
 export interface StoreDownloadProgressPayload {
@@ -111,6 +117,10 @@ class StoreService {
 
   async installModule(repo: string, tag: string): Promise<StoreInstallResult> {
     return ipc('store_install', { repo, tag });
+  }
+
+  async updateInstalledModules(): Promise<StoreModuleUpdate[]> {
+    return ipc('store_update_installed');
   }
 
   onDownloadProgress(callback: (payload: StoreDownloadProgressPayload) => void): UnlistenFn {
@@ -162,6 +172,47 @@ export function compareVersions(a: string, b: string): number {
     if (x !== y) return x - y;
   }
   return a.localeCompare(b);
+}
+
+let autoUpdateStarted = false;
+
+/**
+ * Updates store-installed modules that have a newer release, once per app run.
+ *
+ * Loaded modules are unloaded, re-registered with the new manifest and loaded
+ * again so the new code takes effect right away; modules the user disabled are
+ * only refreshed on disk. Best-effort: a failed check or reload is logged and
+ * never blocks the app or the other modules.
+ */
+export async function autoUpdateInstalledModules(): Promise<void> {
+  if (autoUpdateStarted) return;
+  autoUpdateStarted = true;
+
+  let updates: StoreModuleUpdate[];
+  try {
+    updates = await storeService.updateInstalledModules();
+  } catch (error) {
+    console.error('[modules] startup update check failed:', error);
+    return;
+  }
+
+  for (const update of updates) {
+    const { manifest } = update.module;
+    if (!useModuleStore.getState().modules.has(manifest.id)) continue;
+
+    try {
+      await unloadModule(manifest.id);
+      useModuleStore.getState().registerModule({
+        manifest,
+        status: 'loading',
+        errorCount: 0,
+        source: 'store',
+      });
+      await loadModule(manifest);
+    } catch (error) {
+      console.error(`[modules] failed to reload ${manifest.id} after updating:`, error);
+    }
+  }
 }
 
 export async function installModuleFromStore(
