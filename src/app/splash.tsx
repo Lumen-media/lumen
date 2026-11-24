@@ -146,7 +146,7 @@ function SplashComponent() {
             </div>
           </div>
         )}
-        <p className="splash-version">v0.4.0</p>
+        <p className="splash-version">{version}</p>
       </div>
     </div>
   );
