@@ -170,6 +170,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  BackgroundSurface,
+  type BackgroundSurfaceProps,
+  type BackgroundValue,
+} from '@/lib/background-surface';
 
 const Dialog = Object.assign(_Dialog, {
   DialogClose,
@@ -334,6 +339,9 @@ const TextEditor = Object.assign(_TextEditor, {
 export {
   AlertDialog,
   Avatar,
+  BackgroundSurface,
+  type BackgroundSurfaceProps,
+  type BackgroundValue,
   Badge,
   type BubbleMenuItem,
   Button,
