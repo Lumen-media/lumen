@@ -83,21 +83,43 @@ export function decodeBackgroundUri(uri: string): GeneratorBackground | null {
  * `src` of a media background, `undefined` for generators. Use this instead of
  * reaching for `.src` so the union is narrowed once, in one place.
  */
-export function mediaSrcOf(
-  value: string | Background | null | undefined
-): string | undefined {
+export function mediaSrcOf(value: BackgroundInput): string | undefined {
   const background = parseBackground(value);
-  return background && background.type !== 'generator' ? background.src : undefined;
+  // Se o tipo for generator, não extraia src (URI scheme não suportado como image src)
+  if (background?.type === 'generator') return undefined;
+  // Se o src em si for uma URI generator (edge case: MediaBackground com type='image' mas src=lumen-bg://...), não extraia
+  if (typeof background?.src === 'string' && isGeneratorUri(background.src)) return undefined;
+  // Caso contrário, extract src normalmente
+  return background?.src;
 }
 
+/** A stored value from the host, the picker or a module (`SelectedBackground`). */
+type BackgroundInput =
+  | string
+  | Background
+  | { type?: string; src?: string; name?: string; thumb?: string }
+  | null
+  | undefined;
+
 /** Normalizes a stored string or structured value into a renderable background. */
-export function parseBackground(value: string | Background | null | undefined): Background | null {
+export function parseBackground(value: BackgroundInput): Background | null {
   if (!value) return null;
-  if (typeof value !== 'string') return value;
 
-  const generator = decodeBackgroundUri(value);
-  if (generator) return generator;
+  if (typeof value === 'string') {
+    const generator = decodeBackgroundUri(value);
+    if (generator) return generator;
+    const name = value.split(/[\\/]/).pop() ?? value;
+    return { type: 'image', src: value, name };
+  }
 
-  const name = value.split(/[\\/]/).pop() ?? value;
-  return { type: 'image', src: value, name };
+  // Modules and the picker pass generators as `SelectedBackground` objects
+  // whose `src` is a `lumen-bg://` URI. Decode it so callers get `effect`,
+  // `params` and `seed` instead of a bare URI.
+  if (value.type === 'generator' && !('effect' in value)) {
+    const src = (value as { src?: string }).src;
+    const generator = src ? decodeBackgroundUri(src) : null;
+    if (generator) return { ...generator, name: value.name || generator.name };
+  }
+
+  return value as Background;
 }
