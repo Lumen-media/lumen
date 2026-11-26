@@ -63,10 +63,7 @@ function ReleaseNotesSkeleton() {
           {[60, 75, 50].map((width) => (
             <div key={width} className="flex items-center gap-2">
               <div className="size-1.5 animate-pulse rounded-full bg-muted" />
-              <div
-                className="h-4 animate-pulse rounded bg-muted"
-                style={{ width: `${width}%` }}
-              />
+              <div className="h-4 animate-pulse rounded bg-muted" style={{ width: `${width}%` }} />
             </div>
           ))}
         </div>
@@ -117,8 +114,7 @@ export function ReleaseNotesDialog() {
   const isAutoShown = showReleaseNotes;
   const shouldOpen = isAutoShown || manualOpen;
   const activeTag = selectedVersion ?? releaseNotesVersion;
-  const selectedNote =
-    releaseNotes.find((r) => r.tag_name === activeTag) ?? releaseNotes[0];
+  const selectedNote = releaseNotes.find((r) => r.tag_name === activeTag) ?? releaseNotes[0];
   const shownTag = selectedNote?.tag_name ?? null;
 
   useEffect(() => {
@@ -135,7 +131,12 @@ export function ReleaseNotesDialog() {
   }
 
   return (
-    <Dialog open={shouldOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
+    <Dialog
+      open={shouldOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose();
+      }}
+    >
       <DialogContent
         className="w-[900px] max-w-[calc(100vw-3rem)] min-w-0 sm:w-[1080px] sm:min-w-[800px] sm:max-w-none"
         showCloseButton={false}
@@ -146,7 +147,9 @@ export function ReleaseNotesDialog() {
             {releaseNotes.length > 1 && (
               <Select
                 value={shownTag}
-                onValueChange={(value) => { if (value) selectVersion(value); }}
+                onValueChange={(value) => {
+                  if (value) selectVersion(value);
+                }}
               >
                 <SelectTrigger className="w-[220px]">
                   <SelectValue placeholder={t('Select version')} />
@@ -161,9 +164,7 @@ export function ReleaseNotesDialog() {
               </Select>
             )}
           </DialogTitle>
-          <DialogDescription>
-            {t('View release notes for each version.')}
-          </DialogDescription>
+          <DialogDescription>{t('View release notes for each version.')}</DialogDescription>
         </DialogHeader>
 
         <ScrollArea key={shownTag} className="max-h-[60vh] flex-1">
@@ -198,16 +199,16 @@ export function ReleaseNotesDialog() {
                       </span>
                     )}
                     {selectedNote.draft && (
-                      <span className="rounded bg-muted px-1.5 py-0.5">
-                        {t('Draft')}
-                      </span>
+                      <span className="rounded bg-muted px-1.5 py-0.5">{t('Draft')}</span>
                     )}
                   </div>
                 </div>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => window.open(selectedNote.html_url, '_blank', 'noopener,noreferrer')}
+                  onClick={() =>
+                    window.open(selectedNote.html_url, '_blank', 'noopener,noreferrer')
+                  }
                 >
                   <ExternalLink className="size-3.5" />
                   <span className="sr-only">{t('View on GitHub')}</span>
@@ -238,7 +239,7 @@ export function ReleaseNotesDialog() {
           )}
         </ScrollArea>
 
-        <DialogFooter>
+        <DialogFooter className="bg-transparent border-0">
           <Button variant="outline" onClick={handleClose}>
             {t('Close')}
           </Button>
