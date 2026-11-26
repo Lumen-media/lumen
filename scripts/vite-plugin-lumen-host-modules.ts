@@ -304,6 +304,26 @@ export function lumenHostModules(): Plugin {
         const [moduleId, ...fileParts] = urlPath.split('/');
         const fileRelative = fileParts.join('/');
 
+        // Dev modules are registered in place with the app dev server, which
+        // has the latest build. Ask it first; the installed copy may be stale.
+        try {
+          const devRes = await fetch(
+            `http://127.0.0.1:5179/module-files/${moduleId}/${fileRelative}`,
+            { signal: AbortSignal.timeout(5000) },
+          );
+          if (devRes.ok) {
+            const content = Buffer.from(await devRes.arrayBuffer());
+            const contentType = devRes.headers.get('content-type') || 'application/octet-stream';
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.statusCode = 200;
+            res.end(content);
+            return;
+          }
+        } catch {
+          // App dev server unavailable; fall back to installed files.
+        }
+
         const appData = process.env.APPDATA ?? path.join(os.homedir(), '.local', 'share');
         const candidates = [
           path.join(appData, 'com.lumen.media', 'modules'),
@@ -327,29 +347,15 @@ export function lumenHostModules(): Plugin {
             res.end(content);
             return;
           } catch {
-            // fall through to dev server
+            // fall through to 404
           }
         }
 
-        try {
-          const devRes = await fetch(
-            `http://127.0.0.1:5179/module-files/${moduleId}/${fileRelative}`,
-            { signal: AbortSignal.timeout(5000) },
-          );
-          if (!devRes.ok) throw new Error(`module server returned ${devRes.status}`);
-          const content = Buffer.from(await devRes.arrayBuffer());
-          const contentType = devRes.headers.get('content-type') || 'application/octet-stream';
-          res.setHeader('Content-Type', contentType);
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.statusCode = 200;
-          res.end(content);
-        } catch (err) {
-          console.error(
-            `[lumen-host-modules] ${moduleId}/${fileRelative} not on disk and module server unreachable: ${err instanceof Error ? err.message : String(err)}`,
-          );
-          res.statusCode = 404;
-          res.end(`module file not found: ${moduleId}/${fileRelative}`);
-        }
+        console.error(
+          `[lumen-host-modules] ${moduleId}/${fileRelative} not found on module server or disk`,
+        );
+        res.statusCode = 404;
+        res.end(`module file not found: ${moduleId}/${fileRelative}`);
       });
 
       server.middlewares.use(async (req, res, next) => {
