@@ -708,12 +708,14 @@ async function ensureMediaWindow() {
     win = await WebviewWindow.getByLabel('media-window').catch(() => null);
     if (win) {
       await win.show().catch(() => {});
+      await win.setFullscreen(true).catch(() => {});
     }
     return { created: true };
   }
 
   const visible = await win.isVisible().catch(() => false);
   if (!visible) await win.show().catch(() => {});
+  await win.setFullscreen(true).catch(() => {});
   return { created: false };
 }
 

@@ -11,6 +11,7 @@ import type { ParamValue } from '@/backgrounds/types';
 import { useTranslation } from '@/lib/i18n';
 import { useGeneratorPresetsDialogStore } from '@/stores/generator-presets-dialog-store';
 import { Button } from './ui/button';
+import { Card } from './ui/card';
 import {
   Combobox,
   ComboboxContent,
@@ -390,7 +391,7 @@ export function GeneratorPresetsDialog() {
           </TabsContent>
 
           <TabsContent value="editor" className="px-6 py-4">
-            <div className="grid h-[62dvh] grid-cols-[minmax(0,1fr)_300px] gap-4">
+            <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-4">
               <div className="flex min-h-0 flex-col gap-3">
                 <div className="relative aspect-video overflow-hidden rounded-lg border bg-black">
                   <BackgroundLayer
@@ -420,7 +421,10 @@ export function GeneratorPresetsDialog() {
                         onValueChange={(val) => val && changeEffect(val)}
                         itemToStringLabel={(id) => effectName(id)}
                         onInputValueChange={(value, details) => {
-                          if (details.reason === 'input-change' || details.reason === 'input-clear') {
+                          if (
+                            details.reason === 'input-change' ||
+                            details.reason === 'input-clear'
+                          ) {
                             setEffectQuery(value);
                           }
                         }}
@@ -483,29 +487,31 @@ export function GeneratorPresetsDialog() {
                 </div>
               </div>
 
-              <ScrollArea className="h-full rounded-lg border" viewportClassName="space-y-4 p-3">
-                {PARAM_GROUPS.map((group) => {
-                  const specs = paramSpecs(effect).filter(
-                    (spec) => (spec.group ?? 'advanced') === group.id
-                  );
-                  if (specs.length === 0) return null;
-                  return (
-                    <section key={group.id} className="space-y-2">
-                      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                        {t(group.label)}
-                      </h3>
-                      {specs.map((spec) => (
-                        <ParamControl
-                          key={spec.key}
-                          spec={spec}
-                          value={draft.params[spec.key] ?? spec.default}
-                          onChange={(value) => updateParam(spec.key, value)}
-                        />
-                      ))}
-                    </section>
-                  );
-                })}
-              </ScrollArea>
+              <Card className='p-4'>
+                <ScrollArea className="h-full p-0.5" viewportClassName="space-y-4">
+                  {PARAM_GROUPS.map((group) => {
+                    const specs = paramSpecs(effect).filter(
+                      (spec) => (spec.group ?? 'advanced') === group.id
+                    );
+                    if (specs.length === 0) return null;
+                    return (
+                      <section key={group.id} className="space-y-2">
+                        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                          {t(group.label)}
+                        </h3>
+                        {specs.map((spec) => (
+                          <ParamControl
+                            key={spec.key}
+                            spec={spec}
+                            value={draft.params[spec.key] ?? spec.default}
+                            onChange={(value) => updateParam(spec.key, value)}
+                          />
+                        ))}
+                      </section>
+                    );
+                  })}
+                </ScrollArea>
+              </Card>
             </div>
           </TabsContent>
         </Tabs>
