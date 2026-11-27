@@ -147,6 +147,8 @@ export interface SlideUpdate {
 export interface ModuleListEntry {
   manifest: ModuleManifest;
   source: string;
+  /** `false` for a module the user disabled; those are listed but not loaded. */
+  enabled: boolean;
 }
 
 /** Payload of `module_install` / `module_get`. */

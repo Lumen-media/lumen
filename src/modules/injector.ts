@@ -60,11 +60,12 @@ function scopeModuleStyles(moduleId: string) {
 }
 
 /**
- * Loads every enabled module.
+ * Registers every installed module and loads the enabled ones.
  *
  * Installs the global error handlers on the first call, then resolves the
- * module list from the Rust side and loads each one. A module that throws is
- * marked `faulted` and the rest still load.
+ * module list from the Rust side. Disabled modules are registered with status
+ * `disabled` so they stay visible in the installed list, but are not loaded. A
+ * module that throws is marked `faulted` and the rest still load.
  */
 export async function bootModules() {
   if (!globalHandlersInstalled) {
@@ -81,13 +82,14 @@ export async function bootModules() {
     return;
   }
 
-  for (const { manifest, source } of manifests) {
+  for (const { manifest, source, enabled } of manifests) {
     useModuleStore.getState().registerModule({
       manifest,
-      status: 'loading',
+      status: enabled ? 'loading' : 'disabled',
       errorCount: 0,
       source: source as 'bundled' | 'store' | 'sideload' | 'dev',
     });
+    if (!enabled) continue;
     await loadModule(manifest);
   }
 
