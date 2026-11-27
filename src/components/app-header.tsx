@@ -1,6 +1,6 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import { animate } from 'animejs';
-import { CheckIcon, MessageCircle, Monitor, Smartphone, Star, Volume2 } from 'lucide-react';
+import { CheckIcon, MessageCircle, Monitor, Smartphone, Volume2 } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -135,7 +135,6 @@ export function AppHeader() {
     <header>
       <Card className="flex flex-row min-h-12 py-1 items-center bg-card px-4 border-b border-border shrink-0">
         <div className="flex-1 flex items-center gap-2">
-          <Star className="size-5 text-primary fill-primary" strokeWidth={1.5} />
           <span className="font-semibold text-sm tracking-wide text-foreground">Lumen</span>
         </div>
 
