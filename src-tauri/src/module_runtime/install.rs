@@ -502,6 +502,58 @@ mod tests {
     }
 
     #[test]
+    fn reinstalling_a_pack_preserves_module_data() {
+        let root = std::env::temp_dir().join("lumen-zip-data-test");
+        let _ = fs::remove_dir_all(&root);
+        let modules = root.join("modules");
+        fs::create_dir_all(&modules).unwrap();
+
+        let pack = write_pack(&root, "com.example.data", &[("app.js", "v1")]);
+        let registry = Registry::open(&root.join("registry.sqlite")).unwrap();
+        let installer = installer_for(&modules, &registry);
+        installer
+            .install_from_path(&pack, false)
+            .expect("first install should succeed");
+
+        // Simulate the data a module accumulates while running.
+        let dest = modules.join("com.example.data");
+        fs::write(dest.join("data.json"), r#"{"volume":0.8}"#).unwrap();
+        fs::write(dest.join("data.sqlite"), b"db-bytes").unwrap();
+
+        installer
+            .install_from_path(&pack, false)
+            .expect("reinstall should succeed");
+
+        assert_eq!(
+            fs::read_to_string(dest.join("data.json")).unwrap(),
+            r#"{"volume":0.8}"#,
+            "reinstall dropped data.json"
+        );
+        assert_eq!(
+            fs::read(dest.join("data.sqlite")).unwrap(),
+            b"db-bytes",
+            "reinstall dropped data.sqlite"
+        );
+        assert!(dest.join("app.js").exists(), "reinstall dropped the code");
+        assert!(
+            !modules.join(".com.example.data.data").exists(),
+            "data stash was left behind"
+        );
+    }
+
+    #[test]
+    fn read_pack_manifest_reports_the_pack_id() {
+        let root = std::env::temp_dir().join("lumen-zip-manifest-test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+
+        let pack = write_pack(&root, "com.example.pack", &[("app.js", "x")]);
+        let manifest = read_pack_manifest(&pack).expect("manifest should be readable");
+
+        assert_eq!(manifest.id, "com.example.pack");
+    }
+
+    #[test]
     fn install_from_pack_accepts_nested_entry() {
         let root = std::env::temp_dir().join("lumen-zip-ok-test");
         let _ = fs::remove_dir_all(&root);
