@@ -197,6 +197,25 @@ impl<'a> Installer<'a> {
     }
 }
 
+/// Reads and validates the `manifest.json` of a `.lumenpack` without
+/// extracting anything.
+///
+/// Lets a caller check which module a pack contains *before* installing it, so
+/// a pack whose manifest id does not match the expected one can be rejected
+/// while every installed module is still intact.
+///
+/// # Errors
+///
+/// Returns an error when the pack cannot be opened, is not a ZIP archive, has
+/// no root `manifest.json`, or the manifest itself is invalid.
+pub fn read_pack_manifest(pack_path: &Path) -> Result<ModuleManifest, String> {
+    let file = fs::File::open(pack_path).map_err(|e| format!("cannot open pack: {e}"))?;
+    let mut archive = ZipArchive::new(file).map_err(|e| format!("invalid zip archive: {e}"))?;
+    let manifest = extract_manifest_from_archive(&mut archive)?;
+    manifest.validate()?;
+    Ok(manifest)
+}
+
 /// Files a module keeps its runtime data in.
 ///
 /// They live inside the module directory next to the code, but they belong to
