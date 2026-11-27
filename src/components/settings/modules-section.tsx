@@ -1,6 +1,6 @@
 import { AlertTriangle, CheckCircle, Package, RefreshCw, Trash2, XCircle } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
-import { disableModule, enableModule, reloadModule, uninstallModule } from '@/modules/injector';
+import { disableModule, reloadModule, uninstallModule } from '@/modules/injector';
 import { useModuleStore } from '@/modules/store';
 import type { ModuleRecord, ModuleStatus } from '@/modules/types';
 import { formatVersion } from '@/services/store-service';
@@ -69,11 +69,7 @@ function ModuleRow({ record }: { record: ModuleRecord }) {
               variant="ghost"
               size="icon-sm"
               title={t('Reload')}
-              onClick={() =>
-                // Reloading alone leaves the registry flag off, which would make
-                // the module fail against the asset protocol.
-                status === 'disabled' ? void enableModule(manifest.id) : reloadModule(manifest.id)
-              }
+              onClick={() => reloadModule(manifest.id)}
             >
               <RefreshCw className="size-3.5" />
             </Button>
