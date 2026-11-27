@@ -199,7 +199,16 @@ export async function autoUpdateInstalledModules(): Promise<void> {
 
   for (const update of updates) {
     const { manifest } = update.module;
-    if (!useModuleStore.getState().modules.has(manifest.id)) continue;
+    const store = useModuleStore.getState();
+    const record = store.modules.get(manifest.id);
+    if (!record) continue;
+
+    // A module the user disabled only gets the new manifest on disk; loading
+    // it here would silently switch it back on.
+    if (!update.module.enabled) {
+      store.registerModule({ ...record, manifest });
+      continue;
+    }
 
     try {
       await unloadModule(manifest.id);
@@ -230,11 +239,11 @@ export async function installModuleFromStore(
     await unloadModule(expectedId);
     store.registerModule({
       manifest: result.manifest,
-      status: 'loading',
+      status: result.enabled ? 'loading' : 'disabled',
       errorCount: 0,
       source: result.source as ModuleRecord['source'],
     });
-    await loadModule(result.manifest);
+    if (result.enabled) await loadModule(result.manifest);
   }
 
   return result;
