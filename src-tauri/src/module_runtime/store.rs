@@ -721,6 +721,13 @@ pub async fn store_install(
 
     let runtime = app.state::<ModuleRuntime>();
     let reg = runtime.registry.lock().map_err(|e| e.to_string())?;
+    // Installing over an existing module must not silently re-enable it, so
+    // read the flag before the installer replaces the registry row.
+    let enabled = reg
+        .get(&entry.id)
+        .map_err(|e| e.to_string())?
+        .map(|existing| existing.enabled)
+        .unwrap_or(true);
     let installer = Installer::new(&runtime.modules_dir, &reg);
     let manifest = installer.install_from_path(&pack, false)?;
 
@@ -737,7 +744,7 @@ pub async fn store_install(
         id: manifest.id.clone(),
         version: manifest.version.clone(),
         source: "store".into(),
-        enabled: entry.enabled,
+        enabled,
         path: runtime.modules_dir.join(&manifest.id),
     })
     .map_err(|e| e.to_string())?;
@@ -749,7 +756,7 @@ pub async fn store_install(
     let installed = InstalledModule {
         manifest,
         source: "store".into(),
-        enabled: entry.enabled,
+        enabled,
     };
     let _ = app.emit("module:installed", &installed);
 

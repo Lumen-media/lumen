@@ -105,6 +105,10 @@ impl<'a> Installer<'a> {
     /// Reads and validates `manifest.json` from the archive, removes any
     /// pre-existing install of the same id, then extracts every entry via
     /// [`resolve_archive_entry`]. The recorded `source` is `"sideload"`.
+    ///
+    /// The module's runtime data (`data.json`, `data.sqlite`) is parked outside
+    /// the module directory while it is replaced and restored afterwards, so
+    /// reinstalling or updating a module never drops the user's data.
     fn install_from_pack(&self, pack_path: &Path) -> Result<ModuleManifest, String> {
         let file = fs::File::open(pack_path)
             .map_err(|e| format!("cannot open pack: {e}"))?;
@@ -115,27 +119,16 @@ impl<'a> Installer<'a> {
         manifest.validate()?;
 
         let dest = resolve_module_dest(self.modules_dir, &manifest.id)?;
-        // Save existing module data before removing (preserves data.json/data.sqlite)
-        let existing_data = if dest.exists() {
-            let mut data_backup = std::collections::HashMap::new();
-            // Try to preserve data.json if it exists
-            if let Ok(json_content) = fs::read_to_string(&dest.join("data.json")) {
-                data_backup.insert("data.json".to_string(), json_content);
-            }
-            // Try to preserve data.sqlite if it exists
-            if dest.join("data.sqlite").exists() {
-                // Copy sqlite file to backup location
-                let backup_path = dest.with_extension("data.sqlite.bak");
-                if let Ok(_) = fs::copy(&dest.join("data.sqlite"), &backup_path) {
-                    data_backup.insert("data.sqlite".to_string(), "preserved".to_string());
-                }
-            }
-            Some(data_backup)
-        } else {
-            None
-        };
+        // The module directory holds both the code (replaced on every install)
+        // and the user's data (which must survive). Park the data files outside
+        // the directory so the wipe below cannot reach them.
+        let stash = self.modules_dir.join(format!(".{}.data", manifest.id));
         if dest.exists() {
+            stash_module_data(&dest, &stash)?;
             fs::remove_dir_all(&dest).map_err(|e| format!("cannot remove existing dir: {e}"))?;
+        } else {
+            // Nothing to preserve; drop a stash left behind by a failed install.
+            let _ = fs::remove_dir_all(&stash);
         }
         fs::create_dir_all(&dest).map_err(|e| format!("cannot create module dir: {e}"))?;
 
@@ -148,7 +141,7 @@ impl<'a> Installer<'a> {
                 fs::create_dir_all(&out_path).map_err(|e| e.to_string())?;
             } else {
                 if let Some(parent) = out_path.parent() {
-                    fs::create_dir_all(parent).map_err(|e| e.to_string())?
+                    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                 }
                 let mut out =
                     fs::File::create(&out_path).map_err(|e| e.to_string())?;
@@ -156,19 +149,7 @@ impl<'a> Installer<'a> {
             }
         }
 
-        // Restore preserved module data
-        if let Some(data) = existing_data {
-            if let Some(json_content) = data.get("data.json") {
-                let _ = fs::write(dest.join("data.json"), json_content);
-            }
-            if let Some(_) = data.get("data.sqlite") {
-                let backup_path = dest.with_extension("data.sqlite.bak");
-                let _ = fs::remove_file(backup_path); // Clean up backup if it exists
-                // Note: full sqlite restoration would require more complex handling;
-                // the backup file name is logged for manual restoration if needed
-                log::info!("Module data.sqlite preservation noted (backup at {:?})", backup_path);
-            }
-        }
+        restore_module_data(&dest, &stash);
 
         self.registry
             .insert(&ModuleEntry {
@@ -214,6 +195,55 @@ impl<'a> Installer<'a> {
 
         Ok(manifest)
     }
+}
+
+/// Files a module keeps its runtime data in.
+///
+/// They live inside the module directory next to the code, but they belong to
+/// the user rather than to the pack, so an install must carry them over.
+const MODULE_DATA_FILES: [&str; 4] = [
+    "data.json",
+    "data.sqlite",
+    "data.sqlite-wal",
+    "data.sqlite-shm",
+];
+
+/// Moves `dest`'s runtime data files into `stash`.
+///
+/// Called before the module directory is wiped. Moving (rather than copying)
+/// keeps the operation cheap even for a large SQLite database.
+///
+/// # Errors
+///
+/// Returns an error when the stash directory cannot be created or a data file
+/// cannot be moved, in which case the install is aborted before anything is
+/// deleted.
+fn stash_module_data(dest: &Path, stash: &Path) -> Result<(), String> {
+    fs::create_dir_all(stash).map_err(|e| format!("cannot create data stash: {e}"))?;
+    for name in MODULE_DATA_FILES {
+        let src = dest.join(name);
+        if src.exists() {
+            fs::rename(&src, stash.join(name))
+                .map_err(|e| format!("cannot preserve {name}: {e}"))?;
+        }
+    }
+    Ok(())
+}
+
+/// Moves the files saved by [`stash_module_data`] back into `dest`.
+///
+/// Best-effort: a data file that cannot be restored is logged and dropped,
+/// since failing here would leave the freshly installed module half-usable.
+fn restore_module_data(dest: &Path, stash: &Path) {
+    for name in MODULE_DATA_FILES {
+        let saved = stash.join(name);
+        if saved.exists() {
+            if let Err(e) = fs::rename(&saved, dest.join(name)) {
+                log::warn!("failed to restore module data file {name}: {e}");
+            }
+        }
+    }
+    let _ = fs::remove_dir_all(stash);
 }
 
 /// Resolves and validates the destination directory for `module_id`.

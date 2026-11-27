@@ -184,7 +184,7 @@ pub fn module_list_installed(
         }
     }
     Ok(result)
-
+}
 
 #[derive(Debug, Deserialize)]
 pub struct InstallModuleArgs {
