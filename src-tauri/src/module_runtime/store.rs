@@ -719,6 +719,24 @@ pub async fn store_install(
         .ok_or_else(|| format!("no .lumenpack asset in the latest release of {}", entry.name))?;
     let pack = download_pack(&app, &entry, &release.tag_name, asset).await?;
 
+    // Check which module the pack contains before installing it: installing
+    // first and rejecting afterwards would already have overwritten the
+    // directory of whatever module the pack really holds.
+    let pack_id = match super::install::read_pack_manifest(&pack) {
+        Ok(manifest) => manifest.id,
+        Err(e) => {
+            let _ = fs::remove_file(&pack);
+            return Err(format!("invalid module pack: {e}"));
+        }
+    };
+    if pack_id != entry.id {
+        let _ = fs::remove_file(&pack);
+        return Err(format!(
+            "module identity mismatch: pack manifests as '{pack_id}', catalog declares '{}'",
+            entry.id
+        ));
+    }
+
     let runtime = app.state::<ModuleRuntime>();
     let reg = runtime.registry.lock().map_err(|e| e.to_string())?;
     // Installing over an existing module must not silently re-enable it, so
@@ -854,6 +872,26 @@ pub async fn store_update_installed(app: AppHandle) -> Result<Vec<StoreModuleUpd
                 continue;
             }
         };
+
+        // Reject a pack that belongs to another module before installing it,
+        // so a mislabelled release cannot overwrite a different module.
+        match super::install::read_pack_manifest(&pack) {
+            Ok(manifest) if manifest.id == entry.id => {}
+            Ok(manifest) => {
+                let _ = fs::remove_file(&pack);
+                log::warn!(
+                    "update for {} rejected: pack manifests as '{}'",
+                    entry.id,
+                    manifest.id
+                );
+                continue;
+            }
+            Err(e) => {
+                let _ = fs::remove_file(&pack);
+                log::warn!("invalid update pack for {}: {e}", entry.id);
+                continue;
+            }
+        }
 
         let installed_module = {
             let runtime = app.state::<ModuleRuntime>();
