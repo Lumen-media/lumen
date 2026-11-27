@@ -15,7 +15,7 @@ import { Empty } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { disableModule, enableModule, reloadModule, uninstallModule } from '@/modules/injector';
+import { disableModule, reloadModule, uninstallModule } from '@/modules/injector';
 import { useModuleStore } from '@/modules/store';
 import type { ModuleRecord, ModuleStatus } from '@/modules/types';
 import {
@@ -180,9 +180,7 @@ function ModuleRow({ record, selected, onSelect }: ModuleRowProps) {
             variant="ghost"
             size="icon-sm"
             title={t('Reload')}
-            onClick={() =>
-              status === 'disabled' ? void enableModule(manifest.id) : reloadModule(manifest.id)
-            }
+            onClick={() => void reloadModule(manifest.id)}
           >
             <RefreshCw className="size-3.5" />
           </Button>
@@ -244,10 +242,8 @@ export function StoreManage() {
           return;
         }
       }
-      if (status === 'disabled') {
-        void enableModule(manifest.id);
-      } else if (status === 'faulted') {
-        reloadModule(manifest.id);
+      if (status === 'disabled' || status === 'faulted') {
+        void reloadModule(manifest.id);
       } else if (status === 'active') {
         void disableModule(manifest.id);
       }

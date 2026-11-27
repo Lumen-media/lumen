@@ -62,10 +62,8 @@ function scopeModuleStyles(moduleId: string) {
 /**
  * Registers every installed module and loads the enabled ones.
  *
- * Installs the global error handlers on the first call, then resolves the
- * module list from the Rust side. Disabled modules are registered with status
- * `disabled` so they stay visible in the installed list, but are not loaded. A
- * module that throws is marked `faulted` and the rest still load.
+ * Installs the global error handlers on the first call. A module that throws
+ * is marked `faulted` and the rest still load.
  */
 export async function bootModules() {
   if (!globalHandlersInstalled) {
@@ -219,14 +217,22 @@ export async function unloadModule(id: string) {
   useModuleStore.getState().setStatus(id, 'disabled');
 }
 
-/** Unloads then loads a module in place, keeping its enabled state. */
-export async function reloadModule(id: string) {
-  await unloadModule(id);
+/** Sets a registered module to `loading` and loads it. */
+async function loadRecord(id: string) {
   const record = useModuleStore.getState().modules.get(id);
-  if (record) {
-    useModuleStore.getState().setStatus(id, 'loading');
-    await loadModule(record.manifest);
+  if (!record) return;
+  useModuleStore.getState().setStatus(id, 'loading');
+  await loadModule(record.manifest);
+}
+
+/** Unloads then loads a module in place. A disabled module is enabled first. */
+export async function reloadModule(id: string) {
+  if (useModuleStore.getState().modules.get(id)?.status === 'disabled') {
+    await enableModule(id);
+    return;
   }
+  await unloadModule(id);
+  await loadRecord(id);
 }
 
 /**
@@ -255,11 +261,7 @@ export async function disableModule(id: string) {
 /** Clears the disabled flag and loads the module again. */
 export async function enableModule(id: string) {
   await ipc('module_enable', { id });
-  const record = useModuleStore.getState().modules.get(id);
-  if (record) {
-    useModuleStore.getState().setStatus(id, 'loading');
-    await loadModule(record.manifest);
-  }
+  await loadRecord(id);
 }
 
 /** Unloads the module and removes it and its data from disk. */

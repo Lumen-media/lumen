@@ -157,10 +157,7 @@ export function authorAvatarUrl(authorName: string, size = 64): string {
   return `https://github.com/${encodeURIComponent(authorName)}.png?size=${size}`;
 }
 
-/**
- * Formats a version for display, adding the `v` prefix only when the version
- * does not already carry one (release tags have it, manifests usually do not).
- */
+/** Adds a `v` prefix unless the version already carries one. */
 export function formatVersion(version: string): string {
   return /^v/i.test(version) ? version : `v${version}`;
 }
@@ -181,7 +178,6 @@ export function compareVersions(a: string, b: string): number {
   }
   return 0;
 }
-
 
 let autoUpdateStarted = false;
 
@@ -211,8 +207,6 @@ export async function autoUpdateInstalledModules(): Promise<void> {
     const record = store.modules.get(manifest.id);
     if (!record) continue;
 
-    // A module the user disabled only gets the new manifest on disk; loading
-    // it here would silently switch it back on.
     if (!update.module.enabled) {
       store.registerModule({ ...record, manifest });
       continue;
@@ -232,7 +226,6 @@ export async function autoUpdateInstalledModules(): Promise<void> {
     }
   }
 }
-
 
 export async function installModuleFromStore(
   repo: string,
