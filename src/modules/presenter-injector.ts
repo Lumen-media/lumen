@@ -13,7 +13,8 @@ export async function bootPresenterModules(window: 'presenter' | 'surface' = 'pr
     return;
   }
 
-  for (const { manifest } of manifests) {
+  for (const { manifest, enabled } of manifests) {
+    if (!enabled) continue;
     try {
       await loadAndBootModule(manifest, window);
     } catch (err) {
