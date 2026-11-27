@@ -18,7 +18,12 @@ import { cn } from '@/lib/utils';
 import { disableModule, enableModule, reloadModule, uninstallModule } from '@/modules/injector';
 import { useModuleStore } from '@/modules/store';
 import type { ModuleRecord, ModuleStatus } from '@/modules/types';
-import { compareVersions, type StoreCatalogModule, storeService } from '@/services/store-service';
+import {
+  compareVersions,
+  formatVersion,
+  type StoreCatalogModule,
+  storeService,
+} from '@/services/store-service';
 import { useModulesStore } from '@/stores/modules-store';
 import { ModuleIcon } from './module-icon';
 import { installFromStore } from './store-actions';
@@ -158,7 +163,9 @@ function ModuleRow({ record, selected, onSelect }: ModuleRowProps) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-sm font-medium">{manifest.name}</span>
-          <span className="text-[10px] text-muted-foreground">v{manifest.version}</span>
+          <span className="text-[10px] text-muted-foreground">
+            {formatVersion(manifest.version)}
+          </span>
           <StatusBadge status={status} />
           <SourceBadge source={source} />
         </div>
