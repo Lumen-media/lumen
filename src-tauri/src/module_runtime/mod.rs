@@ -166,7 +166,7 @@ pub fn module_list_installed(
 ) -> Result<Vec<InstalledModule>, String> {
     let runtime = app.state::<ModuleRuntime>();
     let reg = runtime.registry.lock().map_err(|e| e.to_string())?;
-    let entries = reg.list_enabled().map_err(|e| e.to_string())?;
+    let entries = reg.list_all().map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for entry in entries {
@@ -184,7 +184,7 @@ pub fn module_list_installed(
         }
     }
     Ok(result)
-}
+
 
 #[derive(Debug, Deserialize)]
 pub struct InstallModuleArgs {
