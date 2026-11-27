@@ -171,8 +171,9 @@ export function compareVersions(a: string, b: string): number {
     const y = pb[i] ?? 0;
     if (x !== y) return x - y;
   }
-  return a.localeCompare(b);
+  return 0;
 }
+
 
 let autoUpdateStarted = false;
 
@@ -214,6 +215,7 @@ export async function autoUpdateInstalledModules(): Promise<void> {
     }
   }
 }
+
 
 export async function installModuleFromStore(
   repo: string,

@@ -737,7 +737,7 @@ pub async fn store_install(
         id: manifest.id.clone(),
         version: manifest.version.clone(),
         source: "store".into(),
-        enabled: true,
+        enabled: entry.enabled,
         path: runtime.modules_dir.join(&manifest.id),
     })
     .map_err(|e| e.to_string())?;
@@ -749,7 +749,7 @@ pub async fn store_install(
     let installed = InstalledModule {
         manifest,
         source: "store".into(),
-        enabled: true,
+        enabled: entry.enabled,
     };
     let _ = app.emit("module:installed", &installed);
 
