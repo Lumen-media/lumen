@@ -14,8 +14,11 @@ export async function installFromStore(module: StoreCatalogModule, tag = 'latest
     state.clearPhase(module.id);
     toast.success(t('Install complete', { name: module.name }));
   } catch (err) {
-    state.setPhase(module.id, 'error', 0);
-    toast.error(t('Install failed', { name: module.name }));
+    // Drop the progress entry instead of parking it in a failed state, so the
+    // card returns to its normal button and a retry starts clean.
+    state.clearPhase(module.id);
+    const detail = err instanceof Error ? err.message : String(err);
+    toast.error(`${t('Install failed', { name: module.name })}: ${detail}`);
     console.error('[store] install failed:', err);
   }
 }

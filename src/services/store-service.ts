@@ -157,6 +157,14 @@ export function authorAvatarUrl(authorName: string, size = 64): string {
   return `https://github.com/${encodeURIComponent(authorName)}.png?size=${size}`;
 }
 
+/**
+ * Formats a version for display, adding the `v` prefix only when the version
+ * does not already carry one (release tags have it, manifests usually do not).
+ */
+export function formatVersion(version: string): string {
+  return /^v/i.test(version) ? version : `v${version}`;
+}
+
 function parseVersion(tag: string): number[] {
   const core = tag.replace(/^v/i, '').split('-')[0];
   return core.split('.').map((part) => Number.parseInt(part, 10) || 0);

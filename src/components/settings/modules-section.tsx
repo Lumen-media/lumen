@@ -1,8 +1,9 @@
 import { AlertTriangle, CheckCircle, Package, RefreshCw, Trash2, XCircle } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
-import { disableModule, reloadModule, uninstallModule } from '@/modules/injector';
+import { disableModule, enableModule, reloadModule, uninstallModule } from '@/modules/injector';
 import { useModuleStore } from '@/modules/store';
 import type { ModuleRecord, ModuleStatus } from '@/modules/types';
+import { formatVersion } from '@/services/store-service';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
@@ -47,7 +48,7 @@ function ModuleRow({ record }: { record: ModuleRecord }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-sm">{manifest.name}</span>
-            <span className="text-xs text-muted-foreground">v{manifest.version}</span>
+            <span className="text-xs text-muted-foreground">{formatVersion(manifest.version)}</span>
             <StatusBadge status={status} />
             {source === 'dev' && (
               <Badge variant="secondary" className="text-xs">dev</Badge>
@@ -68,7 +69,11 @@ function ModuleRow({ record }: { record: ModuleRecord }) {
               variant="ghost"
               size="icon-sm"
               title={t('Reload')}
-              onClick={() => reloadModule(manifest.id)}
+              onClick={() =>
+                // Reloading alone leaves the registry flag off, which would make
+                // the module fail against the asset protocol.
+                status === 'disabled' ? void enableModule(manifest.id) : reloadModule(manifest.id)
+              }
             >
               <RefreshCw className="size-3.5" />
             </Button>
